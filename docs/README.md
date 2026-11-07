@@ -2,7 +2,7 @@
 
 [简体中文](README-zh.md)
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, read-only GitHub, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-016, PA-018, PA-021, and PA-038).** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, read-only GitHub, compute and attention controls, durable schedules, proactive preparation, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-016, PA-018–019, PA-021, and PA-038).** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
 
 Build a **persistent personal work system on the owner's computer**: one primary agent coordinates goals and tasks, delegates execution and returns inspectable outcomes while conserving human attention. Cloud services are optional. DSH remains the native runtime and orchestration host.
 
@@ -38,6 +38,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Local knowledge evidence](evidence/PA-015.md) | Explicit roots, incremental search, and revision-checked sources |
 | [GitHub read connector evidence](evidence/PA-016.md) | Live account and repository binding, scoped cursors, and MCP revalidation |
 | [Schedule evidence](evidence/PA-018.md) | Versioned routine intent, native wake reconciliation, and logical occurrences |
+| [Proactive work evidence](evidence/PA-019.md) | Replay, owner-reviewed staging, private briefs, and local notices |
 | [Resident host evidence](evidence/PA-021.md) | Startup and shutdown, health, provider waits, backup and restore |
 | [Capability plugin evidence](evidence/PA-038.md) | Public API, lifecycle registry, policy consumers and local examples |
 
