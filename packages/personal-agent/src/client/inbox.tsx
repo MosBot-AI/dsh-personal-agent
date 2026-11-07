@@ -8,6 +8,7 @@ import { PersonalMemory } from './memory.js'
 import { LocalKnowledge } from './knowledge.js'
 import { GitHubRead } from './github-read.js'
 import { Suggestions } from './suggestions.js'
+import { ReviewedSkills } from './skills.js'
 import { Projects, TaskPlanning } from './projects.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
@@ -465,6 +466,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
         {snapshot?.memoryConfigured && <PersonalMemory t={t} port={port} projects={snapshot.projects} tasks={snapshot.tasks}
           connectionKey={connectionKey} currentConnection={() => connection.getSnapshot()} readable={writable}
           writable={writable && !snapshot.recoveryMode} />}
+        {snapshot && writable && !snapshot.recoveryMode && <ReviewedSkills key={connectionKey} projects={snapshot.projects}
+          tasks={snapshot.tasks} port={port} t={t} chooseTask={chooseTask}
+          current={() => connection.getSnapshot() === connectionKey} />}
         {snapshot?.knowledgeConfigured && connected && <LocalKnowledge key={connectionKey} t={t} port={port}
           readable={writable && !snapshot.recoveryMode} current={() => connection.getSnapshot() === connectionKey} />}
         {snapshot?.githubRead && connected && <GitHubRead key={connectionKey} t={t} port={port} projectId={snapshot.githubRead.projectId}

@@ -32,6 +32,8 @@ async function initialize(ctx) {
       } else if (cursor === 'pa014-parent') {
         assert.equal(options.sessionId, parentSession)
         report = { kind: 'ready', cursor, summary: 'Parent sourced brief.', artifactIds: [] }
+      } else if (cursor === 'pa020-held-out') {
+        report = { kind: 'ready', cursor, summary: '## 北区\nIndependent review.', artifactIds: [] }
       } else {
         assert.equal(cursor, 'pa014-child')
         assert.ok(options.sessionId)

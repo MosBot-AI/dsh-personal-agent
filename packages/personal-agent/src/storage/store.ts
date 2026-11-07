@@ -73,6 +73,7 @@ import {
 } from './memory.js'
 import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
 import { createProactiveLedger, type ProactiveScope } from './proactive.js'
+import { createSkillLedger } from './skills.js'
 import {
   dependentIds, hasIncompletePrerequisite, initialProject, prerequisites, projectHistory, projectTasks,
   recordWorkerPlan, replacePrerequisites, saveProjectPlan, workerPlan,
@@ -345,6 +346,10 @@ class WorkStore {
 
   replayRoutingEvents(scope: Scope, key: Parameters<typeof replayRoutingEvents>[2]) {
     return this.access(db => replayRoutingEvents(db, scope, key))
+  }
+
+  createSkillLedger(scope: Scope & { projectId: ProjectId }) {
+    return createSkillLedger(operation => this.access(operation), scope)
   }
 
   createProactiveLedger(scope: ProactiveScope) {

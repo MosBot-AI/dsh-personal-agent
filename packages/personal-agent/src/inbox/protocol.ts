@@ -1,3 +1,4 @@
+import type { SkillRequestInput, SkillResponse } from '../context/skill-contract.js'
 import type { Delivery, TaskStatus } from '../domain/model.js'
 import type { MemoryActiveRecord, MemoryScope } from '@mosbot-ai/dshpa-plugin-api'
 import type { ProjectPlanInput } from '../domain/projects.js'
@@ -170,6 +171,7 @@ type MemoryControl = { scope: MemoryScope; commandId: string }
 type MemoryRevision = { recordId: string; expectedRevision: number }
 
 export type InboxRequest =
+  | SkillRequestInput
   | { type: 'snapshot' }
   | { type: 'knowledge_status' }
   | { type: 'knowledge_search'; rootId?: string; query: string; limit?: number }
@@ -219,6 +221,7 @@ export type InboxRequest =
   | { type: 'resident_audit'; afterSequence?: number }
 
 export type InboxResponse =
+  | SkillResponse
   | { ok: true; kind: 'snapshot'; snapshot: InboxSnapshot }
   | { ok: true; kind: 'updated'; taskId?: string; projectId?: string }
   | { ok: true; kind: 'artifact'; artifact: InboxArtifact & { text: string } }

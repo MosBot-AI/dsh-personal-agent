@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:http'
@@ -200,7 +201,7 @@ describe('published DSH Web local inbox', () => {
     expect(await inbox(query)).toMatchObject({ hits: [] })
   }, 20_000)
 
-  it('reviews and executes a goal plan with sourced Worker drafts and verified prerequisites', async () => {
+  it('reviews a goal plan and reuses an evaluated skill from accepted Worker outcomes', async () => {
     const host = await openWebHost(projectProbe, { patch: [
       '- id: dshpa', '  config:', '    inbox:',
       "      storageDirectory: !!js dshHomePath('project-inbox')",
@@ -269,6 +270,35 @@ describe('published DSH Web local inbox', () => {
     expect(await inbox({ type: 'project_review' })).toMatchObject({ projects: [
       { projectId, accepted: expect.arrayContaining([parent, child]) }, { projectId: other, accepted: [] },
     ] })
+    const fixtureTask = updated(await inbox({ type: 'create_task', projectId, commandId: 'pa020-fixture-task',
+      sessionId: 'pa014-primary', outcome: 'Prepare a separate held-out review.' })).taskId
+    assert.ok(fixtureTask)
+    const fixtureQueued = await readTask(fixtureTask)
+    updated(await inbox({ type: 'start', taskId: fixtureTask, expectedVersion: fixtureQueued.version, cursor: 'pa020-held-out' }))
+    const fixtureResult = await waitForTask(() => readTask(fixtureTask), task => task.status === 'verifying' && task.runtime === 'inactive',
+      'held-out verification', host.diagnostics)
+    updated(await inbox({ type: 'accept_result', taskId: fixtureTask, expectedVersion: fixtureResult.version }))
+
+    const skillId = randomUUID()
+    const candidate = await inbox({ type: 'skill_propose', projectId, skillId, expectedLatest: 0, draft: {
+      name: 'Sourced review', template: '## {{region}}\n{{review}}',
+      sources: [{ taskId: parent, artifactId: parentResult.artifacts[0]!.id },
+        { taskId: child, artifactId: childResult.artifacts[0]!.id }],
+      fixtures: [{ source: { taskId: fixtureTask, artifactId: fixtureResult.artifacts[0]!.id },
+        inputs: { region: '北区', review: 'Independent review.' } }],
+    } })
+    assert.ok(candidate.ok && candidate.kind === 'skill_revision', JSON.stringify(candidate))
+    const exact = { projectId, skillId, revision: 1, digest: candidate.detail.digest }
+    const activate = { type: 'skill_activate', ...exact, expectedSelection: 0 } as const
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, activate)).toMatchObject({ status: 401 })
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, activate, await host.exchange(true))).toMatchObject({ status: 403 })
+    expect(await inbox(activate)).toMatchObject({ ok: false, code: 'skill_evaluation_required' })
+    expect(await inbox({ type: 'skill_evaluate', ...exact })).toMatchObject({ detail: { evaluation: [true] } })
+    expect(await inbox(activate)).toMatchObject({ skill: { active: 1 } })
+    const runId = randomUUID()
+    expect(await inbox({ type: 'skill_run', ...exact, runId, inputs: { region: '南区', review: 'Reused result.' } }))
+      .toMatchObject({ kind: 'skill_output', text: '## 南区\nReused result.' })
+    expect(await inbox({ type: 'skill_feedback', ...exact, runId, feedback: 'accepted' })).toMatchObject({ detail: { accepted: 1 } })
     const db = new DatabaseSync(join(host.root, 'home', 'project-inbox', DATABASE_FILENAME), { readOnly: true })
     try { expect(db.prepare('SELECT count(*) AS total FROM routines').get()?.total).toBe(0) }
     finally { db.close() }

@@ -4,20 +4,18 @@ import { MessageId } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-token-meter'
 import { z } from 'zod'
-import { nonEmptyTextSchema, sessionIdSchema, utcInstantSchema, type SourceEvent, type SourceEventId, type UtcInstant } from '../domain/model.js'
-import { ROUTINE_SOURCE } from '../domain/routines.js'
+import { nonEmptyTextSchema, sessionIdSchema, utcInstantSchema, type SourceEventId, type UtcInstant } from '../domain/model.js'
 import type { WorkState } from '../domain/transitions.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
 import type { NativeCheckpointCapture, NativeCheckpointPolicy } from '../runtime/checkpoint-compaction.js'
-import { currentRoutingBody } from '../runtime/intake.js'
 import { workerReportInstructions } from '../runtime/reports.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
 import { assembleContext, contextSections, type ContextAssemblyResult } from './assembler.js'
 import type { ContextCheckpoint } from './checkpoint.js'
 import { createRecall, type RecallEvidence } from './recall.js'
+import { contextSourceLabels, localInboxSource } from './source-authority.js'
 
 const weight = z.int().min(0).max(100)
-const localSource = 'dshpa-local-inbox'
 const managedWorker = /^dshpa-[a-f0-9]{64}$/u
 const maxModelInputBytes = 64 * 1024
 const routeResolutionMs = 3_000
@@ -67,26 +65,15 @@ export function createLocalContext(options: {
       && live.policyVersion === state.attempt.mandate.policyVersion
   }
 
-  function sourceClass(event: SourceEvent): readonly string[] | undefined {
-    if (event.sourceInstanceId === ROUTINE_SOURCE && event.actor.kind === 'service') return []
-    if (event.sourceInstanceId === localSource) {
-      const profile = identity.currentProfile(event.profileId)
-      const devices = profile?.verifiedDevices.filter(device => device.deviceId === event.actor.deviceId && device.verifiedAt <= event.receivedAt)
-      return profile?.ownerId === event.ownerId && event.actor.kind === 'person' && devices?.length === 1 ? [] : undefined
-    }
-    const routed = store.getRoutingEvent({ ownerId: event.ownerId, profileId: event.profileId, eventId: event.id })
-    return routed && currentRoutingBody(identity, event, routed.receipt.authority)?.dataScope
-  }
-
   function authorize(authority: unknown, evidence: RecallEvidence): boolean {
-    return permitsTask(authority, evidence.state) && (evidence.kind !== 'event' || sourceClass(evidence.event) !== undefined)
+    return permitsTask(authority, evidence.state) && (evidence.kind !== 'event' || contextSourceLabels(store, identity, evidence.event) !== undefined)
   }
 
   const recall = createRecall({ store, authorize })
 
   function sourceUsable(ref: WorkRef, id: SourceEventId, at = now()): boolean {
     const event = store.getContextSource(ref, id, at)
-    const labels = event && sourceClass(event)
+    const labels = event && contextSourceLabels(store, identity, event)
     const scope = store.getWork(ref)?.attempt.scope?.dataScope ?? worker?.dataScope
     return labels?.every(label => worker?.dataScope.includes(label) && scope?.includes(label)) === true
   }
@@ -110,7 +97,7 @@ export function createLocalContext(options: {
     for (const pointer of candidates) {
       if (pointer.kind !== 'event') continue
       const event = store.getContextSource(ref, pointer.eventId, at)
-      if (event?.sourceInstanceId !== localSource || sourceClass(event) === undefined) continue
+      if (event?.sourceInstanceId !== localInboxSource || contextSourceLabels(store, identity, event) === undefined) continue
       const answer = ownerDecisionSchema.safeParse(event.body)
       if (!answer.success || decisions.has(answer.data.referenceId)) continue
       decisions.set(answer.data.referenceId, { text: answer.data.text, sources: [pointer] })

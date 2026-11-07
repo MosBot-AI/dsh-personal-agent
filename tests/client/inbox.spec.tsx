@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { dictionaries, type Translate } from '../../packages/personal-agent/src/client/copy.js'
 import { Inbox, type ConnectionSnapshot, type InboxConnection } from '../../packages/personal-agent/src/client/inbox.js'
 import { apply, createInboxPort } from '../../packages/personal-agent/src/client/index.js'
+import { skillResponseSchema } from '../../packages/personal-agent/src/context/skill-contract.js'
 import type { InboxPort, InboxRequest, InboxResponse, InboxSnapshot, InboxTask } from '../../packages/personal-agent/src/inbox/protocol.js'
 
 beforeAll(() => Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }))
@@ -521,6 +522,60 @@ describe('native Inbox client', () => {
       type: 'accept_result', taskId: candidate.id, expectedVersion: 1,
     })
     expect(node.textContent).toContain('Verified result')
+  })
+
+  it('reviews the exact skill revision and displays generated Markdown as literal text', async () => {
+    const skillId = 'd0b056d3-cbaf-4f92-9eca-731396c64bc9'
+    const digest = 'a'.repeat(64)
+    const exact = { projectId: project.id, skillId, revision: 1, digest }
+    const proof = (label: string) => ({ taskId: `task-${label}`, artifactId: `artifact-${label}`, taskVersion: 3,
+      artifactVersion: 1, digest })
+    let evaluation: boolean[] | null = null
+    let active: number | null = null
+    let accepted = 0
+    const unsafe = '<img src=x onerror=alert(1)>'
+    const port = vi.fn<InboxPort>(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot() }
+      const header = { skillId, latest: 1, active, selection: active ?? 0, name: 'Weekly recap' }
+      if (request.type === 'skill_list') return skillResponseSchema.parse({
+        ok: true, kind: 'skill_list', projectId: project.id, skills: [header],
+      })
+      if (request.type === 'skill_run') return skillResponseSchema.parse({
+        ok: true, kind: 'skill_output', ...exact, runId: request.runId, text: unsafe, feedback: null,
+      })
+      if (request.type === 'skill_evaluate') evaluation = [true]
+      if (request.type === 'skill_activate') active = 1
+      if (request.type === 'skill_feedback') accepted = 1
+      return skillResponseSchema.parse({ ok: true, kind: 'skill_revision', projectId: project.id,
+        skill: { ...header, active, selection: active ?? 0 }, detail: {
+          revision: 1, digest, evaluation, approved: active !== null, accepted, corrections: 0, rollbacks: 0,
+          spec: { name: header.name, template: '## {{topic}}',
+            inputSchema: { type: 'object', required: ['topic'], valueType: 'string', maxLength: 1024, additionalProperties: false },
+            outputSchema: { type: 'string', mediaType: 'text/markdown', maxLength: 8192 },
+            requiredCapabilities: ['render-markdown'], sources: [proof('one'), proof('two')],
+            fixtures: [{ source: proof('test'), inputs: { topic: 'Held out' } }],
+          },
+        },
+      })
+    })
+    const { node, carrier } = await mount(port)
+    const skills = [...node.querySelectorAll('details')].find(item => item.querySelector('summary')?.textContent === 'Reviewed skills')!
+    await act(async () => { skills.open = true; skills.dispatchEvent(new Event('toggle')) })
+    await fill(field(skills, 'Choose a project'), project.id)
+    await fill(field(skills, 'Choose a skill'), skillId)
+    expect(button(skills, 'Approve and activate v1').disabled).toBe(true)
+    await click(button(skills, 'Evaluate held-out examples'))
+    expect(button(skills, 'Approve and activate v1').disabled).toBe(false)
+    await click(button(skills, 'Approve and activate v1'))
+    expect(port.mock.calls.map(([request]) => request)).toContainEqual({ type: 'skill_activate', ...exact, expectedSelection: 0 })
+    await fill(field(skills, 'topic'), 'North')
+    await click(button(skills, 'Run active revision'))
+    expect(field(skills, 'Generated Markdown').value).toBe(unsafe)
+    expect(skills.querySelector('img')).toBeNull()
+    await click(button(skills, 'Accept output'))
+    expect(skills.textContent).toContain('Accepted runs 1')
+    await act(async () => carrier.change('disconnected:0'))
+    expect(node.textContent).not.toContain('Weekly recap')
   })
 
   it('uses the native Connection endpoint and keeps English and Chinese dictionary keys paired', async () => {

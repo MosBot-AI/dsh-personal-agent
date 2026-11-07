@@ -8,6 +8,9 @@ import { proactiveRequests, type ProactiveService } from '../runtime/proactive.j
 import { contextEvidencePointerSchema } from '../context/checkpoint.js'
 import type { LocalContext } from '../context/local-context.js'
 import { memoryRequestSchemas, type LocalMemory } from '../context/memory.js'
+import { createSkillCandidates } from '../context/skill-candidates.js'
+import { skillRequestSchemas } from '../context/skill-contract.js'
+import { localInboxSource } from '../context/source-authority.js'
 import { contextRecallRequestSchema, contextSearchRequestSchema } from '../context/recall.js'
 import {
   artifactIdSchema,
@@ -49,7 +52,7 @@ import type { WorkRef, WorkStore } from '../storage/store.js'
 import type { InboxResponse, InboxReviewProject, InboxSession, InboxTask, InboxUsage } from './protocol.js'
 import { routineRequestSchemas, type RoutineInbox } from './routines.js'
 
-const LOCAL_SOURCE = sourceInstanceIdSchema.parse('dshpa-local-inbox')
+const LOCAL_SOURCE = sourceInstanceIdSchema.parse(localInboxSource)
 const MAX_SESSIONS = 64
 const command = commandIdSchema.max(256)
 const control = { taskId: taskIdSchema, expectedVersion: versionSchema }
@@ -91,6 +94,7 @@ const requestSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('set_subscription'), subscription: z.unknown() }),
   z.strictObject({ type: z.literal('set_attention_policy'), expectedVersion: versionSchema, policy: z.unknown() }),
   ...memoryRequestSchemas,
+  ...skillRequestSchemas,
   ...knowledgeRequestSchemas,
   ...connectorRequestSchemas,
   ...proactiveRequests,
@@ -170,6 +174,7 @@ function terminal(state: WorkState): boolean {
 /** Owner-scoped adapter for the native inbox and deterministic foreground controls. */
 export function createInboxService(options: InboxServiceOptions) {
   const { store, executor, identity, actionGate } = options
+  const skills = createSkillCandidates({ store, identity, now: options.now })
   const worker = options.worker && { ...options.worker, dataScope: [...options.worker.dataScope] }
   const now = options.now ?? (() => utcInstantSchema.parse(new Date().toISOString()))
 
@@ -348,6 +353,14 @@ export function createInboxService(options: InboxServiceOptions) {
     try {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
+        case 'skill_list':
+        case 'skill_inspect':
+        case 'skill_propose':
+        case 'skill_evaluate':
+        case 'skill_activate':
+        case 'skill_rollback':
+        case 'skill_run':
+        case 'skill_feedback': return skills.handle(owner, request)
         case 'create_task': return await createTask(ownerToken, request)
         case 'proactive_state':
         case 'proactive_save_rule':
