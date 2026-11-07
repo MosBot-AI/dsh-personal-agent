@@ -9,7 +9,7 @@
 | Record | Minimum fields and invariants |
 | --- | --- |
 | Owner/Profile | Stable owner ID, verified account/device associations, profile isolation, policy version |
-| SourceEvent | Source instance + external event ID as unique key; trusted actor metadata separate from untrusted body; occurred/received times; thread and provenance |
+| SourceEvent | Source instance + external event ID + external revision as unique key; trusted actor metadata separate from untrusted body; occurred/received times; thread and provenance |
 | Conversation | Stable user-facing conversation ID, runtime session references, last checkpoint, original delivery destination |
 | Project | Owner, title, purpose, resource references, current status; no implicit access to all referenced resources |
 | Task | Owner/project, requested outcome, constraints, status, version, next action, deadline/timezone, provenance, acceptance condition |
@@ -31,13 +31,17 @@ The recommended initial SQLite database is the canonical source for work and eff
 Proposed task states:
 
 ```text
-queued → running → completed
-           ├── waiting_input ──→ queued
-           ├── waiting_approval → queued / cancelled
-           ├── blocked ───────→ queued / failed
-           ├── failed
-           └── cancelling ────→ cancelled / reconciliation_required
+queued -> running -> verifying -> completed
+             |-> waiting_input / waiting_approval / waiting_event
+             |-> waiting_environment / waiting_resource
+             |-> blocked / failed
+nonterminal -> paused -> queued
+nonterminal -> cancelling -> cancelled / reconciliation_required
+wait or blocked -> queued (validated wakeup)
+failed -> queued (explicit retry, new Attempt)
+reconciliation_required -> completed / failed / cancelled (verified outcome)
 ```
+
 
 These arrows require explicit validated events. A task may also be cancelled before it runs. A failed task can be retried only through a new attempt and a checked transition; do not erase the prior failure. Completed/cancelled tasks do not restart simply because an external thread gets a new message.
 
@@ -74,7 +78,7 @@ type PublicEvent = {
 
 The authenticated owner and device come from a trusted adapter, not writable envelope fields. Reusing `commandId` with a different payload is a conflict, not a second action. Event IDs and task IDs are not authorization tokens.
 
-If O10 is selected, the initial HTTP proposal is:
+PA-022 first extends native Remote resources; if a transport gap is demonstrated, the proposed HTTP/SSE adapter uses:
 
 - `POST /v1/commands`: validate/enqueue a command and return its durable identity.
 - `GET /v1/tasks` and `GET /v1/tasks/{id}`: authorized task projections.
@@ -180,3 +184,73 @@ Unit tests prove pure transitions; host contract tests prove DSH integration; fa
 ## 9. Definition of a valid completion claim
 
 The primary agent should report what changed, where the result can be inspected, and any remaining uncertainty. “Implemented” requires code. “Tested” requires named executed checks. “Published” requires verified remote state. “Delivered” requires the provider evidence available for that channel. A design document alone satisfies none of the first three implementation claims.
+
+## 10. Implementation-level invariants and interfaces
+
+The following details are normative for PA-003 onward, but are still proposed application contracts, not existing DSH APIs.
+
+### Record additions
+
+| Record | Required fields and invariant |
+| --- | --- |
+| Project | `kind: project/goal`, success criteria, plan revision, milestones, review cadence; goal decomposition creates ordinary Tasks |
+| Subscription | source/thread/task, `context/work`, version; context mode cannot grant authority or reopen terminal work |
+| Task wait | reason, exact event/device/resource/question reference, deadline, resume condition; a wait consumes no worker slot |
+| Routine | source intent, revision, native schedule mapping, enabled mode, grant, misfire policy; one authoritative application intent |
+| Occurrence | routine ID + revision + intended scheduled instant; unique logical execution regardless of repeated native inbox delivery |
+| Budget reservation | owner/task/provider, estimated ceiling, currency, pricing version, actual usage, settled/uncertain state; reserve atomically before dispatch |
+| Skill candidate | version, input/output, capability references, source successes, evaluation results, activation/rollback state |
+| MediaJob | task/attempt/generation, provider instance/handle, input/workflow/model digests, output spec, resource lease, outcome; uncertain submission never blindly resubmits |
+| ResourceLease | environment/resource ID, holder, generation, expiry, scope; one active desktop controller; server validates on every input |
+| CredentialRef | opaque ID, backend, non-secret metadata, permitted account/origin/purpose; no secret value in domain storage |
+| SecretInputRequest | owner/device/task revision, credential type, storage mode, allowed origin/purpose, expiry, single-use nonce, state; raw input bypasses transcript |
+| DesktopSession | owner/device/environment, view/control permission, expiry, control lease, connection state; UI flags are not authorization |
+
+Use typed ID wrappers in implementation, not interchangeable strings. Runtime validation belongs at model/tool/config/file/queue/process/wire boundaries; do not duplicate schema checks for already typed in-process values solely to distrust TypeScript.
+
+### Task transitions and concurrency
+
+- `ready` is a Worker report. It requests `verifying`; required artifacts and outcomes must validate before `completed`.
+- A new owner clarification can wake waiting work only after its current grant, generation and task revision are checked. Third-party context cannot revive a cancelled/completed task. Explicit `work.reopen` creates a new Attempt and preserves prior history.
+- `paused` stops new dispatch but does not claim rollback of in-flight effects. Resume revalidates current grants and budget. Cancellation additionally revokes the task generation and reconciles owned work.
+- Waiting for a dependency is `blocked` with `reason=dependency`; reject dependency cycles. Exact dependency completion may enqueue work once. An invalid/failed dependency does not silently mark dependents completed.
+- One task has at most one active top-level Attempt. A Worker may own native child agents, counted against its resource/budget limits. Workers on the same file/branch/browser share an explicit resource lease or independent worktree/profile.
+- Stop and approval replies use deterministic services and foreground capacity. No model call is necessary to acknowledge them.
+
+### Atomic storage
+
+Required unique keys: `(ownerId, clientId, commandId)`, `(sourceInstanceId, externalEventId, externalRevision)`, `(routineId, routineRevision, occurrenceAt)`, `effect.operationId`, and `(taskId, generation)` for the top-level attempt. Reusing a command ID with different canonical payload returns conflict. Source adapters must provide a stable revision or explicitly treat updates as new events.
+
+A command transaction reads expected versions, validates transitions, stores the event/result, and appends effect/outbox intents before commit. Network calls run afterward. One-use approval reservation and the immutable effect claim are atomic. The authorization check and dispatch handoff are serialized with revocation; unavoidable in-flight work remains subject to reconciliation.
+
+Task SQLite and DSH Session storage cannot share an atomic commit. Bridge them with a durable delivery intent and a per-input identifier; after Session flush, persist acknowledgment. Recovery reconciles the intent against the Session's consumed/pending input IDs before redelivery. PA-002/009 must prove how this is observable on the pinned host; if not, add a minimal documented seam rather than pretending delivery is exactly once.
+
+Native schedule registration is also a separate commit. Persist mapping intent first and reconcile created schedule IDs; duplicate schedule deliveries use the same Occurrence key. Explicit run-now has its own command ID. A reminder edited mid-flight retains its original revision and is rechecked against current enabled/revoked state.
+
+### Application service vocabulary
+
+These are proposed service operations; transport tools must call the same implementation:
+
+```text
+work.create / work.get / work.list / work.updatePlan
+work.pause / work.resume / work.cancel / work.retry / work.reopen
+work.report / work.verify / work.wait
+context.checkpoint / context.recall
+memory.remember / memory.search / memory.correct / memory.forget
+policy.evaluate / approval.respond / grant.revoke
+effect.prepare / effect.dispatch / effect.reconcile
+routine.create / routine.pause / routine.run
+media.submit / media.inspect / media.cancel / media.collect
+vault.requestInput / vault.find / vault.use / vault.lock
+desktop.openView / desktop.requestControl / desktop.releaseControl
+```
+
+Return typed errors such as `version_conflict`, `permission_denied`, `approval_required`, `resource_unavailable`, `budget_exceeded`, `outcome_uncertain`, `source_unavailable` and `unsupported_capability`. Only declared temporary failures retry. Public events contain safe projections, never raw secret input, arbitrary provider bodies or private reasoning. A command acknowledgment means persisted admission, not completion.
+
+### Initial configuration semantics
+
+Default worker concurrency is 2, with reserved control processing capacity; benchmark E02 uses a configured value of 4. Heavy GPU concurrency starts at 1; desktop control is exclusive. Defaults are configurable through validated plugin configuration, not hidden constants. Unattended paid work needs an explicit daily/task cap and a known price or conservative upper bound; otherwise it stays disabled. Unknown pricing is displayed, not valued at zero.
+
+Context budgets are resolved against model capacity and response reserve before each request. After fixed instructions and current input, start with proportions for authoritative state 30%, recent conversation 25%, retrieval 25%, memory/checkpoint 20%; trim the lower-priority sections first. These are tunable starting values, not a quality claim. Spill oversized evidence with stable pointers.
+
+For initial retention, keep work/artifacts until user deletion, keep verbose diagnostic logs for 14 days, and default automatic memory extraction and screen recording to off. Explain storage growth and offer configurable retention; backup retention and tombstones must be applied during restore. Do not use logs as a hidden second memory store.

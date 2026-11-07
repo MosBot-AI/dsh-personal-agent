@@ -2,7 +2,7 @@
 
 [Documentation index](README.md) · [简体中文](04-decisions-and-source-audit-zh.md)
 
-Audit date: 2026-11-07 UTC. Source inspection is not runtime verification. No DSH installation, plugin execution, or application test suite was run for this documentation-only publication.
+Audit date: 2026-11-07, Asia/Shanghai. Source inspection is not runtime verification. No DSH installation, plugin execution, or application test suite was run for this documentation-only publication.
 
 ## 1. Decision register
 
@@ -12,32 +12,46 @@ Audit date: 2026-11-07 UTC. Source inspection is not runtime verification. No DS
 | D2 | Confirmed direction | Native plugins/bundles first; small core changes are permitted when an actual missing contract is demonstrated. |
 | D3 | Confirmed direction | Coordinate projects, tasks, information, personal affairs, and reminders; support an open connector/MCP system. |
 | D4 | Design direction | Preserve continuous conversation through durable work state and bounded context/memory; do not equate the task database with complete personal memory. |
-| D5 | Design direction | Eventual remote/mobile and voice access use the same personal agent; exact product scope and provider/interface choices remain pending. |
+| D5 | Design direction | Eventual remote/mobile and voice access use the same personal agent; mobile Web precedes voice on the same command path; concrete providers are activation choices. |
 | D7 | Engineering recommendation | Single owner/profile and single-host reliability first; minimal state/effect/authorization contracts before distributed execution. |
 | D8 | Publication scope | Add the implementation plan to this repository's `docs/`; do not claim implementation or change the existing license as part of this publication. |
+| D9 | Engineering default | Lightweight Router, task Workers for long execution, deterministic direct controls. |
+| D10 | Engineering default | One composition bundle with cohesive core services and independent media/memory/workflow plugins; no second orchestrator. |
+| D11 | Engineering default | Plugin SQLite transactions; DSH retains session logs. |
+| D12 | Engineering default | Reuse native schedule; add logical occurrence dedupe and business results. |
+| D13 | Engineering default | Goal/task/evidence/feedback loop; reference-first recall; automatic memory off. |
+| D14 | Engineering default | off/observe/prepare/act with independent attention and compute budgets. |
+| D15 | Engineering default | One owner-facing primary agent; specializations begin as configurations. |
+| D16 | Explicit user direction | DSH Personal Agent, abbreviated dshpa. |
+| D17 | Explicit user direction | Resident operation on the owner's computer; no mandatory cloud coordinator. |
+| D18 | Explicit user direction | Image/video creation through ComfyUI or better-suited replaceable providers. |
+| D19 | Explicit user direction | Local credential/password management; reuse mature vaults and a broker. |
+| D20 | Explicit user direction | Live VNC desktop viewing and takeover. |
+| D21 | Explicit user direction | Dedicated secure password/key intake directly to protected storage and authorized use. |
+| D22 | Explicit user direction | Independently replaceable media/workflow and memory plugins, user configuration, public interfaces and migration guarantees. |
 
 This register reconciles the current direction with older proposals. The earlier “external personal-assistant controller calling DSH through an SDK” architecture is superseded. An API gateway or speech service may be external infrastructure, but it must not become a second owner of orchestration.
 
-## 2. Hermes comparison options: no implicit selection
+## 2. Defaults for the earlier options
 
-The options below remain pending selection, rather than accepted implementation scope. Existing implementation status in Hermes is not DSH implementation status and is not evidence that code is directly portable.
+The request for an implementable plan now resolves these engineering defaults. They do not grant account access, spending or live-resource authority. O identifiers remain for traceability; the blanket pending status is superseded. Hermes source was not re-audited and no new claim is made about its current implementation.
 
-| Option | Candidate refinement | Current DSH planning status | Selection question |
-| --- | --- | --- | --- |
-| O1 | Separate provider/model/reasoning choice for different workers | Pending | Fixed model first, explicit worker profiles, or automatic routing? |
-| O2 | Replaceable memory backends with export/migration compatibility | Pending | Internal seam only, or a supported third-party provider SDK? |
-| O3 | Automatic continuous memory extraction/recall and pre-compaction saving | Pending | Which facts may be auto-saved, with what review, privacy, and quality rules? |
-| O4 | User commands/conversation to remember, inspect, correct, and forget | Pending | Which explicit operations belong in the first release? |
-| O5 | Interchangeable local, hosted, and real-time voice providers | Pending | Text first, one speech path, or provider interchangeability now? |
-| O8 | Date-based task views, task detail, project statistics, task operation history | Pending | Which richer views/history are needed beyond baseline task CRUD? |
-| O9 | Daily/weekly planning and review templates | Pending | Which templates, and should schedules be explicitly created separately? |
-| O10 | Unified mobile/connector API, change log, and reconnect protocol | Pending | Which initial clients and replay/compatibility guarantees are required? |
+| Option | Default | Delivery / reconsideration |
+| --- | --- | --- |
+| O1 | Explicit Router/Worker model configuration, initially one model; no silent provider fallback | M2; automatic routing needs evaluation |
+| O2 | Explicitly replaceable: public versioned MemoryProvider, default plugin, examples, migration and rollback | PA-038, PA-012, PA-039; required in first complete release |
+| O3 | Required pre-compaction checkpoint; automatic extraction off, optional reviewed candidates | M2/M3 after quality/deletion tests |
+| O4 | Explicit remember/inspect/correct/forget | Required in foundation alpha |
+| O5 | Text first; one STT/TTS pair behind replaceable interfaces | PA-026; provider chosen at activation |
+| O8 | Today, project/task detail, history and artifacts | PA-008, PA-014 |
+| O9 | On-demand daily/weekly review templates; schedules activated separately | PA-014, PA-018 |
+| O10 | Shared domain commands; reuse DSH remote first; mobile Web/reconnect in beta | PA-022 |
 
-The underlying DSH vision already included tasks, memory, voice, connectors, and future mobile access. The pending choices concern the detailed refinements above. Safe internal boundaries can be designed now without marking every related feature selected. Privacy, authorization, correctness, and recovery are engineering release requirements rather than optional product embellishments.
+Resident operation, media, credentials, VNC and secure input follow explicit user additions. [08](08-local-computer-media-and-vault.md) specifies them as first-class capabilities, not cloud-platform afterthoughts.
 
 ## 3. Repository baseline
 
-At inspection, `MosBot-AI/dsh-personal-agent` was public, its default branch was `main`, and its only file was `LICENSE`. No existing application code, documentation, test configuration, or `AGENTS.md` was present in that tree.
+The earlier plan recorded a LICENSE-only pre-documentation tree. This revision began at local HEAD `8928cd989d76db55bb1a5f30efcf37f099d7c4ed` with ten bilingual plan documents and a clean worktree, but no application/package setup. This pass verified both local upstream SHAs, retained the source audit and added task data and a plan checker.
 
 - [Pre-documentation repository commit](https://github.com/MosBot-AI/dsh-personal-agent/commit/7b377ca7bc8e97466fb78cac92838b9018a029f6): `7b377ca7bc8e97466fb78cac92838b9018a029f6`.
 - [Existing license](https://github.com/MosBot-AI/dsh-personal-agent/blob/7b377ca7bc8e97466fb78cac92838b9018a029f6/LICENSE): Apache License 2.0. This documentation addition preserves it. Any different licensing choice needs a separate explicit maintainer decision and dependency/notice review.
@@ -49,7 +63,7 @@ Proposed `packages/`, API endpoints, tool commands, and test directories elsewhe
 | Source | Inspected commit | Manifest facts |
 | --- | --- | --- |
 | DeepSeek Harness | `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159` | Root `0.2.2-rc.1`; Node `>=24.9.0`; pnpm `11.28.5` |
-| DSH Superagent Prototype | `8c32a9dc5d72c033816c6a8110b37f40cf94fba4` | `0.1.0`; DSH dev dependencies `0.2.1-alpha.2`, peers `^0.2.1-alpha.2`; Node `^22.19.0 || >=24.0.0`; pnpm `11.7.0` |
+| DSH Superagent Prototype | `8c32a9dc5d72c033816c6a8110b37f40cf94fba4` | `0.1.0`; DSH dev dependencies `0.2.1-alpha.2`, peers `^0.2.1-alpha.2`; Node `^22.19.0` or `>=24.0.0`; pnpm `11.7.0` |
 
 Evidence: [Harness package.json](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/package.json), [prototype package.json](https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/package.json).
 
@@ -101,6 +115,24 @@ Sources: [approval lifecycle](https://github.com/deepseek-ai/deepseek-harness/bl
 
 **Implication:** durable exact-action Approval/Grant/Effect records are new project work. Preserve native enforcement and fail-closed behavior while validating how the personal workflow resumes a fresh execution after approval or restart.
 
+### 5.5 New audit: schedules and transactions
+
+Native schedule already persists instructions, supports timezone/Cron/RRULE, destinations and receipts. It needs an online host and collapses missed recurring occurrences. Session flush and schedule acknowledgment are separate commits, so crashes can duplicate delivery; receipts establish inbox persistence, not business completion. PA-018 reuses scheduling and adds logical occurrence deduplication. [Schedule](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/schedule/schedule/README.md).
+
+Storage-domain explicitly lacks cross-table transactions and secondary indexes. Its SQLite document-row provider does not establish an atomic Task + Approval + Effect + Outbox API. Use plugin-owned tables/database rather than modifying host storage. [Domain limits](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/storage/storage-domain/README.md), [SQLite](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/storage/storage-sqlite/README.md).
+
+### 5.6 New audit: remote access, desktop and credentials
+
+Native remote-access protects declared Remote resources/actions. Extend it before introducing another identity stack; Task/Artifact/desktop-session resources still require their own checks. [Remote access](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/api/remote-access/README.md).
+
+Computer/browser-use registries select providers, not a universal operation implementation. Shared desktops lack cross-session arbitration, and SSH file sandboxing does not restrict networking. PA-031 adds leases/isolation checks; PA-036 supplies VNC transport. [Computer](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/computer-use/computer-use/README.md), [browser](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/browser-use/browser-use/README.md), [SSH sandbox](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/ssh/sandbox-ssh/README.md).
+
+Credentials supplies references and records, but credentials-local is readable by same-UID processes and explicitly defers an OS keychain provider. PA-032/037 are new broker/intake work; the existing file provider cannot substantiate vault isolation. [Service](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/credentials/credentials/README.md), [local limits](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/credentials/credentials-local/README.md).
+
+### 5.7 New audit: media delivery
+
+Attachment supports images and generic files without a dedicated audio/video lifecycle. The session-controller file route returns entire files, ignores Range and uses image-size limits. Large-video playback, previews, media job recovery and generation require new work. [Attachments](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/attachment/attachment/README.md), [file route](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/api/session-controller/README.md).
+
 ## 6. Prototype patterns to retain and assumptions to replace
 
 | Topic | Useful pattern | Required personal-agent change |
@@ -137,16 +169,12 @@ Additional implementation references: [domain model](https://github.com/deepseek
 | Cancellation race | Effects continue after user stop | Generation/revocation fence, native cancel, provider reconciliation |
 | Context loss or false memory | Wrong decisions and repeated work | Canonical tasks, source-backed checkpoints, correction/deletion tests |
 | Proactivity overload/cost | Notification fatigue and wasted spend | Observe mode, quiet hours, dedupe, explicit budgets and measured usefulness |
-| Scope creep from Hermes | Unchosen features displace a reliable core | Pending-option register; explicit feature selection before M4 |
+| Scope growth | Features displace reliable outcomes | Release closures and separate local-capability gates; no premature learning/cloud expansion |
 | Premature mobile/voice platform | Multiple inconsistent state machines | One command/domain core; optional adapters; minimal first client |
 | License/third-party reuse mistakes | Distribution obligations missed | Preserve current license; review notices before copying upstream code |
 
-## 8. Questions to close before implementation scope is frozen
+## 8. Remaining activation inputs
 
-1. Which of O1–O5 and O8–O10 should be in the first release, later, or excluded?
-2. Which first deployment target and connector should prove the vertical slice?
-3. What private information may be retained automatically, for how long, and under what review/deletion behavior?
-4. What model/tool spending limits, concurrency, and notification preferences should be defaults?
-5. Is the existing repository license the intended final choice? Preserve it until that is explicitly decided.
+Concrete accounts/scopes, target hardware/OS, model/budget, actual media models, vault provider, VNC server, remote domain and voice service remain deployment inputs. They do not reopen the whole architecture. Missing resources allow keyless development but block corresponding live gates. Do not invent hardware performance, pricing, vault state or historical knowledge.
 
-These questions do not block publishing this plan. They do prevent treating unresolved options as authorized implementation scope.
+Defaults are in [02](02-implementation-roadmap.md), task details in [06](06-agent-execution-guide.md). This task does not change licensing, connect accounts or upload private data.

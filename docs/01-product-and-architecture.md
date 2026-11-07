@@ -1,182 +1,142 @@
-# 01. Product scope and native architecture
+# 01. dshpa product and architecture
 
 [Documentation index](README.md) · [简体中文](01-product-and-architecture-zh.md)
 
-## 1. Product objective
+**DSH Personal Agent, or dshpa, is a personal work system built as native DSH plugins.** It resides on an owner's computer or host, maintains a continuous primary conversation, understands goals and context, progresses independent tasks, operates authorized tools and computers, and delivers inspectable, editable outcomes. Users should not manage underlying Sessions or coordinate every step. This is a target design, not an implementation claim.
 
-Build an open-source personal agent inside DeepSeek Harness that reduces the user's coordination burden. The user should be able to continue an ordinary conversation while work happens in the background, ask what is unfinished, inspect results, make decisions, and stop or redirect work.
+## 1. Position and success
 
-The primary agent owns the relationship and the overall work queue. Workers receive bounded assignments and return evidence and artifacts. They do not become independent owners of the user's permissions or long-term identity.
+Start with individuals managing knowledge, projects, creative work and personal affairs, especially those with local data, applications and toolchains. Progress from intent to usable results and tracked follow-through. One owner/profile comes first; shared agents and multi-tenancy are not prerequisites.
 
-Representative outcomes:
+The north-star measures are weekly **accepted outcomes and reduced intervention time**, constrained by unwanted effects, interruptions and spending. Task counts, tokens and runtime are diagnostic. Compare actual coordination effort during trials and ask whether outcomes were useful; do not invent hours saved from model self-assessment.
 
-- “Organize this project, tell me what is blocked, and help with the next step.”
-- “Keep track of this task; remind me at the time I choose.”
-- “Find the relevant material and prepare a draft.” Sending the draft is a separate action when authorization is needed.
-- “What have we decided, what remains, and where did that fact come from?”
-- “Stop this task.” The system distinguishes the stop request from confirmed execution termination.
+Four architectural objectives:
 
-These are target behaviors, not claims of current functionality.
+- **Continuous:** preserve goals across turns, restarts and entry points; apply new constraints to pending work.
+- **Productive:** independent execution and outcomes without blocking the primary conversation.
+- **Proactive:** prepare useful work under explicit rules and surface meaningful changes.
+- **Persistent:** reconcile and resume after waits, restarts and offline devices without depending on one context window.
 
-## 2. Product boundaries
+See [05](05-research-and-product-lessons.md) for Superagent principles, research and evidence boundaries.
 
-### Confirmed direction
+## 2. User journeys and capability progression
 
-1. **DSH is the personal agent.** Do not add a second external reasoning controller that owns the user conversation and calls DSH only for execution.
-2. **Everything is a plugin, with enforceable boundaries.** Compose product capabilities through DSH/Cordis services and bundles. Security checks belong in trusted runtime paths, not merely in prompts.
-3. **One primary agent first.** Keep identities and UI simple. Additional specialist agents are execution details unless a later product decision explicitly introduces multiple primary agents.
-4. **Persistent work outlives an LLM context.** Projects, tasks, authorizations, pending questions, and action receipts need durable records.
-5. **Open connectors and MCP.** GitHub is one adapter, not the definition of every task. Personal tasks must not be forced into pull-request-shaped records.
-6. **Remote/mobile and voice are product directions.** They should attach to the same agent and task model. Their detailed interface and provider choices remain staged decisions.
+| Journey | Request | Completion | First release |
+| --- | --- | --- | --- |
+| Project progress | Find blockers and advance this project | Goals, dependencies, sources, reviewable changes and remaining work | Foundation alpha |
+| Knowledge/research | Research using my material | Inspectable citations, facts versus inference, editable brief | Foundation alpha |
+| Goals/reminders | Track this and review Friday | Success criteria, next action, explicit schedule and delivery evidence | Foundation alpha |
+| Computer collaboration | Complete this using local software | Saved output, live VNC viewing, takeover and stop | Desktop alpha |
+| Image/video | Make a cover and short video | Preview, versions and edit manifest; generation/composition labeled | Desktop alpha |
+| Credentials | Save this account and use it on this site | Secure input, protected storage, exact-site login, locking/revocation and usage history | Desktop alpha |
+| Communication | Prepare a meeting and draft follow-up | Sourced mail/calendar context; drafts separate from sending | Beta |
+| Mobile/voice/devices | Continue work on my home computer from my phone | Same task/authority; explicit offline waits and safe recovery | Beta / v1 |
 
-### Non-goals for the first release
+Progress from reading, to private preparation, reversible local operation, authorized external action and ongoing delegation. Each capability declares access, actions, data destinations and limitations. A single autonomy switch cannot cover every operation.
 
-- Porting Hermes code as if it were a DSH plugin without adaptation.
-- Multi-tenant SaaS, distributed execution fleets, autonomous payments, a plugin marketplace, or a general workflow language.
-- Promising perfect memory, exactly-once external effects, zero-cost proactivity, or compatibility with every MCP server.
-- Modifying all of DSH before proving that native extension points are insufficient.
+## 3. Interaction
 
-## 3. Architecture
+The **primary conversation** accepts multiple tasks, interruptions and changed direction. A concise acknowledgment precedes background dispatch. **Today** prioritizes decisions, usable results and deadlines. **Projects** show goals, plan revisions, dependencies and milestones. **Artifacts** contain versioned documents, code, images, video and data. **Connections/devices** explain availability and waits.
+
+Task detail shows stage, meaningful progress, sources, artifacts, cost and controls. Execution detail is expandable; private reasoning is not displayed. Distinguish thinking, tool execution, queued work, waiting for a person/environment, recovery and uncertain results.
+
+Onboarding starts with one real task and its data/model/permission needs, not a complete personal questionnaire. Missing sources are explicitly unavailable, never replaced by realistic-looking sample briefings.
+
+A request receives one acknowledgment by default. Routine progress stays in the workspace; notify for outcomes, blockers and necessary decisions. Ask one concrete question for a pending decision. Explicit reminders have separate frequency rules. Suggested quiet hours are 22:00–08:00 in the selected IANA zone; explicit reminder timing and user-defined urgent exceptions retain their intended meaning.
+
+## 4. Logical architecture
 
 ```mermaid
 flowchart TB
-    U[User: DSH UI / future Web or mobile client] --> I[Authenticated input and command adapter]
-    I --> P[DSH personal-agent bundle]
-    subgraph Native[DSH runtime and native plugins]
-      P --> A[Primary agent and conversation coordinator]
-      A --> T[Project and task services]
-      A --> C[Context assembly and memory boundary]
-      T --> W[Native agent workers and execution attempts]
-      A --> G[Trusted action and approval gate]
-      W --> G
-      G --> X[Connector / MCP / sandboxed tool adapters]
-      T --> S[Scheduler and recovery]
-      S --> A
-      T --> D[(Durable state and effect journal)]
-      G --> D
-      C --> D
-      D --> E[Redacted event stream and notification outbox]
-    end
-    E --> U
-    X --> R[Authorized external resources]
+  U[DSH Web desktop and future mobile voice] --> IN[Trusted input and deterministic commands]
+  EV[Sources clock and devices] --> IN
+  IN --> F[Dedupe admission subscriptions batching]
+  F --> R[Primary Agent / lightweight Router]
+  F -->|Owned events| W[Task Workers / native subagents]
+  R --> T[Project Task Attempt services]
+  T --> W
+  R --> C[Budgeted context and memory]
+  W --> G[Action policy and resource scheduler]
+  G --> X[Connectors desktop files media credential broker]
+  T --> DB[(Plugin authoritative database)]
+  C --> DB
+  G --> DB
+  DB --> O[Artifacts event stream notification outbox]
+  O --> U
+  S[Process supervision / stall detection] --> T
 ```
 
-The diagram is a proposed composition, not existing package names. A reverse proxy, database, credential broker, browser process, or speech service may run separately. These support DSH; they do not replace it as the orchestrator.
-
-### Ownership of responsibilities
-
-| Component | Owns | Does not own |
+| Component | Owns | Must not own |
 | --- | --- | --- |
-| Primary agent | Understanding intent, proposing plans, choosing bounded work, user-facing synthesis | Granting itself permissions or fabricating task completion |
-| Task service | Durable state machine, dependencies, attempts, acceptance evidence | LLM conversation history as its sole database |
-| Execution adapter | Mapping attempts to native DSH agents, steering, cancel, tool/result events | Deciding that idle means business success |
-| Policy/action gate | Verified identity, scope, current grants, revocation, action checks | Treating memory, external content, or a model assertion as authorization |
-| Context/memory service | Relevant facts and references under a token/data-access budget | Credential storage or a replacement for the grant ledger |
-| Connectors | Provider API behavior, source identity, cursors, capabilities, receipts | Inferring broad authority from possession of an access token |
-| Client adapters | Authentication, rendering, input, reconnect, notification presentation | Running a separate private copy of the planning and policy logic |
+| Router | Intent, new-task dispatch, cross-task priority and user synthesis | Long shell/browser/research loops or every worker's detailed plan |
+| Worker | Task execution, local decomposition, artifacts and evidence; native subagents when useful | Self-granted authority, new primary identity or independent channel broadcasts |
+| Work service | States, dependencies, waits, generations, acceptance and recovery | Treating model prose as state facts |
+| Policy/action dispatch | Exact identity/resource/data/recipient authority, review and receipts | Authority inferred from memory or external content |
+| Context | Reference recall, budgets, checkpoints, correction and forgetting | Secrets or a search index as canonical state |
+| Execution adapters | Native DSH lifecycle and external capabilities | Another LLM runtime |
+| Clients | Input, display, takeover, approvals and reconnect | Independent planning or authorization state |
+| Supervision | Health and bounded recovery; selective semantic stall checks | Changing its own permissions or spending limits |
 
-## 4. Proposed plugin and repository layout
+Models handle ambiguous intent, research and proposals. Code owns identity, uniqueness, transitions, dependencies, leases, budget reservation and final dispatch. Model review cannot override deterministic denial. Status, stop and exact approval responses need not call a model.
 
-Names below are local proposals. Do not publish packages or assume these names exist upstream.
+## 5. Physical organization
 
 ```text
 packages/
-  personal-agent/       # DSH bundle, configuration, service wiring
-  core/                 # IDs, state transitions, schemas, service contracts
-  storage-sqlite/       # migrations, transactions, repositories, recovery
-  orchestrator/         # primary-agent coordination and worker handback
-  tasks/                # projects, tasks, attempts, dependencies
-  policy/               # trusted action gate, grants, approvals, audit
-  context/              # bounded context assembly and source references
-  scheduler/            # durable jobs, reminders, wakeups, notification policy
-  connectors/           # registry and first provider adapter
-  client-api/           # optional remote/mobile adapter, after scope decision
-  voice/                # optional voice adapter, after scope decision
-tests/
-  contracts/ integration/ recovery/ security/ fixtures/
-docs/
+  personal-agent/       # DSH bundle, core services, consumers and client UI
+  plugin-api/           # public versioned service definitions and lifecycle
+  plugin-testkit/       # keyless provider contract tests
+  memory-sqlite/        # independent default memory provider
+  media-comfyui/        # independent default generation provider
+  creation-workflows/  # replaceable image and video workflows
+examples/plugins/      # custom memory and mock-media examples
+tests/ evals/ workflows/ deploy/ docs/
 ```
 
-Use TypeScript/ESM and a single workspace initially, subject to M0 verification against the pinned host. Start with fewer physical packages if that reduces cyclic dependencies; preserve service interfaces rather than manufacturing a package for every class.
+These paths are planned. Media generation, creation workflows and memory are independent replaceable plugins; [09](09-plugin-architecture.md) specifies public contracts, settings and migration. Trusted control services compose inside DSH/Cordis. Credential brokers, media processes and confined executors may be separate processes without becoming independent planners. Package boundaries are not security boundaries.
 
-Plugin contracts should declare identifier/version, supported host versions, dependencies, config schema, capabilities, lifecycle, health, data migration ownership, and shutdown behavior. Reject missing required services and incompatible versions with a readable error. Disable optional capabilities cleanly.
+Use effect/disposer registration, declared services, validated configuration, health and version compatibility. Fail clearly on missing dependencies. Follow pinned host composition and whole-config replacement rules. Applications launch only through named `dsh` profiles.
 
-Trusted in-process plugins share a runtime trust boundary. A capability manifest is not an OS sandbox. Untrusted executors or connectors require an isolated process/OS identity and a restricted RPC interface. Do not give them the profile directory, full credential environment, or unrestricted shell.
+## 6. Reuse and new responsibilities
 
-## 5. Native reuse versus new work
+| Existing upstream surface | dshpa work |
+| --- | --- |
+| Agent lifecycle, steer/inject/cancel, streaming, sessions | Native adapter plus business completion, cancellation reconciliation and client projection |
+| Subagents and Agent Teams | Reuse inside workers; own cross-project persistent tasks |
+| Schedules | Reuse timing and wakeups; add occurrence dedupe, grants, results and delivery |
+| SQLite/domain storage | Plugin-owned transactional DB because the audited API lacks cross-table transactions |
+| Remote access/client extension points | Extend resources/views first; add HTTP/SSE only for demonstrated gaps |
+| CUA/browser providers, SSH, filesystem sandbox | Reuse drivers; add shared resource leases, takeover and verified isolation |
+| Credentials | Reuse seam; add protected provider/broker, vault UI and purpose grants |
+| Skills and context/compaction | Reuse loading/hooks; add memory lifecycle and evaluated skill versions |
+| Superagent intake/tickets/assignments/effects/outbox | Selectively adapt; replace single-repo, full-access, completion and recovery assumptions |
 
-Reuse the inspected DSH agent runtime, plugin/service lifecycle, provider/tool integration, session persistence, and subagent facilities where contracts fit. Use in-process agent APIs rather than routing native orchestration through an SDK subprocess merely to call back into the same host.
+[04](04-decisions-and-source-audit.md) owns evidence. Do not fork the entire prototype with its older host. Prove missing host behavior with a contract test before proposing a minimal patch and upstream strategy. SDK limitations do not establish missing native capabilities.
 
-The superagent prototype supplies useful design patterns: intake, triggers, threads, tickets, assignments, immutable mandate snapshots, persistent effects, outbox, and restart recovery. Extract or adapt selectively after the compatibility spike.
+## 7. Durable work and events
 
-New personal-agent work includes:
+One visible conversation can contain several tasks; a task can have several Attempts and Sessions. Project can represent a finite project or ongoing goal with success criteria, review cadence, plan revision and milestones. Both use the same Task execution model. Sessions carry context, not business ownership.
 
-- An owner-centric primary conversation and cross-project durable task model.
-- Verified source/account identity and action-level authorization for private data.
-- Durable approval, question, revocation, and effect-result records.
-- General connector and artifact concepts instead of single-repository assumptions.
-- Bounded personal context and memory with correction/deletion semantics.
-- User-controlled notification/reminder behavior and later client/speech adapters.
+Authenticate, deduplicate and filter events. Exact task references and subscriptions take the fast path; batch remaining candidates for the Router. Context-only sources confer no authority. Workers hand back out-of-scope or misrouted work. Plan changes compare revisions and identify superseded tasks and reusable artifacts.
 
-Do not copy prototype deployment assumptions such as `danger-full-access`. Do not mistake its `src/core/memory.ts` in-memory repository implementation for a complete personal memory system.
+Persist wait conditions for people, time, devices and resources, releasing compute slots. Do not maintain presence by repeatedly polling a model. Generations fence stale results. Task state, effects and delivery remain distinct; [03](03-contracts-security-and-tests.md) defines the contracts.
 
-### Core-change rule
+## 8. Memory, knowledge and learned capabilities
 
-First prove the need using a small failing host-contract test. Prefer a plugin or adapter. If a core patch is necessary, document the missing guarantee, minimal patch, pinned base commit, upstream strategy, and compatibility test. Plausible investigation areas include durable remote approval resumption and stable public hooks, but they are not preapproved claims that DSH lacks cancellation or streaming.
+Work facts, explicit preferences, conversation summaries, source material and authority have distinct semantics. Follow stable references before bounded text retrieval. Add vectors only for a measured quality gap. Budget system constraints, current request, authoritative state, recent conversation, memory and retrieved evidence; preserve current instructions and commitments first.
 
-## 6. Primary conversation and work lifecycle
+Explicit remember/inspect/correct/forget ships in foundation alpha. Automatic extraction is off initially; enabled extraction creates sourced candidates with sensitive-data limits. Corrections supersede facts; forgetting invalidates derived retrieval and prevents silent re-ingestion from old logs. llmwiki is a configured read-only source; its currently missing path must not be created or written implicitly.
 
-The primary conversation remains responsive while workers execute. Keep incoming user messages, work state, and delivery state separate.
+Repeated accepted work may produce a versioned candidate Skill containing input/output, capabilities, preconditions, examples and tests. Replay and user activation precede use. Skills cannot grant permissions, install dependencies or schedule themselves. Feedback may improve prompts and retrieval, but unverified self-evolution is not a release claim.
 
-1. Authenticate input and deduplicate its source event.
-2. Determine whether it is a new request, clarification, existing-task follow-up, approval, cancellation, or ordinary conversation.
-3. Load only relevant project/task references and authorized context.
-4. Persist a task and its requested outcome before dispatch.
-5. Create an execution attempt, associate it with a native DSH agent, and enforce its tool/data budget.
-6. Record meaningful progress, artifacts, questions, and effects. Avoid streaming private reasoning or raw secret-bearing tool output.
-7. Validate outcome against the task acceptance condition. Record completion, failure, cancellation, or uncertainty explicitly.
-8. Deliver the result through a durable outbox, preserving the original conversation unless directed otherwise.
+## 9. Local operation and future extension
 
-A task may have multiple attempts and sessions. One session may contain multiple conversational turns. These are different identifiers and lifecycle concepts. A primary conversation can be compacted or its runtime agent replaced without losing open work.
+Resident local operation is the default; [08](08-local-computer-media-and-vault.md) specifies desktop, media and credentials. Host, GUI, vault and GPU availability are independent. ComfyUI is the first generation adapter; FFmpeg supplies deterministic composition; other backends follow capabilities and policy. Credentials remain in mature vaults and protected brokers.
 
-A model-generated handback is a proposal: task state changes still pass schema validation, current-version checks, authorization, and result validation. A worker cannot make itself the primary agent or expand another worker's scope.
+Begin with one authoritative host, then add optional execution devices. Authority does not migrate implicitly with device connectivity. Leases and reconciliation prevent duplicate work. Cloud, mobile and voice extend the same system. STT/TTS uses the existing command path; interrupting playback does not cancel a task implicitly.
 
-## 7. Persistent information and memory
+## 10. Non-goals and reconsideration triggers
 
-Continuous conversation is a goal already present in the DSH plan. The specific Hermes memory features remain pending options [O2–O4](04-decisions-and-source-audit.md); this section proposes a safe boundary, not acceptance of all those features.
+The first release excludes multi-tenant SaaS, a public marketplace, custom vault cryptography, a general workflow language, automatic payments, unconstrained self-modification and unlimited model routing. It does not promise perfect GUI reliability, arbitrary MCP safety or execution during sleep.
 
-Separate:
-
-1. **Canonical work state:** projects, tasks, deadlines, next actions, dependencies, and effect receipts.
-2. **Compact profile:** explicit preferences and stable facts, with source and validity information.
-3. **Conversation/episode records:** summaries and references to original messages and artifacts.
-4. **Retrieval index:** a derived view, rebuildable from authorized source records.
-5. **Authorization and secrets:** independent trusted storage, never inferred from a profile or summary.
-
-Recommended initial storage is SQLite plus readable export files and keyword/full-text retrieval. Do not require a vector database for the first release. Chinese segmentation, mixed-language queries, stale fact replacement, and access filtering must be tested before making retrieval-quality claims.
-
-Before compaction, persist a structured checkpoint: objective, constraints, decisions, open work, next step, pending approvals, artifact references, and source pointers. Rebuild the context under explicit budgets for system instructions, current request, task state, memory, recent turns, retrieved evidence, and tool output. Do not let retrieval crowd out the current user message or safety constraints.
-
-Record provenance, timestamps, confidence, and whether a fact was explicit or inferred. Corrections supersede current facts; deletions must propagate to indexes and derived summaries. Backups need a documented retention/deletion policy. Automatic fact extraction, user-facing memory commands, and third-party provider loading are separately selectable work packages.
-
-## 8. Connectors, MCP, and proactive work
-
-A connector advertises supported read/write operations, account identity, source event IDs, cursor semantics, rate limits, receipt/idempotency support, and health. Incoming email, documents, or web content are evidence, not instructions from the owner.
-
-MCP is one tool/connector transport. Its tool descriptions and server responses do not prove an action is safe. Apply the same owner, resource, recipient, data, and grant checks at the execution boundary. Refreshing tool definitions cannot silently add permissions.
-
-Begin with one read-only connector and fixture data. Add external writes only after the approval and effect-reconciliation gates pass. Select the first real provider during M0; do not assume GitHub or a particular email account is authorized merely because it is convenient.
-
-For proactive candidates, begin in observe mode. A deterministic scheduler and source filter may create a candidate; the model may estimate usefulness. Actual reading/writing still requires the corresponding access and action grant. Record why a notification was useful, suppress duplicates, honor quiet hours, and cap model/cost budgets. A reminder requested for a time is different from an unsolicited suggestion.
-
-## 9. Server, client, and voice division
-
-**Server/native DSH side:** authoritative identity, primary agent, task state, permissions, connector credentials, durable events, scheduler, and recovery.
-
-**Web/mobile side:** render conversation/tasks/artifacts; send authenticated commands; display approvals with exact scope; provide cancel/redirect controls; cache limited display state; resume from a cursor; capture/play audio with explicit permission. Never embed provider keys in a mobile app.
-
-**Transport recommendation:** authenticated HTTP commands plus SSE for one-way updates, with WebSocket/WebRTC only when bidirectional or real-time media needs justify them. This is proposed contract work, not a claim of an existing endpoint. O10 controls the detailed unified API/changefeed scope.
-
-**Voice direction:** audio input → STT → the same primary-agent command path → TTS output. Real-time speech can later share the same identity and task session. O5 controls interchangeable providers. Barge-in should stop playback and request a model-turn interruption; stopping speech must not implicitly cancel a task or revoke a committed action. Text confirmation remains available for consequential actions. A phone UI is not evidence of PSTN calling support.
-
-Lock-screen push requires platform services, tokens, explicit permission, and delivery policy. Keep payloads minimal and fetch sensitive detail after authentication. A live event stream is not a push-notification service or a delivery receipt.
+Reconsider distribution only after measured single-host limits; vectors after recall failures; visible specialists after repeated role-specific needs; native mobile after a concrete Web limitation. Beta/v1 cards preserve future scope without bypassing initial validation.

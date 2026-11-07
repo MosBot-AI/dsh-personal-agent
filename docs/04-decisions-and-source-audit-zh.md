@@ -2,7 +2,7 @@
 
 [文档索引](README-zh.md) · [English](04-decisions-and-source-audit.md)
 
-审计日期：2026-11-07 UTC。源码检查不等于运行时验证。本次仅发布文档，未安装 DSH、执行插件或运行应用测试套件。
+审计日期：2026-11-07，Asia/Shanghai。源码检查不等于运行时验证。本次仅发布文档，未安装 DSH、执行插件或运行应用测试套件。
 
 ## 1. 决策登记
 
@@ -12,32 +12,46 @@
 | D2 | 已确认方向 | 原生插件/套件优先；证明实际缺失契约后，允许小范围核心修改。 |
 | D3 | 已确认方向 | 协调项目、任务、信息、个人事务和提醒；支持开放连接器/MCP 系统。 |
 | D4 | 设计方向 | 通过持久工作状态和受限上下文/记忆保持持续对话；不能将任务数据库等同于完整个人记忆。 |
-| D5 | 设计方向 | 最终远程/移动端和语音访问使用同一个个人智能体；精确产品范围及提供商/界面选择仍待决定。 |
+| D5 | 设计方向 | 最终远程/移动端和语音访问使用同一个个人智能体；先移动 Web，后共享命令路径的语音；具体服务在激活时配置。 |
 | D7 | 工程建议 | 优先实现单一所有者/配置档案和单宿主可靠性；分布式执行前先完成最小状态/效果/授权契约。 |
 | D8 | 发布范围 | 将实施计划加入本仓库 `docs/`；本次发布不声称已实现功能，也不更改现有许可证。 |
+| D9 | 工程基线 | 主 Router 轻量编排，长执行交给 Worker；直接控制命令不依赖 LLM。 |
+| D10 | 工程基线 | 一个原生组合套件，核心服务内聚，媒体/记忆/创作能力为独立插件；不引入第二编排引擎。 |
+| D11 | 工程基线 | 插件自有 SQLite 提供跨记录事务；DSH 会话日志仍归宿主。 |
+| D12 | 工程基线 | 复用原生 schedule，新增逻辑 occurrence 去重和业务结果。 |
+| D13 | 工程基线 | 目标→任务→证据→反馈；引用检索先行，自动记忆默认关闭。 |
+| D14 | 工程基线 | 主动工作分 off/observe/prepare/act；费用和注意力有独立预算。 |
+| D15 | 工程基线 | 同一个 owner 主 agent；专业角色首先是配置，而非多个权限主体。 |
+| D16 | 用户明确方向 | 名称 DSH Personal Agent，简称 dshpa。 |
+| D17 | 用户明确方向 | 用户电脑可常驻运行、操作本机；云协调器非必需。 |
+| D18 | 用户明确方向 | 图片/视频生成进入产品；ComfyUI 或更合适后端可替换。 |
+| D19 | 用户明确方向 | 本地凭据及密码管理能力；工程上复用成熟密码库与代理。 |
+| D20 | 用户明确方向 | VNC 实时桌面查看和接管能力。 |
+| D21 | 用户明确方向 | 专用密码/密钥安全输入通道，直达受保护存储和授权使用路径。 |
+| D22 | 用户明确方向 | 图片/视频创作和记忆独立可插拔，用户可配置或编写替代插件；提供公开接口和迁移保障。 |
 
 本登记将当前方向与旧提案作了协调。之前“外部个人助手控制器通过 SDK 调用 DSH”的架构已被取代。API 网关或语音服务可以是外部基础设施，但不能成为第二个编排所有者。
 
-## 2. Hermes 对比选项：不隐式选定
+## 2. 旧选项的实施默认值
 
-以下选项仍待选择，并非已接受的实施范围。Hermes 中已实现的状态不代表 DSH 已实现，也不能证明代码可直接移植。
+本轮在用户要求完善为可实施方案后，选定以下工程基线；它们不是用户账户、支出或真实资源授权。保留 O 编号以便追溯，替代旧版笼统“待定”状态。没有复查 Hermes 源码，不对其当前能力作新增声明。
 
-| 选项 | 候选细化能力 | 当前 DSH 规划状态 | 选择问题 |
-| --- | --- | --- | --- |
-| O1 | 不同执行智能体分别选择提供商/模型/推理方式 | 待定 | 先使用固定模型、显式执行智能体配置，还是自动路由？ |
-| O2 | 支持导出/迁移兼容性的可替换记忆后端 | 待定 | 仅保留内部替换接口，还是提供受支持的第三方提供商 SDK？ |
-| O3 | 自动持续记忆提取/召回及压缩前保存 | 待定 | 哪些事实可自动保存，采用什么审查、隐私和质量规则？ |
-| O4 | 用户通过命令/对话记住、查看、更正和遗忘 | 待定 | 哪些显式操作属于首版？ |
-| O5 | 可互换的本地、托管和实时语音提供商 | 待定 | 先做文本、一条语音路径，还是现在就支持提供商互换？ |
-| O8 | 按日期查看任务、任务详情、项目统计、任务操作历史 | 待定 | 基础任务 CRUD 之外需要哪些更丰富视图/历史？ |
-| O9 | 每日/每周计划和复盘模板 | 待定 | 哪些模板，计划时间表是否应单独显式创建？ |
-| O10 | 统一移动端/连接器 API、变更日志及重连协议 | 待定 | 需要哪些初始客户端及回放/兼容性保证？ |
+| 选项 | 默认实施决定 | 交付 / 重审 |
+| --- | --- | --- |
+| O1 | Router/Worker 显式模型配置，初始同一模型；禁止静默跨提供商回退 | M2；自动路由须有评测 |
+| O2 | 用户要求可替换：公开版本化 MemoryProvider、独立默认插件、示例、迁移和回滚 | PA-038、PA-012、PA-039；首个完整版本必需 |
+| O3 | 压缩前检查点为必需；自动事实提取默认关闭，可产生待审核候选 | M2/M3；质量与删除测试后启用 |
+| O4 | 显式记住/查看/更正/遗忘 | 基础 alpha 必需 |
+| O5 | 先文本；v1 一对 STT/TTS 适配器；保留替换接口 | PA-026，提供商在激活时选 |
+| O8 | Today、项目/任务详情、历史和成果 | PA-008、PA-014 |
+| O9 | 按需日/周计划与复盘模板；周期执行独立启用 | PA-014、PA-018 |
+| O10 | 统一领域命令先行；优先复用 DSH remote；移动 Web + 重连在 beta | PA-022 |
 
-DSH 的原始愿景已包含任务、记忆、语音、连接器和未来移动端访问。待定的是上述详细细化能力。现在可以设计安全内部边界，而不必将所有相关功能都标记为已选定。隐私、授权、正确性和恢复是工程发布要求，不是可选的产品装饰。
+新增本机、媒体、凭据、VNC 和安全输入范围来自用户明确补充；具体实现见 [08](08-local-computer-media-and-vault-zh.md)，不再作为云端平台完成后的附属项。
 
 ## 3. 仓库基线
 
-检查时，`MosBot-AI/dsh-personal-agent` 为公开仓库，默认分支为 `main`，唯一文件为 `LICENSE`。该树中没有现有应用代码、文档、测试配置或 `AGENTS.md`。
+旧版方案记录加入文档前只有 `LICENSE`。本轮开始的本地 HEAD 为 `8928cd989d76db55bb1a5f30efcf37f099d7c4ed`，已有十份中英文方案文档，工作树干净；尚无应用代码和包配置。本轮保留原源码审计并核实两个本地仓库 SHA，增加实施清单和计划校验工具。
 
 - [加入文档前的仓库提交](https://github.com/MosBot-AI/dsh-personal-agent/commit/7b377ca7bc8e97466fb78cac92838b9018a029f6)：`7b377ca7bc8e97466fb78cac92838b9018a029f6`。
 - [现有许可证](https://github.com/MosBot-AI/dsh-personal-agent/blob/7b377ca7bc8e97466fb78cac92838b9018a029f6/LICENSE)：Apache License 2.0。本次文档增加保留它。任何其他许可证选择都需要维护者另行明确决定，并审查依赖和声明。
@@ -49,7 +63,7 @@ DSH 的原始愿景已包含任务、记忆、语音、连接器和未来移动�
 | 来源 | 检查的提交 | 清单事实 |
 | --- | --- | --- |
 | DeepSeek Harness | `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159` | 根版本 `0.2.2-rc.1`；Node `>=24.9.0`；pnpm `11.28.5` |
-| DSH Superagent Prototype | `8c32a9dc5d72c033816c6a8110b37f40cf94fba4` | `0.1.0`；DSH 开发依赖 `0.2.1-alpha.2`、peer 依赖 `^0.2.1-alpha.2`；Node `^22.19.0 || >=24.0.0`；pnpm `11.7.0` |
+| DSH Superagent Prototype | `8c32a9dc5d72c033816c6a8110b37f40cf94fba4` | `0.1.0`；DSH 开发依赖 `0.2.1-alpha.2`、peer 依赖 `^0.2.1-alpha.2`；Node `^22.19.0` 或 `>=24.0.0`；pnpm `11.7.0` |
 
 证据：[Harness package.json](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/package.json)、[原型 package.json](https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/package.json)。
 
@@ -101,6 +115,24 @@ Agent Teams 已提供持久化的比较并交换任务看板，具备依赖、�
 
 **结论：** 持久化的精确动作 Approval/Grant/Effect 记录是项目新增工作。保留原生强制执行和默认拒绝行为，同时验证个人工作流如何在审批或重启后恢复新的执行。
 
+### 5.5 本轮新增审计：调度与事务
+
+原生 schedule 已支持持久任务、IANA 时区、Cron/RRULE、目标会话和回执；宿主须在线，错过的重复执行会折叠到最近一次。其 Session flush 与调度确认是不同提交，崩溃后可能重复投递；回执证明进入会话 inbox，不证明业务执行完成。因此 PA-018 复用调度但增加逻辑 occurrence 去重，不再把提醒从零实现。[schedule](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/schedule/schedule/README.md)。
+
+storage-domain 明确不提供跨表事务和次级索引；SQLite 后端以 JSON 文档行提供存储，不能据此推断具备 Task + Approval + Effect + Outbox 的原子提交 API。因此选择插件自有数据库，不直接改写宿主存储表。[domain 限制](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/storage/storage-domain/README.md)、[SQLite 后端](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/storage/storage-sqlite/README.md)。
+
+### 5.6 本轮新增审计：远程、电脑与凭据
+
+原生 remote-access 为 Remote 资源和动作提供访问控制，优先扩展它而非重新建身份系统；个人 Task/Artifact/desktop session 仍须声明自己的资源检查。[remote-access](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/api/remote-access/README.md)。
+
+computer-use/browser-use 的 registry 负责 provider 注册，不是通用桌面操作实现。共享桌面没有跨 Session 仲裁；SSH 文件沙箱也不约束网络访问。因此 PA-031 增加控制租约和隔离验证，PA-036 独立实现 VNC 传输。[电脑](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/computer-use/computer-use/README.md)、[浏览器](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/browser-use/browser-use/README.md)、[SSH 沙箱](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/ssh/sandbox-ssh/README.md)。
+
+credentials 提供引用和记录服务；当前 credentials-local 可被同 UID 进程读取，原文明确 OS-keychain provider 尚未提供。PA-032/037 的安全输入及代理是新增实现，不能沿用明文文件后声称具有保险箱隔离。[凭据服务](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/credentials/credentials/README.md)、[本地限制](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/credentials/credentials-local/README.md)。
+
+### 5.7 本轮新增审计：媒体展示
+
+现有 attachment 支持图片及普通文件，但没有专门音视频生命周期；session-controller 的 `/api/file` 整文件返回、忽略 Range，并使用图片大小限制。因此大视频播放、缩略图、后端作业恢复与生成能力都属于新增工作。[attachment](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/attachment/attachment/README.md)、[文件路由](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/api/session-controller/README.md)。
+
 ## 6. 保留的原型模式与替换的假设
 
 | 主题 | 有用模式 | 个人智能体所需变化 |
@@ -137,16 +169,12 @@ Agent Teams 已提供持久化的比较并交换任务看板，具备依赖、�
 | 取消竞争条件 | 用户停止后效果继续发生 | 代次/撤销隔离、原生取消、提供商核对 |
 | 上下文丢失或虚假记忆 | 错误决策和重复工作 | 权威任务、有来源的检查点、更正/删除测试 |
 | 主动服务过载/费用 | 通知疲劳和支出浪费 | 观察模式、免打扰时段、去重、明确预算和实测价值 |
-| Hermes 带来的范围膨胀 | 未选功能挤占可靠核心 | 待选项登记；M4 前明确选择功能 |
+| 过度扩展 | 功能堆积挤占可靠闭环 | 按发布闭包推进；本机能力有独立验收；自动学习和云扩展不能越级 |
 | 过早构建移动/语音平台 | 多套不一致状态机 | 单一命令/领域核心；可选适配器；最小首个客户端 |
 | 许可证/第三方复用错误 | 遗漏分发义务 | 保留现有许可证；复制上游代码前审查声明 |
 
-## 8. 冻结实施范围前需要解决的问题
+## 8. 真正仍待激活时确定的事项
 
-1. O1–O5 和 O8–O10 中，哪些进入首版、推迟或排除？
-2. 用哪个首个部署目标和连接器证明纵向切片？
-3. 哪些私有信息可以自动保留，保留多久，采用何种审查/删除行为？
-4. 模型/工具支出限制、并发和通知偏好的默认值应是什么？
-5. 现有仓库许可证是否是最终预期选择？明确决定之前保留它。
+只剩具体账户及授权范围、目标机器/OS、模型与费用上限、ComfyUI/模型实际可用性、密码库后端、VNC server、远程域名及语音服务。这些是部署输入，不是整个架构重新待定。无资源时继续 keyless/夹具工作，不能通过相应 live 发布关卡。未获知的机器性能、服务价格、密码库状态和历史知识不作推定。
 
-这些问题不阻碍发布本计划，但会阻止将未决选项视为已获授权的实施范围。
+默认值见 [02](02-implementation-roadmap-zh.md)，任务细节见 [06](06-agent-execution-guide-zh.md)。不更改仓库许可证、不替用户打开账户连接或上传私人数据。

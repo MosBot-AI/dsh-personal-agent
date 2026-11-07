@@ -9,7 +9,7 @@
 | 记录 | 最少字段与不变量 |
 | --- | --- |
 | Owner/Profile | 稳定所有者 ID、已验证账户/设备关联、配置档案隔离、策略版本 |
-| SourceEvent | 来源实例 + 外部事件 ID 作为唯一键；可信操作者元数据与不可信正文分离；发生/接收时间；线程和来源 |
+| SourceEvent | 来源实例 + 外部事件 ID + 外部修订号作为唯一键；可信操作者元数据与不可信正文分离；发生/接收时间；线程和来源 |
 | Conversation | 稳定的用户可见对话 ID、运行时会话引用、最后检查点、原始交付目的地 |
 | Project | 所有者、标题、目的、资源引用、当前状态；不隐式授予对全部引用资源的访问 |
 | Task | 所有者/项目、请求结果、约束、状态、版本、下一步、截止时间/时区、来源、验收条件 |
@@ -31,13 +31,17 @@
 拟议任务状态：
 
 ```text
-queued → running → completed
-           ├── waiting_input ──→ queued
-           ├── waiting_approval → queued / cancelled
-           ├── blocked ───────→ queued / failed
-           ├── failed
-           └── cancelling ────→ cancelled / reconciliation_required
+queued -> running -> verifying -> completed
+             |-> waiting_input / waiting_approval / waiting_event
+             |-> waiting_environment / waiting_resource
+             |-> blocked / failed
+nonterminal -> paused -> queued
+nonterminal -> cancelling -> cancelled / reconciliation_required
+wait or blocked -> queued (validated wakeup)
+failed -> queued (explicit retry, new Attempt)
+reconciliation_required -> completed / failed / cancelled (verified outcome)
 ```
+
 
 这些转换需要明确且经过验证的事件。任务也可在运行前取消。失败任务只能通过新的执行尝试和经过检查的转换来重试；不能抹去先前失败。已完成/已取消任务不能仅因外部线程收到新消息而重新启动。
 
@@ -74,7 +78,7 @@ type PublicEvent = {
 
 已认证的所有者和设备来自可信适配器，而非可写的封装字段。以不同载荷复用 `commandId` 属于冲突，不是第二个动作。事件 ID 和任务 ID 不是授权令牌。
 
-若选择 O10，初始 HTTP 提案为：
+PA-022 首先复用原生 Remote；确有传输缺口时，HTTP/SSE 适配器使用以下拟议端点：
 
 - `POST /v1/commands`：验证/入队命令，并返回其持久标识。
 - `GET /v1/tasks` 与 `GET /v1/tasks/{id}`：获授权的任务投影视图。
@@ -180,3 +184,73 @@ prepared → authorized → dispatching → confirmed
 ## 9. 有效完成声明的定义
 
 主智能体应报告变更内容、结果查看位置和任何剩余不确定性。“已实现”需要代码；“已测试”需要具名且已执行的检查；“已发布”需要验证远程状态；“已交付”需要该渠道可获得的提供商证据。仅有设计文档不满足前三类实现声明中的任何一类。
+
+## 10. 实施级不变量与接口
+
+以下细则约束 PA-003 之后的实现。它们是拟议应用契约，不是现有 DSH API。
+
+### 新增记录
+
+| 记录 | 必需字段和不变量 |
+| --- | --- |
+| Project | `kind: project/goal`、成功条件、计划版本、里程碑、复查周期；目标拆解仍创建普通 Task |
+| Subscription | 来源/线程/任务、`context/work` 模式、版本；context 不能授予权限或重启终态任务 |
+| Task wait | 原因、精确事件/设备/资源/问题引用、截止时间、恢复条件；等待不占 Worker 槽 |
+| Routine | 用户意图、版本、原生 schedule 映射、启用模式、授权、错过执行策略；应用意图只有一个权威记录 |
+| Occurrence | routine ID + revision + 原定发生时间；原生重复投递仍只有一个逻辑执行 |
+| Budget reservation | owner/task/provider、估算上限、币种、价格版本、实际用量、已结算/不确定状态；调用前原子预留 |
+| Skill candidate | 版本、输入/输出、能力引用、成功实例、评测、激活/回退状态 |
+| MediaJob | task/attempt/generation、后端实例和句柄、输入/工作流/模型哈希、输出规格、资源租约和结果；提交不明不盲重试 |
+| ResourceLease | environment/resource ID、持有者、代次、到期时间、范围；桌面只有一个控制者，每次输入由服务端校验 |
+| CredentialRef | 不透明 ID、后端、非秘密元数据、允许的账号/域名/用途；领域数据库不存秘密值 |
+| SecretInputRequest | owner/device/task revision、凭据类型、保存方式、允许来源/用途、到期、单次 nonce、状态；原始输入绕过对话 |
+| DesktopSession | owner/device/environment、查看/控制权限、到期、控制租约和连接状态；客户端标记不是授权 |
+
+实现使用具名类型 ID，不能将不同 ID 作为可互换字符串。运行时校验在模型/工具/config/file/queue/process/wire 边界执行；已具备静态类型的同进程值不必仅因不信任 TypeScript 而重复校验。
+
+### 状态转换与并发
+
+- `ready` 是 Worker 回报，触发 `verifying`；只有必需产物和效果验证通过后才进入 `completed`。
+- 所有者新回复唤醒工作前重新检查授权、代次和任务版本。第三方上下文不能复活取消/完成任务。显式 `work.reopen` 创建新 Attempt，保留过去历史。
+- `paused` 停止新派发，不声称回滚在途效果；resume 重查授权/预算。取消还需撤销任务代次并核对所属执行。
+- 等依赖用 `blocked` 和 `reason=dependency`；拒绝依赖环。精确依赖完成可唤醒一次；依赖失败不能把下游任务标成完成。
+- 每个 Task 最多一个活动顶层 Attempt。Worker 可拥有 DSH 子智能体，但纳入其预算/资源限制。共享文件、分支或浏览器的执行器必须使用显式租约或独立 worktree/profile。
+- 停止和审批响应走确定性服务及前台保留容量，确认接收不需要模型调用。
+
+### 事务与跨存储交接
+
+必需唯一键：`(ownerId, clientId, commandId)`、`(sourceInstanceId, externalEventId, externalRevision)`、`(routineId, routineRevision, occurrenceAt)`、`effect.operationId`，以及顶层尝试的 `(taskId, generation)`。同 command ID 不同规范化载荷返回冲突。来源适配器必须给出稳定 revision，或明确把更新视为新事件。
+
+命令事务读取预期版本、验证转换、存事件/结果，并添加效果与发件箱意图后提交；网络操作在提交后执行。一次性审批预留与不可变效果声明原子提交。授权检查和派发交接与撤销串行化；不可避免的在途动作保留核对路径。
+
+产品 SQLite 与 DSH Session 存储不能共享一次原子提交。使用持久交付意图和唯一输入 ID 衔接；Session flush 后再存确认。重启时比较 Session 已消费/待消费输入 ID，核对后决定重投。PA-002/009 必须验证固定宿主是否可观察这些状态；存在缺口则增加最小扩展点，不宣称天然恰好执行一次。
+
+原生 schedule 注册也跨提交：先存映射意图，再记录/核对创建出的 schedule ID；重复投递使用同 Occurrence 键。run-now 使用独立 command ID。在途提醒保留原 revision，并检查当前启用/撤销状态。
+
+### 应用服务词汇
+
+以下是拟议操作名；工具与传输适配器调用同一实现：
+
+```text
+work.create / work.get / work.list / work.updatePlan
+work.pause / work.resume / work.cancel / work.retry / work.reopen
+work.report / work.verify / work.wait
+context.checkpoint / context.recall
+memory.remember / memory.search / memory.correct / memory.forget
+policy.evaluate / approval.respond / grant.revoke
+effect.prepare / effect.dispatch / effect.reconcile
+routine.create / routine.pause / routine.run
+media.submit / media.inspect / media.cancel / media.collect
+vault.requestInput / vault.find / vault.use / vault.lock
+desktop.openView / desktop.requestControl / desktop.releaseControl
+```
+
+类型化错误包括 `version_conflict`、`permission_denied`、`approval_required`、`resource_unavailable`、`budget_exceeded`、`outcome_uncertain`、`source_unavailable`、`unsupported_capability`。只有声明为暂时性的问题才能重试。公开事件使用安全投影，不放秘密原始输入、任意提供商响应或私有推理。命令 ACK 表示已经持久接收，不表示任务完成。
+
+### 初始配置语义
+
+Worker 默认并发 2，保留独立控制处理容量；E02 基准配置为 4。GPU 重任务初始并发 1；桌面控制互斥。这些是经过校验的插件配置，不是藏在代码里的常数。无人值守付费工作需要明确每日/单任务上限及已知价格或保守估算上界，否则不启用；未知价格不计为零。
+
+上下文预算根据模型容量和输出预留计算。扣除固定指令与当前输入后，初始比例为权威状态 30%、近期对话 25%、检索 25%、记忆/检查点 20%，先裁剪低优先级内容。这是可调初值，不是质量承诺；超长证据用稳定引用外置。
+
+初始保留策略：任务/成果保留至用户删除，详细诊断日志 14 天，自动事实提取和屏幕录像默认关闭。说明存储增长并允许配置；备份保留、删除标记需在恢复时执行。不得将日志变成隐藏的第二个个人记忆库。

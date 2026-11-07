@@ -1,28 +1,45 @@
-# DSH Personal Agent implementation plan
+# dshpa product and implementation plan
 
 [简体中文](README-zh.md)
 
-**Status: design and implementation proposal, not a working release.** Updated 2026-11-07 UTC. The repository contained only its existing `LICENSE` when this documentation work began. These documents do not claim that the proposed plugins, APIs, tests, or clients have been implemented.
+**Status: detailed plan; product not implemented.** Revision `2026-11-07-r6`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
 
-DSH Personal Agent turns DeepSeek Harness itself into the user's central personal agent: one primary agent coordinates projects, tasks, information, reminders, and delegated work. It is a DSH-native bundle of plugins, not an external assistant that treats DSH as a coding tool.
+Build a **persistent personal work system on the owner's computer**: one primary agent coordinates goals and tasks, delegates execution and returns inspectable outcomes while conserving human attention. Cloud services are optional. DSH remains the native runtime and orchestration host.
 
-## Reading order
+## Reading guide
 
-1. [Product scope and native architecture](01-product-and-architecture.md): responsibilities, plugin boundaries, persistent work, memory, connectors, clients, and voice.
-2. [Implementation roadmap](02-implementation-roadmap.md): dependency-ordered milestones, work packages, acceptance gates, and release criteria.
-3. [Contracts, security, and tests](03-contracts-security-and-tests.md): proposed data and API contracts, approval, cancellation, recovery, and verification.
-4. [Decisions and source audit](04-decisions-and-source-audit.md): confirmed direction, unresolved Hermes options, pinned upstream evidence, and risks.
+| Document | Purpose |
+| --- | --- |
+| [01 Product and architecture](01-product-and-architecture.md) | Value, user outcomes, responsibilities and non-goals |
+| [08 Local computer, media, vault and VNC](08-local-computer-media-and-vault.md) | Resident execution, viewing/takeover, secure intake, credential use and creation |
+| [02 Roadmap](02-implementation-roadmap.md) | Foundation alpha → desktop alpha → beta → v1 and defaults |
+| [06 Agent execution guide](06-agent-execution-guide.md) | Handoff prompt, execution procedure, 39-task index and evidence |
+| [03 Contracts](03-contracts-security-and-tests.md) | States, transactions, authorization, recovery and resource/media/secret records |
+| [07 Evaluation](07-evaluation-and-release-gates.md) | E00–E21, quality targets, live evidence and release gates |
+| [04 Decisions/source audit](04-decisions-and-source-audit.md) | Existing versus new capabilities, defaults and activation inputs |
+| [05 Research](05-research-and-product-lessons.md) | Products, expert/designer analysis, Superagent principles and evidence limits |
+| [09 Plugin architecture](09-plugin-architecture.md) | Replaceable media/memory, development, configuration, migration and rollback |
 
-English is the primary project documentation language. Each document has a separate `-zh.md` counterpart with the same scope and decision IDs.
+Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. All tasks are `planned`. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
 
-## What is settled and what is not
+## Key choices
 
-- **Settled product direction:** DSH is the central agent; native plugins first; project/task/information management; an open connector/MCP boundary; persistent conversation and memory as design goals; eventual remote/mobile and voice access.
-- **Pending selection:** Hermes comparison options 1–5 and 8–10. Their detailed enhancements are documented as optional proposals, not silently accepted scope.
-- **Engineering recommendations:** the concrete package split, SQLite schema, transport shape, milestone scope, and performance gates below. They require implementation validation and do not override pending product decisions.
+- Lightweight Router and task Workers; waiting releases compute.
+- Reuse native DSH; plugin SQLite owns transactional work/authority/effect/outbox state.
+- Resident operation, VNC, secure password/key input, credential brokerage and media belong in the first complete product.
+- One desktop controller, with human takeover; API and media work may run concurrently.
+- ComfyUI is the first replaceable generation adapter; distinguish generated from composited video and validate actual hardware.
+- Secure forms feed mature vaults directly; agents use scoped references. No custom cryptography or secrets in chat.
+- Evaluate accepted outcomes, attention and cost rather than feature volume.
 
-The first implementation step is a compatibility spike. The inspected current DSH source and the superagent prototype target different DSH versions. Native DSH already has in-process cancellation and assistant streaming; the plan must not mistake SDK surface limitations for missing runtime capabilities.
+## Current verification
 
-## Delivery boundaries
+```sh
+python3 scripts/check_plan.py
+python3 scripts/check_plan.py --check-sources
+git diff --check
+```
 
-This publication adds documentation only. It does not install dependencies, start agents, connect accounts, spend on model calls, change the repository license, create a GitHub Project, or make application changes. Milestone dates and staffing are deliberately not promised. Implementation should advance by acceptance evidence, not by marking a design as delivered.
+These checks validate plan structure, dependencies, bilingual files, local links and source paths, **not unimplemented product behavior**. PA-001 creates future pnpm scripts. Live model, media, VNC and vault checks belong to their task cards.
+
+The specified `/Users/charleypeng/Documents/llmwiki` path was absent; no historical conclusions were invented. No software was installed, accounts connected, real secrets read, models/media jobs run or product published. Concrete accounts, budgets, hardware and providers are activation inputs, not blockers for keyless development.

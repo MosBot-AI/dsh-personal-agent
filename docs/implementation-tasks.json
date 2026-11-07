@@ -1,0 +1,1744 @@
+{
+  "schema_version": 1,
+  "plan_revision": "2026-11-07-r6",
+  "timezone": "Asia/Shanghai",
+  "status": "design_only",
+  "baseline": {
+    "personal_agent": "8928cd989d76db55bb1a5f30efcf37f099d7c4ed",
+    "harness": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "superagent": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4"
+  },
+  "source_roots": {
+    "H": "/Users/charleypeng/dev/deepseek-harness",
+    "S": "/Users/charleypeng/dev/dsh-superagent-prototype"
+  },
+  "execution_rules": {
+    "current_task": "documentation_only",
+    "first_task": "PA-001",
+    "default_release": "desktop-alpha",
+    "one_active_task_per_agent": true,
+    "implementation_commands_exist": false,
+    "live_credentials_required_for_live_claims": true,
+    "status_requires_evidence": true
+  },
+  "tasks": [
+    {
+      "id": "PA-001",
+      "phase": "M0",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Bootstrap a pinned native bundle",
+      "title_zh": "固定工具链与原生套件骨架",
+      "depends_on": [],
+      "target_paths": [
+        "package.json",
+        "pnpm-workspace.yaml",
+        "pnpm-lock.yaml",
+        "packages/personal-agent/package.json",
+        "packages/personal-agent/cordis.patch.yml",
+        "packages/personal-agent/src/index.ts"
+      ],
+      "source_refs": [
+        "H:package.json",
+        "H:docs/architecture.md",
+        "S:src/index.ts",
+        "S:cordis.patch.yml"
+      ],
+      "implementation_steps": [
+        "Create a TypeScript ESM workspace with exact DSH versions from the audited checkout; record Node >=24.9.0 and pnpm 11.28.5. Do not silently substitute alpha dependencies.",
+        "Create one DSH composition bundle with cohesive core services and workspace slots for plugin-api, plugin-testkit and independent memory/media/workflow providers. Launch through a named dsh profile; no second orchestrator or standalone launcher.",
+        "Define build, typecheck, test, test:contracts, test:recovery, test:e2e and check scripts. Missing optional live credentials must produce skipped evidence, never a passing live claim."
+      ],
+      "acceptance_ids": [
+        "E00"
+      ],
+      "test_files": [
+        "tests/contracts/bundle.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/contracts/bundle.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-001.md"
+    },
+    {
+      "id": "PA-002",
+      "phase": "M0",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Prove host seams and choose adapters",
+      "title_zh": "验证宿主扩展点与复用边界",
+      "depends_on": [
+        "PA-001"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/host-adapter.ts",
+        "docs/evidence/host-compatibility.md"
+      ],
+      "source_refs": [
+        "H:packages/core/agent/src/runtime-types.ts",
+        "H:packages/core/tools/src/contracts.ts",
+        "H:packages/schedule/schedule/README.md",
+        "H:packages/storage/storage-domain/README.md",
+        "H:packages/api/remote-access/README.md",
+        "S:src/executor/dsh.ts"
+      ],
+      "implementation_steps": [
+        "Probe create/resume/followup/steer/inject/cancel/whenIdle, transient streams and durable final events on the real pinned host with a fake model.",
+        "Exercise tool guard, lifecycle disposal and persistence flush. Record that synchronous deny-only guards do not implement durable asynchronous approvals.",
+        "Prove schedule occurrence delivery and duplicate behavior; map native remote resource controls. Record missing seams with failing tests before proposing a minimal upstream patch."
+      ],
+      "acceptance_ids": [
+        "E00",
+        "E02",
+        "E06"
+      ],
+      "test_files": [
+        "tests/contracts/host.spec.ts",
+        "tests/contracts/schedule-host.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/contracts/host.spec.ts tests/contracts/schedule-host.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-002.md"
+    },
+    {
+      "id": "PA-003",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Define commands and durable work states",
+      "title_zh": "定义领域记录与状态转换",
+      "depends_on": [
+        "PA-002"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/domain/model.ts",
+        "packages/personal-agent/src/domain/commands.ts",
+        "packages/personal-agent/src/domain/transitions.ts"
+      ],
+      "source_refs": [
+        "S:src/core/model.ts",
+        "S:src/core/engine.ts"
+      ],
+      "implementation_steps": [
+        "Implement the records and transition table in document 03 with branded IDs and validated external/model/durable inputs. Project.kind represents a goal or a finite project; do not create a second planner.",
+        "Separate Task, Attempt, Effect, Delivery and user conversation state. Add version/generation checks, immutable mandate references and structured wait reasons.",
+        "Implement deterministic create/status/cancel/pause/resume controls. Retry creates a new Attempt; reopening a terminal task requires an authenticated explicit command."
+      ],
+      "acceptance_ids": [
+        "E01",
+        "E03",
+        "E05",
+        "E06"
+      ],
+      "test_files": [
+        "tests/domain/transitions.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/domain/transitions.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-003.md"
+    },
+    {
+      "id": "PA-004",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Persist command, state and outbox atomically",
+      "title_zh": "实现事务存储和迁移",
+      "depends_on": [
+        "PA-003"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/storage/schema.ts",
+        "packages/personal-agent/src/storage/store.ts",
+        "packages/personal-agent/src/storage/migrations/001.ts"
+      ],
+      "source_refs": [
+        "S:src/app/store.ts",
+        "S:src/app/effects.ts",
+        "H:packages/storage/storage-domain/README.md"
+      ],
+      "implementation_steps": [
+        "Use a plugin-owned node:sqlite database because the audited storage-domain API lacks cross-table transactions. Keep session logs in DSH.",
+        "Commit input dedupe, task transitions, action intent and outbox in one transaction; add unique indexes and compare-and-swap revisions. Do not execute network work inside a transaction.",
+        "Implement one-writer process locking, foreign keys, WAL, safe file permissions, versioned migrations and corruption quarantine. Bound synchronous transaction size."
+      ],
+      "acceptance_ids": [
+        "E03",
+        "E06",
+        "E11"
+      ],
+      "test_files": [
+        "tests/storage/atomicity.spec.ts",
+        "tests/storage/migration.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/storage/atomicity.spec.ts tests/storage/migration.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-004.md"
+    },
+    {
+      "id": "PA-005",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Enforce identity, grants and action review",
+      "title_zh": "实现身份、授权与动作执行关卡",
+      "depends_on": [
+        "PA-004"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/policy/identity.ts",
+        "packages/personal-agent/src/policy/grants.ts",
+        "packages/personal-agent/src/policy/dispatch.ts"
+      ],
+      "source_refs": [
+        "S:src/admission.ts",
+        "S:src/policy.ts",
+        "H:packages/core/tools/src/index.ts",
+        "H:packages/credentials/credentials/README.md"
+      ],
+      "implementation_steps": [
+        "Bind owner/device/source identities through trusted adapters. Never infer cross-service identity from names, email text or memory.",
+        "Implement allow/ask/deny decisions, canonical action digest, atomic one-use approval reservation and dispatch fencing. Revalidate policy and revocation at dispatch.",
+        "Keep credentials outside worker contexts; start without shell/browser/network tools for private-data workers. Add a bypass test for every newly enabled execution path."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E07"
+      ],
+      "test_files": [
+        "tests/security/authorization.spec.ts",
+        "tests/security/bypass.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/security/authorization.spec.ts tests/security/bypass.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-005.md"
+    },
+    {
+      "id": "PA-006",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Run bounded native DSH workers",
+      "title_zh": "实现原生任务执行器",
+      "depends_on": [
+        "PA-005"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/executor.ts",
+        "packages/personal-agent/src/runtime/reports.ts",
+        "packages/personal-agent/src/runtime/presets.ts"
+      ],
+      "source_refs": [
+        "S:src/executor/dsh.ts",
+        "S:src/executor/background.ts",
+        "S:src/app/sessions.ts"
+      ],
+      "implementation_steps": [
+        "Create or resume native agents using a task work directory, capability subset, input cursor and generation. Do not copy danger-full-access.",
+        "Implement report kinds progress/waiting/ready/blocked/failed with evidence and wait condition. Verify artifacts before task completion; idle is not completion.",
+        "Release compute slots on durable waits; account for background jobs and child agents before release. Cancel and teardown all task-owned work without touching unrelated sessions."
+      ],
+      "acceptance_ids": [
+        "E01",
+        "E02",
+        "E06"
+      ],
+      "test_files": [
+        "tests/runtime/executor.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/runtime/executor.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-006.md"
+    },
+    {
+      "id": "PA-007",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Deliver verifiable artifacts and results",
+      "title_zh": "交付可验证产物与结果",
+      "depends_on": [
+        "PA-006"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/artifacts/store.ts",
+        "packages/personal-agent/src/runtime/outbox.ts",
+        "packages/personal-agent/src/domain/verification.ts"
+      ],
+      "source_refs": [
+        "S:src/app/outbox.ts",
+        "S:src/app/delivery.ts"
+      ],
+      "implementation_steps": [
+        "Store versioned artifacts with content digest, source references, owner visibility and acceptance evidence. Check existence/content before ready.",
+        "Commit immutable outbound content and delivery destination; serialize per task/channel without blocking unrelated conversations.",
+        "Distinguish generated, accepted by provider, delivered and read. Unknown delivery outcomes require reconciliation when provider dedupe is unavailable."
+      ],
+      "acceptance_ids": [
+        "E01",
+        "E06",
+        "E12"
+      ],
+      "test_files": [
+        "tests/integration/artifacts.spec.ts",
+        "tests/recovery/outbox.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/integration/artifacts.spec.ts tests/recovery/outbox.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-007.md"
+    },
+    {
+      "id": "PA-008",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Ship the first usable conversation and inbox",
+      "title_zh": "交付主对话与待办界面",
+      "depends_on": [
+        "PA-007"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/client/index.tsx",
+        "packages/personal-agent/src/client/inbox.tsx",
+        "packages/personal-agent/src/client/task.tsx",
+        "packages/personal-agent/locale/zh-CN.json",
+        "packages/personal-agent/locale/en-US.json"
+      ],
+      "source_refs": [
+        "S:src/client/index.tsx",
+        "S:src/client/overview.tsx",
+        "H:packages/client/ui-schedule/README.md"
+      ],
+      "implementation_steps": [
+        "Reuse DSH Web client extension points, host authentication and existing chat rendering; add Today, project/task detail and artifact links.",
+        "Show blocking questions, exact approval cards and inspectable results before routine activity. Input remains usable during execution.",
+        "Add cancel/pause/redirect controls and honest disconnected/recovering/unknown states; locale-owned copy and keyboard navigation."
+      ],
+      "acceptance_ids": [
+        "E01",
+        "E02",
+        "E05",
+        "E12"
+      ],
+      "test_files": [
+        "tests/client/inbox.spec.tsx",
+        "tests/e2e/local-flow.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/client/inbox.spec.tsx tests/e2e/local-flow.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-008.md"
+    },
+    {
+      "id": "PA-009",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Recover safely from restart and cancellation",
+      "title_zh": "实现重启恢复与取消核对",
+      "depends_on": [
+        "PA-006",
+        "PA-007"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/recovery.ts",
+        "packages/personal-agent/src/runtime/cancel.ts"
+      ],
+      "source_refs": [
+        "S:src/app/runtime.ts",
+        "S:src/executor/dsh.ts",
+        "H:packages/core/session/README.md"
+      ],
+      "implementation_steps": [
+        "Reconcile tasks, attempts, DSH sessions, pending inputs, effect receipts and deliveries before dispatch resumes.",
+        "Persist cancellation generation before signaling agents. Stale workers cannot commit or create effects; unresolved in-flight writes remain uncertain.",
+        "Inject crashes before send, after remote acceptance and before local acknowledgment. Restore backups in reconcile-only mode with no stale grant reactivation."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E06",
+        "E11"
+      ],
+      "test_files": [
+        "tests/recovery/crash.spec.ts",
+        "tests/recovery/cancel.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/recovery/crash.spec.ts tests/recovery/cancel.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-009.md"
+    },
+    {
+      "id": "PA-010",
+      "phase": "M2",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Route events without blocking the primary agent",
+      "title_zh": "实现轻量路由、订阅与批处理",
+      "depends_on": [
+        "PA-008",
+        "PA-009"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/intake.ts",
+        "packages/personal-agent/src/runtime/router.ts",
+        "packages/personal-agent/src/runtime/subscriptions.ts",
+        "packages/personal-agent/prompts/router.md",
+        "packages/personal-agent/prompts/worker.md"
+      ],
+      "source_refs": [
+        "S:src/core/intake.ts",
+        "S:src/core/evals.ts",
+        "S:src/core/tickets.ts",
+        "S:prompts/orchestrator.md"
+      ],
+      "implementation_steps": [
+        "Authenticate and deduplicate events; apply deterministic admission and explicit task references before semantic routing. Batch unrelated new candidates with per-item decisions.",
+        "Deliver subscribed in-scope events directly to active workers; context-only subscriptions do not grant authority or reopen tasks. Handbacks return to the Router once.",
+        "Reserve foreground control capacity; main agent dispatches expensive work and never waits on shell or browser loops. Expose bounded queue/backpressure and fair scheduling."
+      ],
+      "acceptance_ids": [
+        "E02",
+        "E03"
+      ],
+      "test_files": [
+        "tests/runtime/routing.spec.ts",
+        "tests/runtime/fairness.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/runtime/routing.spec.ts tests/runtime/fairness.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-010.md"
+    },
+    {
+      "id": "PA-011",
+      "phase": "M2",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Preserve context through checkpoints and recall",
+      "title_zh": "实现检查点与引用召回",
+      "depends_on": [
+        "PA-010"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/context/checkpoint.ts",
+        "packages/personal-agent/src/context/recall.ts",
+        "packages/personal-agent/src/context/assembler.ts"
+      ],
+      "source_refs": [
+        "S:src/app/resources.ts",
+        "S:src/app/source-context.ts",
+        "H:packages/compaction/compaction/README.md"
+      ],
+      "implementation_steps": [
+        "Persist objectives, constraints, decisions, unresolved questions and source pointers before compaction. Log model-visible input through supported DSH events.",
+        "Use task/event/artifact references for exact retrieval before text search; inline small adjacent summaries and expose bounded page cursors for spilled content.",
+        "Budget context by section and preserve current instructions. Test repeated compaction, stale summaries, inaccessible sources and bilingual retrieval."
+      ],
+      "acceptance_ids": [
+        "E04",
+        "E07"
+      ],
+      "test_files": [
+        "tests/context/checkpoint.spec.ts",
+        "tests/context/recall.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/context/checkpoint.spec.ts tests/context/recall.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-011.md"
+    },
+    {
+      "id": "PA-012",
+      "phase": "M2",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Make personal memory explicit and correctable",
+      "title_zh": "实现可查看、更正和遗忘的记忆",
+      "depends_on": [
+        "PA-011",
+        "PA-005",
+        "PA-038"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/context/memory.ts",
+        "packages/personal-agent/src/client/memory.tsx",
+        "packages/memory-sqlite/src/index.ts"
+      ],
+      "source_refs": [
+        "S:src/core/memory.ts",
+        "H:packages/session-query/README.md"
+      ],
+      "implementation_steps": [
+        "Implement remember/search/correct/forget with scope, source, confidence and validity. Keep inferred candidates separate from confirmed preferences.",
+        "Correction supersedes; deletion invalidates indexes/checkpoints/derived summaries and records an exclusion so old logs are not silently re-ingested. Disclose retained backups.",
+        "Default automatic extraction to off; explicit instructions can save facts. Never write back to external llmwiki without a separate user request.",
+        "Implement the documented MemoryProvider as an independent plugin, including normalized export/import, revisions and tombstones. Core-owned forgetting exclusions prevent stale-provider recall."
+      ],
+      "acceptance_ids": [
+        "E04",
+        "E07",
+        "E21"
+      ],
+      "test_files": [
+        "tests/context/memory.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/context/memory.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-012.md"
+    },
+    {
+      "id": "PA-013",
+      "phase": "M2",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Budget compute and human attention",
+      "title_zh": "实现费用、算力与通知预算",
+      "depends_on": [
+        "PA-010",
+        "PA-007"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/budget.ts",
+        "packages/personal-agent/src/runtime/attention.ts",
+        "packages/personal-agent/src/client/usage.tsx"
+      ],
+      "source_refs": [
+        "S:src/app/retry-health.ts",
+        "S:src/limits.ts",
+        "S:docs/000-philosophy.md"
+      ],
+      "implementation_steps": [
+        "Reserve estimated provider cost atomically before parallel calls; reconcile usage afterward and carry uncertain reservations until reconciled.",
+        "Enforce turn/tool/time and concurrency limits even when prices are unknown. Unknown monetary price is not zero; prohibit unattended paid work without configured limits.",
+        "Coalesce routine progress; separate user-requested reminders from proactive suggestions; apply quiet hours and notification reasons. Persist rejected/suppressed candidates for evaluation."
+      ],
+      "acceptance_ids": [
+        "E02",
+        "E08",
+        "E09"
+      ],
+      "test_files": [
+        "tests/runtime/budget.spec.ts",
+        "tests/runtime/attention.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/runtime/budget.spec.ts tests/runtime/attention.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-013.md"
+    },
+    {
+      "id": "PA-014",
+      "phase": "M2",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Track goals and changing plans",
+      "title_zh": "实现目标、计划修订与跨项目协调",
+      "depends_on": [
+        "PA-011",
+        "PA-013"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/domain/projects.ts",
+        "packages/personal-agent/src/domain/dependencies.ts",
+        "packages/personal-agent/src/client/projects.tsx"
+      ],
+      "source_refs": [
+        "S:src/core/tickets.ts",
+        "H:packages/team/agent-team/README.md"
+      ],
+      "implementation_steps": [
+        "Represent goal projects with success criteria, review cadence, milestones and linked tasks; maintain an explicit plan revision and rationale for changes.",
+        "Reject dependency cycles and propagate blocked/waiting states. Task workers decompose local work; primary agent reconciles cross-project conflicts and priorities.",
+        "Offer a weekly review on demand; creating a template never arms a recurring schedule. Ask only when a tradeoff changes the intended outcome or authorized scope."
+      ],
+      "acceptance_ids": [
+        "E01",
+        "E03",
+        "E12"
+      ],
+      "test_files": [
+        "tests/domain/projects.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/domain/projects.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-014.md"
+    },
+    {
+      "id": "PA-015",
+      "phase": "M3",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Connect local knowledge and documents",
+      "title_zh": "接入本地知识库和文档",
+      "depends_on": [
+        "PA-012",
+        "PA-014"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/connectors/local-knowledge.ts",
+        "packages/personal-agent/src/context/search-index.ts"
+      ],
+      "source_refs": [
+        "H:packages/fs/fs/README.md",
+        "H:packages/fs/fs-sandbox/README.md"
+      ],
+      "implementation_steps": [
+        "Implement configurable read-only roots with include/exclude filters, size/type limits and stable source references. Do not scan home directories by default.",
+        "Index changed content incrementally; deletion and permission revocation invalidate derived entries. Treat file text and embedded instructions as untrusted data.",
+        "Support Chinese/mixed-language keyword search first. If llmwiki is unavailable, show unavailable and continue only with explicitly available sources; never fabricate or create the path."
+      ],
+      "acceptance_ids": [
+        "E04",
+        "E07"
+      ],
+      "test_files": [
+        "tests/connectors/local-knowledge.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/connectors/local-knowledge.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-015.md"
+    },
+    {
+      "id": "PA-016",
+      "phase": "M3",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Integrate one real read-only connector",
+      "title_zh": "接入首个真实只读连接器",
+      "depends_on": [
+        "PA-010",
+        "PA-013",
+        "PA-015"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/connectors/registry.ts",
+        "packages/personal-agent/src/connectors/github.ts",
+        "packages/personal-agent/src/connectors/mcp.ts"
+      ],
+      "source_refs": [
+        "S:src/sources/github.ts",
+        "S:src/sources/github-read.ts",
+        "S:src/sources/registry.ts",
+        "H:packages/mcp/README.md"
+      ],
+      "implementation_steps": [
+        "Default engineering target is one owner-selected GitHub repository; use a connector interface supporting account identity, cursors, capability/version fingerprints and rate limits.",
+        "Validate fixtures first, then a read-only live connection when supplied. No credential means unavailable live evidence, not a switch to invented data.",
+        "Wrap MCP as a transport behind the same policy. Tool changes require capability revalidation; generic tool names cannot bypass account/resource checks."
+      ],
+      "acceptance_ids": [
+        "E03",
+        "E07",
+        "E10"
+      ],
+      "test_files": [
+        "tests/connectors/github.spec.ts",
+        "tests/connectors/mcp.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/connectors/github.spec.ts tests/connectors/mcp.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-016.md"
+    },
+    {
+      "id": "PA-017",
+      "phase": "M3",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Add one reviewable external write path",
+      "title_zh": "实现一条可审核的外部写入路径",
+      "depends_on": [
+        "PA-016",
+        "PA-009",
+        "PA-005"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/connectors/github-write.ts",
+        "packages/personal-agent/src/policy/reconcile.ts"
+      ],
+      "source_refs": [
+        "S:src/sources/github-channel.ts",
+        "S:src/app/outbox.ts"
+      ],
+      "implementation_steps": [
+        "Implement a draft pull request in a dedicated test repository: prepare a branch in an isolated workspace, show exact repo/base/head/title/body and content digest, then dispatch under a matching grant.",
+        "Use native API identity where available and an immutable operation marker with lookup reconciliation. Ambiguous timeout remains uncertain; never assume provider exactly-once behavior.",
+        "Live test opens and reads back a draft PR only under explicitly supplied test authority. Merge, broad writes and production credentials are out of this slice."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E06",
+        "E10"
+      ],
+      "test_files": [
+        "tests/connectors/github-write.spec.ts",
+        "tests/e2e/github-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/connectors/github-write.spec.ts tests/e2e/github-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-017.md"
+    },
+    {
+      "id": "PA-018",
+      "phase": "M3",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Bridge durable schedules into event intake",
+      "title_zh": "实现可靠提醒与例行任务",
+      "depends_on": [
+        "PA-002",
+        "PA-010",
+        "PA-013"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/schedule-adapter.ts",
+        "packages/personal-agent/src/domain/routines.ts"
+      ],
+      "source_refs": [
+        "H:packages/schedule/schedule/README.md",
+        "H:packages/schedule/tool-schedule/README.md"
+      ],
+      "implementation_steps": [
+        "Reuse native timing calculation and durable wakeups; keep application Routine intent separate from native schedule mapping and reconcile mapping creation after crash.",
+        "Deduplicate logical occurrences by routine revision and scheduled occurrence; treat native inbox receipt as wakeup evidence, not completed business work.",
+        "Persist timezone, DST choice and misfire policy. Simple reminders can deliver without a model; goal work waits without occupying a worker. Never auto-arm templates."
+      ],
+      "acceptance_ids": [
+        "E06",
+        "E08",
+        "E09"
+      ],
+      "test_files": [
+        "tests/runtime/schedule.spec.ts",
+        "tests/recovery/schedule.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/runtime/schedule.spec.ts tests/recovery/schedule.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-018.md"
+    },
+    {
+      "id": "PA-019",
+      "phase": "M3",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Prepare useful work proactively",
+      "title_zh": "实现受约束的主动准备",
+      "depends_on": [
+        "PA-016",
+        "PA-018",
+        "PA-014",
+        "PA-013"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/proactive.ts",
+        "packages/personal-agent/src/client/suggestions.tsx"
+      ],
+      "source_refs": [
+        "S:src/core/evals.ts",
+        "S:docs/002-authorization.md"
+      ],
+      "implementation_steps": [
+        "Implement off/observe/prepare/act modes. Observe records proposals; prepare permits only granted read access and private artifacts; act additionally needs operation-specific grants.",
+        "Use explicit goal/rule, source freshness, dedupe window, cooldown and budget before semantic assessment. Store why a candidate was surfaced or suppressed.",
+        "Run replay and staged dogfooding before enabling a rule. Lack of useful evidence results in silence, not speculative notifications."
+      ],
+      "acceptance_ids": [
+        "E07",
+        "E08",
+        "E09"
+      ],
+      "test_files": [
+        "tests/runtime/proactive.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/runtime/proactive.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-019.md"
+    },
+    {
+      "id": "PA-020",
+      "phase": "M3",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Turn repeated success into reviewed skills",
+      "title_zh": "实现技能沉淀与有限学习",
+      "depends_on": [
+        "PA-012",
+        "PA-019"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/context/skill-candidates.ts",
+        "packages/personal-agent/src/client/skills.tsx"
+      ],
+      "source_refs": [
+        "H:packages/skill/skill/README.md",
+        "H:packages/skill/skill-filesystem/README.md"
+      ],
+      "implementation_steps": [
+        "Propose a versioned skill after repeated accepted outcomes, carrying input/output schema, required capabilities, source examples and test cases.",
+        "Evaluate against held-out fixtures; activate only with explicit approval. A skill never changes permissions, installs plugins or schedules itself.",
+        "Track success, correction and rollback by version; automatic memory candidates remain off unless enabled separately. Keep a known-good version."
+      ],
+      "acceptance_ids": [
+        "E04",
+        "E07",
+        "E12"
+      ],
+      "test_files": [
+        "tests/context/skills.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/context/skills.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-020.md"
+    },
+    {
+      "id": "PA-021",
+      "phase": "M3",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Operate an always-on single host",
+      "title_zh": "实现常驻部署与分层监督",
+      "depends_on": [
+        "PA-009",
+        "PA-013",
+        "PA-018"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/health.ts",
+        "packages/personal-agent/src/runtime/watchdog.ts",
+        "deploy/",
+        "docs/operations.md"
+      ],
+      "source_refs": [
+        "S:src/infra/health.ts",
+        "S:src/app/retry-health.ts",
+        "S:docs/006-deployment.md"
+      ],
+      "implementation_steps": [
+        "Make the user-owned computer a first-class always-on host with a foreground dsh profile, opt-in login startup/service configuration, persistent state, readiness, graceful shutdown and sleep/wake recovery. macOS is the first verified desktop target; Linux headless hosting is a separate tested deployment. No mandatory cloud coordinator.",
+        "Monitor stale progress, repeated tool calls and budget exhaustion independently of process liveness. Default semantic watchdog is diagnostic; bounded restart/retry cannot revive cancelled work.",
+        "Test disk-full, migrations, backup/restore, credential revocation and provider outages. Add retention settings and audit export without logging private content."
+      ],
+      "acceptance_ids": [
+        "E06",
+        "E09",
+        "E11"
+      ],
+      "test_files": [
+        "tests/ops/health.spec.ts",
+        "tests/ops/restore.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/ops/health.spec.ts tests/ops/restore.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-021.md"
+    },
+    {
+      "id": "PA-022",
+      "phase": "M4",
+      "release": "beta",
+      "status": "planned",
+      "title": "Expose the same agent securely on mobile web",
+      "title_zh": "实现远程 API 与移动 Web",
+      "depends_on": [
+        "PA-008",
+        "PA-021",
+        "PA-005"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/api/commands.ts",
+        "packages/personal-agent/src/api/events.ts",
+        "packages/personal-agent/src/client/mobile.tsx"
+      ],
+      "source_refs": [
+        "H:packages/api/remote-access/README.md",
+        "H:packages/api/remotes/README.md"
+      ],
+      "implementation_steps": [
+        "First extend native remote resources; keep domain commands transport-independent. Add authenticated HTTP/SSE only where native contracts cannot serve device/replay needs.",
+        "Implement device enrollment/revocation, CSRF/origin protection, bounded replay, snapshots and precise approval cards on responsive Web/PWA. No new client-side planner.",
+        "Separate live stream from push notifications. Verify reconnect from expired cursor and revoked device; previews disclose minimum information."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E07",
+        "E13"
+      ],
+      "test_files": [
+        "tests/api/remote.spec.ts",
+        "tests/e2e/mobile.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/api/remote.spec.ts tests/e2e/mobile.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-022.md"
+    },
+    {
+      "id": "PA-023",
+      "phase": "M4",
+      "release": "beta",
+      "status": "planned",
+      "title": "Add personal communication workflows",
+      "title_zh": "扩展邮件日历与消息场景",
+      "depends_on": [
+        "PA-022",
+        "PA-019"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/connectors/mail.ts",
+        "packages/personal-agent/src/connectors/calendar.ts",
+        "packages/personal-agent/src/connectors/chat.ts"
+      ],
+      "source_refs": [
+        "S:src/sources/feishu.ts",
+        "S:src/sources/feishu-channel.ts"
+      ],
+      "implementation_steps": [
+        "Choose one mail/calendar provider and one optional message channel at feature activation; expose account-scoped capabilities through the existing connector interface.",
+        "Deliver a meeting brief and draft followup using scoped data; show timezone/conflicts and ask only for missing consequential details. Sending remains a separate effect.",
+        "Map verified owner identity across channels; default replies stay in the origin. Revocation prevents new access and offers distinct retained-data deletion."
+      ],
+      "acceptance_ids": [
+        "E03",
+        "E05",
+        "E07",
+        "E10",
+        "E13"
+      ],
+      "test_files": [
+        "tests/connectors/personal-communications.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/connectors/personal-communications.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-023.md"
+    },
+    {
+      "id": "PA-024",
+      "phase": "M4",
+      "release": "v1",
+      "status": "planned",
+      "title": "Extend isolation and hosted execution options",
+      "title_zh": "扩展隔离和托管执行选项",
+      "depends_on": [
+        "PA-031",
+        "PA-032",
+        "PA-022"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/environments.ts",
+        "packages/personal-agent/src/runtime/browser.ts",
+        "deploy/executor/"
+      ],
+      "source_refs": [
+        "H:packages/sandbox/sandbox/README.md",
+        "H:packages/browser-use/README.md",
+        "H:packages/computer-use/README.md"
+      ],
+      "implementation_steps": [
+        "Extend the local executor boundaries established in PA-031/032 with dedicated VM or hosted execution providers when needed. Keep the local-only mode fully supported; never migrate coordinator or user data implicitly.",
+        "Implement persistent environment references, capability discovery, egress restrictions and user browser takeover. Login secrets bypass model-visible fields.",
+        "Prefer connectors over UI automation; require exact reviewable actions for writes. A takeover pauses conflicting automation and resumes only after explicit handback."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E07",
+        "E14"
+      ],
+      "test_files": [
+        "tests/security/execution-environment.spec.ts",
+        "tests/e2e/browser.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/security/execution-environment.spec.ts tests/e2e/browser.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-024.md"
+    },
+    {
+      "id": "PA-025",
+      "phase": "M4",
+      "release": "v1",
+      "status": "planned",
+      "title": "Connect intermittently available personal devices",
+      "title_zh": "实现自有设备接入与离线恢复",
+      "depends_on": [
+        "PA-024",
+        "PA-009"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/devices.ts",
+        "packages/personal-agent/src/runtime/leases.ts",
+        "docs/device-protocol.md"
+      ],
+      "source_refs": [
+        "H:packages/ssh/sandbox-ssh/README.md",
+        "H:packages/ssh/ssh/README.md"
+      ],
+      "implementation_steps": [
+        "Use native SSH/provider seams where sufficient; define an outbound enrolled device connection only for a demonstrated gap. Preserve one authoritative coordinator.",
+        "Persist device capability/availability and generation-fenced work leases. Device offline moves work to a durable wait; reconnect revalidates grant, budget, state and output before execution.",
+        "Do not copy uncommitted local work or move private context to another machine silently. Revocation cuts new dispatch; in-flight effects reconcile; device daemon stores no primary-agent memory."
+      ],
+      "acceptance_ids": [
+        "E06",
+        "E07",
+        "E14"
+      ],
+      "test_files": [
+        "tests/runtime/devices.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/runtime/devices.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-025.md"
+    },
+    {
+      "id": "PA-026",
+      "phase": "M4",
+      "release": "v1",
+      "status": "planned",
+      "title": "Add voice without a second agent loop",
+      "title_zh": "实现共享任务模型的语音入口",
+      "depends_on": [
+        "PA-022",
+        "PA-013"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/voice/stt.ts",
+        "packages/personal-agent/src/voice/tts.ts",
+        "packages/personal-agent/src/voice/session.ts"
+      ],
+      "source_refs": [],
+      "implementation_steps": [
+        "Start with one selectable STT/TTS adapter pair behind interfaces and the existing command/event service; choose vendor at activation with data and price disclosure.",
+        "Implement transcription review, interruption, text fallback and reconnection. Stopping playback never cancels business work by implication.",
+        "Keep consequential approval in a structured textual action card; ambiguous speech cannot grant authority. Voice cost is in the same budget ledger."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E09",
+        "E15"
+      ],
+      "test_files": [
+        "tests/voice/session.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/voice/session.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-026.md"
+    },
+    {
+      "id": "PA-027",
+      "phase": "M5",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Evaluate complete user outcomes",
+      "title_zh": "建立评测与真实使用证据",
+      "depends_on": [
+        "PA-015",
+        "PA-017",
+        "PA-018",
+        "PA-019",
+        "PA-020",
+        "PA-021"
+      ],
+      "target_paths": [
+        "evals/cases/",
+        "evals/runner.ts",
+        "docs/evidence/alpha-report.md"
+      ],
+      "source_refs": [
+        "S:tests/runtime.spec.ts",
+        "S:tests/runtime-concurrency.spec.ts"
+      ],
+      "implementation_steps": [
+        "Implement E00-E12 from document 07 with deterministic replay, host contract tests and separately labeled real model/provider scenarios.",
+        "Compare a single foreground-session baseline with the Router/Worker design on the same tasks, tools, model and budget; include quality, interruption and monetary cost. Foundation evaluation uses project brief, research, reminder, review, code change and document/data organization; media is added in desktop-alpha evaluation.",
+        "Run a seven-day opt-in alpha trial and record accepted outcomes, avoidable interruptions, intervention time and incidents. Skipped live tests block a usable-alpha claim."
+      ],
+      "acceptance_ids": [
+        "E00",
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08",
+        "E09",
+        "E10",
+        "E11",
+        "E12"
+      ],
+      "test_files": [
+        "tests/evals/scenarios.spec.ts",
+        "tests/e2e/alpha-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/evals/scenarios.spec.ts tests/e2e/alpha-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-027.md"
+    },
+    {
+      "id": "PA-028",
+      "phase": "M5",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Package and document a reproducible alpha",
+      "title_zh": "打包可复现 alpha 与运维文档",
+      "depends_on": [
+        "PA-027"
+      ],
+      "target_paths": [
+        "packages/personal-agent/package.json",
+        "README.md",
+        "README-zh.md",
+        "docs/operations.md",
+        "docs/evidence/release-alpha.md"
+      ],
+      "source_refs": [
+        "H:docs/architecture.md",
+        "S:LICENSE"
+      ],
+      "implementation_steps": [
+        "Verify clean install, profile load, update/migration, export, restore and safe uninstall while retaining user data by default.",
+        "Document implemented/tested/experimental/planned status and limitations; retain Apache-2.0 project license and MIT notices for copied prototype code.",
+        "Produce local release artifacts and an evidence report. Publishing packages, remote releases or deployments requires the actual release instruction; this task does not assume it."
+      ],
+      "acceptance_ids": [
+        "E00",
+        "E11",
+        "E12"
+      ],
+      "test_files": [
+        "tests/e2e/install.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/e2e/install.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-028.md"
+    },
+    {
+      "id": "PA-029",
+      "phase": "M5",
+      "release": "beta",
+      "status": "planned",
+      "title": "Validate remote and personal workflows",
+      "title_zh": "验证远程与个人事务 beta",
+      "depends_on": [
+        "PA-035",
+        "PA-022",
+        "PA-023"
+      ],
+      "target_paths": [
+        "docs/evidence/release-beta.md",
+        "evals/cases/beta/"
+      ],
+      "source_refs": [],
+      "implementation_steps": [
+        "Run alpha regressions plus E13 and mail/calendar end-to-end cases with device revocation and cross-channel redirects. Validate remote WSS desktop viewing and revocation.",
+        "Verify a seven-day always-on host run with phone client disconnects and provider recovery; report missed/duplicate outcomes and data access scope.",
+        "Publish only the capabilities with recorded evidence and activation configuration."
+      ],
+      "acceptance_ids": [
+        "E03",
+        "E05",
+        "E07",
+        "E10",
+        "E13",
+        "E19",
+        "E20",
+        "E21"
+      ],
+      "test_files": [
+        "tests/e2e/beta-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/e2e/beta-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-029.md"
+    },
+    {
+      "id": "PA-030",
+      "phase": "M5",
+      "release": "v1",
+      "status": "planned",
+      "title": "Validate distributed execution and voice",
+      "title_zh": "验证跨设备与语音完整版本",
+      "depends_on": [
+        "PA-029",
+        "PA-024",
+        "PA-025",
+        "PA-026"
+      ],
+      "target_paths": [
+        "docs/evidence/release-v1.md",
+        "evals/cases/v1/"
+      ],
+      "source_refs": [],
+      "implementation_steps": [
+        "Run E00-E21, including device disconnect during dispatch, takeover/automation races, revoked leases and speech ambiguity.",
+        "Run a fourteen-day opt-in trial spanning cloud-only work and intermittently connected devices; verify accepted outcomes and intervention burden.",
+        "Require zero unresolved critical security/recovery defects; retain incomplete tracks as experimental rather than calling the product feature-complete."
+      ],
+      "acceptance_ids": [
+        "E00",
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08",
+        "E09",
+        "E10",
+        "E11",
+        "E12",
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E17",
+        "E18",
+        "E19",
+        "E20",
+        "E21"
+      ],
+      "test_files": [
+        "tests/e2e/v1-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/e2e/v1-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-030.md"
+    },
+    {
+      "id": "PA-031",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Operate the owner desktop with resource leases",
+      "title_zh": "实现本机电脑操作与资源互斥",
+      "depends_on": [
+        "PA-009",
+        "PA-013",
+        "PA-021"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/runtime/desktop.ts",
+        "packages/personal-agent/src/runtime/resource-leases.ts",
+        "packages/personal-agent/src/client/desktop.tsx"
+      ],
+      "source_refs": [
+        "H:packages/computer-use/computer-use/README.md",
+        "H:packages/browser-use/browser-use/README.md",
+        "H:packages/experimental/cua-macos/README.md"
+      ],
+      "implementation_steps": [
+        "Probe installed OS, driver and required user permissions; distinguish background API/file work from interactive unlocked desktop work. Reuse DSH providers rather than implementing a second CUA stack.",
+        "Acquire a whole-workflow desktop lease, use per-profile/tab browser locks, expose activity and immediate user takeover, and stop new input when the user takes control. Lock screen or missing consent becomes waiting_environment.",
+        "Separate arbitrary code execution from the control store and vault by enforced process/OS sandbox boundaries. If the selected backend cannot protect them, disable unrestricted shell for that deployment and record the limitation; never claim same-UID separation is a sandbox."
+      ],
+      "acceptance_ids": [
+        "E02",
+        "E07",
+        "E14",
+        "E18"
+      ],
+      "test_files": [
+        "tests/runtime/desktop.spec.ts",
+        "tests/security/local-executor.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/runtime/desktop.spec.ts tests/security/local-executor.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-031.md"
+    },
+    {
+      "id": "PA-032",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Integrate a local credential broker and vault",
+      "title_zh": "实现本地凭据代理与密码库",
+      "depends_on": [
+        "PA-005",
+        "PA-031",
+        "PA-037"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/vault/broker.ts",
+        "packages/personal-agent/src/vault/keychain.ts",
+        "packages/personal-agent/src/vault/bitwarden.ts",
+        "packages/personal-agent/src/client/vault.tsx"
+      ],
+      "source_refs": [
+        "H:packages/credentials/credentials/README.md",
+        "H:packages/credentials/credentials-local/README.md"
+      ],
+      "implementation_steps": [
+        "Reuse the DSH credential service where appropriate and add a protected local provider/broker. Integrate OS keychain and a Bitwarden adapter; do not build encryption, vault sync or account recovery from scratch.",
+        "Expose metadata and use-credential operations, not plaintext reads. User unlock and precise item/domain/task grants precede browser autofill or connector use. Keep CLI session keys in the broker only and strip all secret output before tool logging.",
+        "Implement save/update/generate through secure UI, lock/expiry/revocation, test-account login and authenticated readback. Check navigation before autofill; passwords, OTPs, screenshots, DOM, clipboard and errors must not leak. A locked vault waits without retry loops."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E07",
+        "E17",
+        "E18"
+      ],
+      "test_files": [
+        "tests/security/vault.spec.ts",
+        "tests/e2e/vault-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/security/vault.spec.ts tests/e2e/vault-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-032.md"
+    },
+    {
+      "id": "PA-033",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Run durable image and video provider jobs",
+      "title_zh": "实现图片视频异步生成后端",
+      "depends_on": [
+        "PA-007",
+        "PA-013",
+        "PA-021",
+        "PA-038"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/media/provider.ts",
+        "packages/media-comfyui/src/index.ts",
+        "packages/personal-agent/src/media/jobs.ts",
+        "packages/personal-agent/src/media/resources.ts"
+      ],
+      "source_refs": [],
+      "implementation_steps": [
+        "Implement capability-based MediaProvider submit/inspect/cancel/collect over durable MediaJob and resource leases. Start with an existing local ComfyUI install and approved versioned API workflows.",
+        "Persist workflow/model/seed/input digests and returned prompt_id. Reconnect by status/history; a lost submit response must not blindly render again. Bind cancellations to the owned instance/job; do not interrupt another user workflow.",
+        "Probe actual GPU/CPU/storage capability, serialize heavy jobs initially, enforce quotas and queue fairness, and verify output MIME/dimensions/duration/hash. Remote media provider use requires explicit data/cost policy; no automatic cloud upload or model downloads.",
+        "Package ComfyUI separately against plugin-api. Select image/video providers by capabilities and explicit policy; pin each durable job to provider and configuration revision."
+      ],
+      "acceptance_ids": [
+        "E06",
+        "E09",
+        "E16",
+        "E18",
+        "E21"
+      ],
+      "test_files": [
+        "tests/media/comfyui.spec.ts",
+        "tests/media/jobs.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/media/comfyui.spec.ts tests/media/jobs.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-033.md"
+    },
+    {
+      "id": "PA-034",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Deliver editable image and video creation workflows",
+      "title_zh": "交付可编辑图片和视频工作流",
+      "depends_on": [
+        "PA-031",
+        "PA-033"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/media/pipeline.ts",
+        "packages/personal-agent/src/media/preview.ts",
+        "packages/personal-agent/src/client/media.tsx",
+        "workflows/media/",
+        "packages/creation-workflows/src/index.ts"
+      ],
+      "source_refs": [],
+      "implementation_steps": [
+        "Provide a cover-image workflow and a short-video workflow: brief, storyboard, assets, render, assemble, preview and revise. Offer deterministic FFmpeg composition from user assets when generative video is unavailable; label these capabilities separately.",
+        "Store original assets, generated shots, edit manifest, subtitles/audio references and version history as artifacts. Add authenticated range-capable media preview instead of relying on the audited 50 MiB full-file DSH route.",
+        "Evaluate actual visual quality and requested constraints, support selective shot regeneration and cancellation, and keep publishing separate. Unknown custom nodes require reviewed installation; licensed model assets remain external to the source package.",
+        "Publish the default creation flows as a separate local plugin implementing CreationWorkflowProvider; customization must not require core changes."
+      ],
+      "acceptance_ids": [
+        "E12",
+        "E16",
+        "E18",
+        "E21"
+      ],
+      "test_files": [
+        "tests/media/pipeline.spec.ts",
+        "tests/api/media-preview.spec.ts",
+        "tests/e2e/media-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/media/pipeline.spec.ts tests/api/media-preview.spec.ts tests/e2e/media-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-034.md"
+    },
+    {
+      "id": "PA-035",
+      "phase": "M5",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Validate a resident personal-computer release",
+      "title_zh": "验证个人电脑常驻版本",
+      "depends_on": [
+        "PA-028",
+        "PA-031",
+        "PA-032",
+        "PA-033",
+        "PA-034",
+        "PA-036",
+        "PA-039"
+      ],
+      "target_paths": [
+        "docs/evidence/release-desktop-alpha.md",
+        "evals/cases/desktop/"
+      ],
+      "source_refs": [],
+      "implementation_steps": [
+        "Run E00-E12 plus E14 and E16-E21 on the named user-owned desktop platform. Verify startup, logout/lock/sleep differences, offline operation, takeover and simultaneous media/background work. Include E19 live desktop viewing and takeover.",
+        "Demonstrate a local image artifact, a playable video with declared generative or composited mode, a test-vault login, and recovery after host restart. Record hardware, versions, resource peaks and limitations; unsupported generative video cannot be advertised.",
+        "Complete a seven-day opt-in resident trial with real requested tasks and no uncontrolled secrets or duplicate external actions. Produce local packaging and instructions; installation on a real user machine is a later explicit implementation action."
+      ],
+      "acceptance_ids": [
+        "E00",
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08",
+        "E09",
+        "E10",
+        "E11",
+        "E12",
+        "E14",
+        "E16",
+        "E17",
+        "E18",
+        "E19",
+        "E20",
+        "E21"
+      ],
+      "test_files": [
+        "tests/e2e/desktop-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/e2e/desktop-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-035.md"
+    },
+    {
+      "id": "PA-036",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Provide authenticated VNC viewing and takeover",
+      "title_zh": "实现 VNC 实时查看与接管",
+      "depends_on": [
+        "PA-008",
+        "PA-031",
+        "PA-032"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/desktop/session.ts",
+        "packages/personal-agent/src/desktop/gateway.ts",
+        "packages/personal-agent/src/client/desktop-viewer.tsx",
+        "deploy/desktop/"
+      ],
+      "source_refs": [
+        "H:packages/computer-use/computer-use/README.md",
+        "H:packages/api/remote-access/README.md"
+      ],
+      "implementation_steps": [
+        "Integrate a pinned noVNC client and an RFB/VNC server provider for the actual desktop or selected VM. Probe OS server authentication, shared-session semantics and permissions.",
+        "Authenticate short-lived owner/device/environment-bound sessions through the DSH host. Broker WSS to a private allowlisted backend; no arbitrary host/port proxy. Enforce read-only on the server, not just the client viewOnly flag.",
+        "Share the desktop lease with native CUA. Fence and drain agent input before human takeover. Expire control on disconnect without auto-resuming the agent. Clipboard, file transfer and recording start disabled; secure login suppresses model capture."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E07",
+        "E14",
+        "E17",
+        "E19"
+      ],
+      "test_files": [
+        "tests/desktop/gateway.spec.ts",
+        "tests/desktop/takeover.spec.ts",
+        "tests/e2e/vnc-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/desktop/gateway.spec.ts tests/desktop/takeover.spec.ts tests/e2e/vnc-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-036.md"
+    },
+    {
+      "id": "PA-037",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Accept secrets through a dedicated secure user channel",
+      "title_zh": "安全密码与密钥输入通道",
+      "depends_on": [
+        "PA-005",
+        "PA-008",
+        "PA-031"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/vault/intake.ts",
+        "packages/personal-agent/src/vault/secret-request.ts",
+        "packages/personal-agent/src/client/secure-input.tsx",
+        "packages/personal-agent/src/api/secret-input.ts"
+      ],
+      "source_refs": [
+        "H:packages/credentials/credentials/README.md"
+      ],
+      "implementation_steps": [
+        "Create a SecretInputRequest bound to authenticated owner/device/task, requested credential kind, permitted destination, storage choice, expiry and single-use nonce. The model can request a secret card but cannot choose an arbitrary upload endpoint.",
+        "Provide a trusted password/key form outside transcript and model-readable UI. Send directly to the broker over authenticated TLS or protected native IPC with CSRF/origin checks, no analytics/session replay and no body logging. Suspend model desktop/DOM capture during entry.",
+        "Store only in the selected protected provider or an explicitly temporary broker lease; fail closed if the provider is unavailable. Return an opaque credential reference and sanitized receipt. Test expiry/replay/wrong device, transport interruption, lock/restart and canary-secret absence from logs, events, prompts, artifacts and error responses."
+      ],
+      "acceptance_ids": [
+        "E05",
+        "E07",
+        "E17",
+        "E20"
+      ],
+      "test_files": [
+        "tests/security/secret-input.spec.ts",
+        "tests/client/secure-input.spec.tsx",
+        "tests/e2e/secret-input-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/security/secret-input.spec.ts tests/client/secure-input.spec.tsx tests/e2e/secret-input-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-037.md"
+    },
+    {
+      "id": "PA-038",
+      "phase": "M1",
+      "release": "alpha",
+      "status": "planned",
+      "title": "Define public capability plugin contracts and examples",
+      "title_zh": "定义公开插件接口、契约测试和示例",
+      "depends_on": [
+        "PA-002",
+        "PA-003",
+        "PA-005"
+      ],
+      "target_paths": [
+        "packages/plugin-api/src/index.ts",
+        "packages/plugin-api/src/memory.ts",
+        "packages/plugin-api/src/media.ts",
+        "packages/plugin-api/src/workflow.ts",
+        "packages/plugin-testkit/src/index.ts",
+        "examples/plugins/"
+      ],
+      "source_refs": [
+        "H:docs/architecture.md",
+        "H:packages/core/tools/src/contracts.ts"
+      ],
+      "implementation_steps": [
+        "Implement versioned Definition/Provider/Consumer seams from document 09, explicit registration, config schemas, capabilities, health, drain and disposal. Providers depend only on public API types.",
+        "Add keyless external memory and mock-media example plugins, loadable as local packages without core edits. Keep mock capabilities visibly labeled.",
+        "Test incompatible versions, missing providers, lifecycle cleanup and policy wrapping. A plugin manifest does not establish process isolation; keep core authority and exclusion records private."
+      ],
+      "acceptance_ids": [
+        "E07",
+        "E21"
+      ],
+      "test_files": [
+        "tests/contracts/plugins.spec.ts",
+        "tests/security/plugin-boundaries.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/contracts/plugins.spec.ts tests/security/plugin-boundaries.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-038.md"
+    },
+    {
+      "id": "PA-039",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Let users configure and safely replace providers",
+      "title_zh": "实现用户插件配置、记忆迁移和安全切换",
+      "depends_on": [
+        "PA-008",
+        "PA-012",
+        "PA-033",
+        "PA-034",
+        "PA-038",
+        "PA-037"
+      ],
+      "target_paths": [
+        "packages/personal-agent/src/client/providers.tsx",
+        "packages/personal-agent/src/runtime/provider-selection.ts",
+        "packages/personal-agent/src/context/migration.ts"
+      ],
+      "source_refs": [
+        "H:docs/architecture.md",
+        "H:packages/core/tools/src/contracts.ts"
+      ],
+      "implementation_steps": [
+        "Show installed plugins, config forms, health, data destinations and defaults. Secret fields use CredentialRef and secure input; incompatible or unavailable providers fail visibly.",
+        "Pin media jobs to provider/version/config revision. Drain old instances and apply defaults only to new jobs. Never silently reroute private input to a different provider.",
+        "Implement memory write-freeze, versioned export/import with sources/tombstones, verification and atomic active-provider swap. Replay subsequent correction/deletion records before rollback; failed migration keeps the old provider active."
+      ],
+      "acceptance_ids": [
+        "E07",
+        "E21"
+      ],
+      "test_files": [
+        "tests/client/providers.spec.tsx",
+        "tests/context/provider-migration.spec.ts",
+        "tests/media/provider-switch.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/client/providers.spec.tsx tests/context/provider-migration.spec.ts tests/media/provider-switch.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-039.md"
+    }
+  ],
+  "product_name": "DSH Personal Agent",
+  "product_short_name": "dshpa"
+}
