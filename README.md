@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, read-only GitHub, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-016, PA-018, PA-021, and PA-038).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, read-only GitHub, compute and attention controls, durable schedules, proactive preparation, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-016, PA-018–019, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -21,6 +21,7 @@ The [goal planning evidence](docs/evidence/PA-014.md) covers revisions, Worker d
 The [local knowledge evidence](docs/evidence/PA-015.md) covers explicit roots, incremental indexing and source revocation.
 The [GitHub read connector evidence](docs/evidence/PA-016.md) covers live readback, scoped cursors, and MCP capability revalidation.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
+The [proactive evidence](docs/evidence/PA-019.md) covers rule replay, staged review, private briefs and local notice limits.
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
 The [capability plugin evidence](docs/evidence/PA-038.md) covers versioned registration, scoped consumers, and independent keyless examples.
@@ -269,6 +270,14 @@ For a route that incurs no model charges, use `unmetered: true` in its `worker` 
 `inbox.computeLimits` sets `maxInputBytes`, `maxOutputTokens`, `maxTurns`, `maxStepsPerTurn` and `maxWallTimeMs`. `inbox.gpu` sets `concurrency`, `maxQueued` and `timeoutMs`. Heavy GPU work uses a separate in-process queue with one slot by default. The installed host's private Workers have no tools, and a provider rate limit releases the Worker after teardown and records when the owner can resume.
 
 Proactive notifications default to `off`. The authenticated inbox `set_attention_policy` operation takes `expectedVersion` and a `policy` with `mode`, `timeZone`, `quietHours` and `urgentRules`. The default quiet interval is 22:00–08:00 UTC. Use an IANA zone for local time. Unsolicited notifications reserve up to three slots per owner and local day across channels. Explicit reminders and required decisions have separate rules. Routine progress stays in the task view. Trusted carriers use `dshpaAttention` to record a candidate and hand off an eligible exact delivery through the existing Outbox.
+
+### Prepare work proactively
+
+Set `config.inbox.proactive: true` and configure a priced or explicitly unmetered routing model and verified source accounts. In **Today**, open **Proactive suggestions**. Define a rule for an active goal, one anchor task, one verified account and thread, and required keywords. Rules start off. **Replay source history** checks up to 100 exact stored events without calling the model.
+
+Choose **Start observing** after replay and set the global initiative limit to at least Observe. The router checks scope, source freshness, keywords, deduplication, cooldown and model budget before assessment. Observations record proposed or suppressed outcomes for review. Review at least 20 proposals with at least 70% marked useful before granting source read and private preparation. Private briefs retain their source reference and are available to the owner for inspection.
+
+After reviewing a useful private brief, you can separately grant local brief notices. With both rule and global policy set to Act, approved local notices can appear in **Today**. They share the existing limit of three unsolicited notices per owner and local day across routes and honor quiet hours. Rules whose goal revision, source enrollment or model route changed require revalidation. An assessment with no useful proposal stays silent.
 
 ### Schedule local reminders and task wakes
 

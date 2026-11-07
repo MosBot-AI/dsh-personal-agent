@@ -51,11 +51,12 @@ const candidateSchema = z.strictObject({
   ...candidateFields,
   summary: nonEmptyTextSchema.max(2_048).optional(),
   deliveryId: deliveryIdSchema.optional(),
+  local: z.literal(true).optional(),
 }).refine(candidate => candidate.category === 'progress'
-  ? candidate.summary !== undefined && candidate.deliveryId === undefined && !candidate.urgent
-  : candidate.summary === undefined)
+  ? candidate.summary !== undefined && candidate.deliveryId === undefined && !candidate.urgent && !candidate.local
+  : candidate.summary === undefined && (!candidate.local || (candidate.category === 'proactive' && !candidate.deliveryId && !candidate.urgent)))
 
-const dispositionSchema = z.enum(['workspace', 'suppressed', 'reserved'])
+const dispositionSchema = z.enum(['workspace', 'suppressed', 'reserved', 'local'])
 const reasonSchema = z.enum([
   'coalesced_progress', 'mode_off', 'observe_only', 'prepare_only', 'workspace_only', 'delivery_unavailable',
   'already_reserved', 'external_not_authorized', 'quiet_hours', 'daily_limit', 'recovery_required',
@@ -174,10 +175,13 @@ function installDayLookup(db: DatabaseSync): void {
 
 function usage(db: DatabaseSync, ownerId: OwnerId, range: ReturnType<typeof dayRange>): number {
   const count = db.prepare(`
-    SELECT COUNT(*) AS count FROM attention_decisions
-    WHERE owner_id = ? AND category IN ('result', 'blocker', 'proactive') AND reserved_at BETWEEN ? AND ?
-      AND dshpa_attention_local_day(reserved_at, ?) = ?
-  `).get(ownerId, range.start, range.end, range.timeZone, range.day)?.count
+    SELECT COUNT(*) AS count FROM (
+      SELECT reserved_at AS at FROM attention_decisions WHERE owner_id = ?
+        AND category IN ('result', 'blocker', 'proactive') AND reserved_at BETWEEN ? AND ?
+      UNION ALL
+      SELECT created_at FROM attention_local_notices WHERE owner_id = ? AND created_at BETWEEN ? AND ?
+    ) WHERE dshpa_attention_local_day(at, ?) = ?
+  `).get(ownerId, range.start, range.end, ownerId, range.start, range.end, range.timeZone, range.day)?.count
   return typeof count === 'number' ? count : corrupt()
 }
 
@@ -236,7 +240,8 @@ function decodeDecision(row: Record<string, unknown>): AttentionDecision {
   if (!parsed.success || !claimed.success || !reason.success || parsed.data.id !== row.id
     || (parsed.data.action === 'reserved'
       ? parsed.data.deliveryId !== row.delivery_id || parsed.data.destination === undefined || parsed.data.at !== row.reserved_at
-      : row.reserved_at !== null || claimed.data !== undefined)) return corrupt()
+      : row.reserved_at !== null || claimed.data !== undefined)
+    || (parsed.data.action === 'local' && (parsed.data.category !== 'proactive' || row.delivery_id !== null))) return corrupt()
   return { ...parsed.data, ...(claimed.data === undefined ? {} : { claimedAt: claimed.data }),
     ...(reason.data === undefined ? {} : { claimReason: reason.data }) }
 }
@@ -284,7 +289,7 @@ export function createAttention(
     }))
   }
 
-  function consider(ref: WorkRef, input: unknown) {
+  function consider(ref: WorkRef, input: unknown, localAuthority?: () => boolean) {
     const parsed = candidateSchema.safeParse(input)
     if (!parsed.success) return fail('invalid_input')
     const candidate = parsed.data
@@ -306,7 +311,7 @@ export function createAttention(
       const at = now()
       const policy = policyFor(db, ref)
       const delivery = exactDelivery(db, ref, candidate)
-      const { summary, deliveryId: requestedDeliveryId, ...metadata } = candidate
+      const { summary, deliveryId: requestedDeliveryId, local, ...metadata } = candidate
 
       function evaluate(): Pick<Decision, 'action' | 'reason'> {
         if (candidate.category === 'progress') return workspace('coalesced_progress')
@@ -314,6 +319,13 @@ export function createAttention(
           if (policy.mode === 'off') return suppress('mode_off')
           if (policy.mode === 'observe') return suppress('observe_only')
           if (policy.mode === 'prepare') return workspace('prepare_only')
+        }
+        if (local) {
+          if (!dispatchPermitted(db)) return suppress('recovery_required')
+          if (localAuthority?.() !== true) return suppress('external_not_authorized')
+          if (quiet(policy, at)) return suppress('quiet_hours')
+          if (usage(db, ref.ownerId, dayRange(at, policy.timeZone)) >= MAX_UNSOLICITED) return suppress('daily_limit')
+          return { action: 'local', reason: 'proactive_act' }
         }
         if (candidate.deliveryId === undefined) return workspace('workspace_only')
         if (!delivery) return suppress('delivery_unavailable')
@@ -341,6 +353,8 @@ export function createAttention(
       `).run(id, ref.ownerId, ref.profileId, ref.taskId, candidate.attemptId, candidate.generation,
         sourceInstanceId, externalEventId, externalRevision, candidate.category, fingerprint, JSON.stringify(decision),
         delivery?.id ?? null, verdict.action === 'reserved' ? at : null)
+      if (verdict.action === 'local') db.prepare('INSERT INTO attention_local_notices (decision_id, owner_id, created_at) VALUES (?, ?, ?)')
+        .run(id, ref.ownerId, at)
       if (summary !== undefined) {
         db.prepare(`
           INSERT INTO attention_progress (task_id, owner_id, profile_id, decision_id, summary, updated_at)
@@ -436,5 +450,5 @@ export function createAttention(
     })
   }
 
-  return Object.freeze({ configure, consider, claim, deliver, snapshot })
+  return Object.freeze({ configure, consider, claim, deliver, snapshot, policy: (scope: Scope) => access(db => policyFor(db, scope)) })
 }

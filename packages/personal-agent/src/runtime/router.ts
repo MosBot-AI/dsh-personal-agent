@@ -38,6 +38,7 @@ interface RoutingOptions {
   readonly assessmentDataScope?: readonly string[]
   readonly authorizeDelivery?: (state: WorkState, event: SourceEvent) => boolean
   readonly authorizeWake?: (state: WorkState, event: SourceEvent) => boolean
+  readonly proactive?: (event: SourceEvent, body: RoutingBody, receipt: RoutingReceipt) => string
   readonly now?: () => UtcInstant
   readonly maxEventAgeMs?: number
   readonly maxOutstanding?: number
@@ -64,7 +65,7 @@ function response(receipt: RoutingReceipt, duplicate: boolean) {
 }
 
 /** A malformed or repeated model decision can invalidate only its own candidate. */
-function readDecisions(input: unknown, candidates: readonly AssessmentCandidate[]): Map<string, Decision> {
+export function readDecisions(input: unknown, candidates: readonly AssessmentCandidate[]): Map<string, Decision> {
   const decisions = new Map<string, Decision>()
   if (!Array.isArray(input) || input.length > candidates.length * 2) return decisions
   const expected = new Set<string>(candidates.map(candidate => candidate.id))
@@ -241,6 +242,7 @@ export function createRouter(options: RoutingOptions) {
     if (body.target !== undefined || body.waitReference !== undefined || scoped.length > 0 || body.kind !== 'candidate') {
       return reject(ref, receipt, 'target_unavailable')
     }
+    if (options.proactive) return reject(ref, receipt, options.proactive(event, body, receipt))
     enqueue(stored, body, 'candidate')
   }
 

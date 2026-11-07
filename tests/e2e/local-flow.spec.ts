@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { contextCheckpointSchema } from '../../packages/personal-agent/src/context/checkpoint.js'
 import { inspectMcpReadFingerprint } from '../../packages/personal-agent/src/connectors/mcp.js'
 import {
@@ -23,6 +23,7 @@ const probe = fileURLToPath(new URL('./fixtures/local-flow-probe.mjs', import.me
 const contextProbe = fileURLToPath(new URL('./fixtures/context-flow-probe.mjs', import.meta.url))
 const memoryProbe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
 const projectProbe = fileURLToPath(new URL('./fixtures/project-flow-probe.mjs', import.meta.url))
+const proactiveProbe = fileURLToPath(new URL('./fixtures/proactive-flow-probe.mjs', import.meta.url))
 const nativeSessionId = 'pa008-native-chat'
 const fixtureProjectId = 'pa008-fixture-project'
 const questionReference = 'pa008-fixture-question'
@@ -50,6 +51,44 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('replays a scoped source and records a budgeted native observation without surfacing a notice', async () => {
+    const host = await openWebHost(proactiveProbe)
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const result = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(result.status === 200 && result.result?.ok, host.diagnostics())
+      return result.result.value
+    }
+    const state = () => inbox({ type: 'proactive_state' })
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'proactive_state' })).toMatchObject({ status: 401 })
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'proactive_state' }, await host.exchange(true))).toMatchObject({ status: 403 })
+    expect(await state()).toMatchObject({ policy: { mode: 'off', version: 0 }, rules: [], candidates: [] })
+    const ruleId = 'web-observation'
+    expect(await inbox({ type: 'proactive_save_rule', ruleId, expectedVersion: null, draft: {
+      title: 'Review fixture readiness', projectId: 'pa019-goal', taskId: 'pa019-anchor', sourceInstanceId: 'pa019-source',
+      accountId: 'pa019-account', threadId: 'pa019-thread', query: 'ready 发布',
+    } })).toMatchObject({ rules: [{ mode: 'off', version: 1 }] })
+    expect(await inbox({ type: 'proactive_mode', ruleId, expectedVersion: 1, mode: 'observe' }))
+      .toEqual({ ok: false, code: 'replay_required' })
+    expect(await inbox({ type: 'proactive_replay', ruleId, expectedVersion: 1 }))
+      .toMatchObject({ rules: [{ replay: { matched: 1, examined: 1 }, version: 2 }] })
+    expect(await inbox({ type: 'proactive_mode', ruleId, expectedVersion: 2, mode: 'observe' })).toMatchObject({ ok: true })
+    expect(await inbox({ type: 'set_attention_policy', expectedVersion: 0,
+      policy: { mode: 'observe', timeZone: 'UTC', quietHours: null, urgentRules: [] } })).toMatchObject({ ok: true })
+    const proposal = await vi.waitFor(async () => {
+      const result = await state()
+      assert.ok(result.ok && result.kind === 'proactive_state')
+      const latest = result.candidates[0]
+      expect(latest).toMatchObject({ status: 'proposed', summary: 'Scoped fixture review.' })
+      return latest!
+    }, { timeout: 5000 })
+    expect(await inbox({ type: 'proactive_feedback', candidateId: proposal.id, useful: true }))
+      .toMatchObject({ rules: [{ evidence: { reviewed: 1, useful: 1 } }] })
+    expect(await inbox({ type: 'proactive_mode', ruleId, expectedVersion: 3, mode: 'prepare', grant: 'read_source' }))
+      .toEqual({ ok: false, code: 'observation_required' })
+    expect(await inbox({ type: 'snapshot' })).toMatchObject({ snapshot: { proactiveNotices: [], usage: { calls: 1 } } })
+  }, 25_000)
+
   it('reads only the pinned GitHub MCP facade through the authenticated owner carrier', async () => {
     const calls: string[] = []
     let changed = false

@@ -7,6 +7,7 @@ import { Reminders, Routines } from './routines.js'
 import { PersonalMemory } from './memory.js'
 import { LocalKnowledge } from './knowledge.js'
 import { GitHubRead } from './github-read.js'
+import { Suggestions } from './suggestions.js'
 import { Projects, TaskPlanning } from './projects.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
@@ -438,6 +439,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           {results.length ? taskRows(results) : <p className="dshpa-muted">{t('today.noResults')}</p>}
         </section>
         {snapshot?.schedules && <Reminders items={snapshot.schedules.reminders} t={t} />}
+        {writable && snapshot?.proactiveNotices?.map(notice => <article key={notice.id} className="dshpa-card">
+          <h3>{t('suggestions.notice')}</h3><p>{notice.summary}</p>
+        </article>)}
         <section className="dshpa-section" aria-labelledby="dshpa-other">
           <h2 id="dshpa-other">{t('today.routine')} <span>{routine.length}</span></h2>
           {routine.length ? taskRows(routine) : <p className="dshpa-muted">{t('today.noTasks')}</p>}
@@ -465,6 +469,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           readable={writable && !snapshot.recoveryMode} current={() => connection.getSnapshot() === connectionKey} />}
         {snapshot?.githubRead && connected && <GitHubRead key={connectionKey} t={t} port={port} projectId={snapshot.githubRead.projectId}
           readable={writable && !snapshot.recoveryMode} current={() => connection.getSnapshot() === connectionKey} />}
+        {snapshot?.proactiveConfigured && connected && <Suggestions key={connectionKey} snapshot={snapshot} port={port} t={t}
+          current={() => connection.getSnapshot() === connectionKey} writable={writable && !snapshot.recoveryMode}
+          refresh={() => { void refresh() }} />}
         {snapshot?.schedules && <Routines routines={snapshot.schedules.routines} tasks={snapshot.tasks} t={t}
           writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('routines')}
           submit={(request, acknowledged) => { void mutate('routines', request, acknowledged) }} />}

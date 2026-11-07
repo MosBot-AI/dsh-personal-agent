@@ -72,13 +72,14 @@ import {
   type MemoryLedgerActor, type MemoryLedgerPage,
 } from './memory.js'
 import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
+import { createProactiveLedger, type ProactiveScope } from './proactive.js'
 import {
   dependentIds, hasIncompletePrerequisite, initialProject, prerequisites, projectHistory, projectTasks,
   recordWorkerPlan, replacePrerequisites, saveProjectPlan, workerPlan,
 } from './projects.js'
 import {
   applyWorkerHandback, cancelUnfinishedRouting, checkWorkerRoute, commitWorkerRoute, getRoutingEvent, getSubscription,
-  listRoutingEvents, listSubscriptions, putSubscription, recordRoutingEvent, setRoutingDisposition,
+  listRoutingEvents, listSubscriptions, putSubscription, recordRoutingEvent, setRoutingDisposition, replayRoutingEvents,
 } from './routing.js'
 import {
   completeRoutineOccurrence, createRoutine, getRoutine, getRoutineRetirement, listArmedRoutines, listRoutineMappings,
@@ -340,6 +341,14 @@ class WorkStore {
 
   listRoutingEvents(scope: Scope, limit?: number) {
     return this.access(db => listRoutingEvents(db, scope, limit))
+  }
+
+  replayRoutingEvents(scope: Scope, key: Parameters<typeof replayRoutingEvents>[2]) {
+    return this.access(db => replayRoutingEvents(db, scope, key))
+  }
+
+  createProactiveLedger(scope: ProactiveScope) {
+    return createProactiveLedger(operation => this.access(operation), scope)
   }
 
   setRoutingDisposition(ref: RoutingEventRef, expectedVersion: number, disposition: unknown) {

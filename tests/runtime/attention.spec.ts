@@ -78,6 +78,21 @@ function policy(mode: 'off' | 'observe' | 'prepare' | 'act') {
 }
 
 describe('durable attention policy', () => {
+  it('shares the owner cap between granted local notices and external reservations', () => {
+    const f = fixture()
+    const work = task(f.store, 'shared-budget', ['external-one', 'external-two'])
+    succeed(f.attention.configure(scope, policy('act'), 0))
+    const local = (id: string) => ({ ...candidate(work.state, 'proactive', id), local: true })
+    expect(succeed(f.attention.consider(work.ref, local('unauthorized'))).decision.reason).toBe('external_not_authorized')
+    expect(succeed(f.attention.consider(work.ref, candidate(work.state, 'proactive', 'external', work.deliveries[0]))).decision.action).toBe('reserved')
+    for (const id of ['local-one', 'local-two']) {
+      expect(succeed(f.attention.consider(work.ref, local(id), () => true)).decision.action).toBe('local')
+    }
+    expect(succeed(f.attention.consider(work.ref, candidate(work.state, 'proactive', 'external-extra', work.deliveries[1]))).decision.reason)
+      .toBe('daily_limit')
+    expect(f.reopen().attention.snapshot(scope).unsolicitedUsed).toBe(3)
+  })
+
   it('coalesces progress without notification reservations and rejects identity changes on replay', () => {
     const f = fixture()
     const work = task(f.store, 'progress')
