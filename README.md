@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable artifact delivery, and local Web inbox are implemented (PA-001 through PA-008).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, and guarded recovery are implemented (PA-001 through PA-009).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -13,6 +13,7 @@ The [authorization evidence](docs/evidence/PA-005.md) covers trusted identity, e
 The [Worker evidence](docs/evidence/PA-006.md) covers native launch and resume, report admission, foreground control, and teardown.
 The [artifact and delivery evidence](docs/evidence/PA-007.md) covers immutable content, trusted verification, and provider receipt handling.
 The [local Web inbox evidence](docs/evidence/PA-008.md) covers native conversation integration, task controls, approval, and result acceptance.
+The [recovery evidence](docs/evidence/PA-009.md) covers input acknowledgments, cancellation fences, and backup restore.
 
 [Implementation Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent workflow](docs/11-github-project-workflow.md)
 
@@ -79,6 +80,19 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 ```
 
 Open or create a native conversation, then select **Today** in the DSH sidebar. Create a project and attach tasks to the conversation. Start work explicitly, review the candidate artifact after the Worker releases, and accept the result in the inbox. Use the conversation link to return to the native transcript and composer.
+
+## Restore a standalone work backup
+
+Use a private standalone SQLite backup and an absolute destination path that does not exist. From the repository root after building the workspace, set `BACKUP_FILE` and `RESTORE_DIR` to those paths and run the restore command.
+
+```sh
+node --input-type=module - "$BACKUP_FILE" "$RESTORE_DIR" <<'JS'
+import { restoreWorkStoreBackup } from './packages/personal-agent/lib/storage/restore.js'
+restoreWorkStoreBackup(process.argv[2], process.argv[3])
+JS
+```
+
+The source backup stays intact. The destination opens in reconciliation-only mode for scoped inspection and exact readback. New Worker input, action claims, and delivery stay disabled while the restored authority and post-backup outcomes are reviewed.
 
 ## Validate the plan
 

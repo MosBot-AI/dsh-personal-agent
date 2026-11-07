@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证产物交付和本地 Web 收件箱（PA-001 至 PA-008）。** 修订 `2026-11-07-r7`，Asia/Shanghai。DSH Personal Agent 简称 **dshpa**。本轮基于现有方案、两个固定版本的本地 DSH 仓库、Grok Bot/Muse/dots 官方资料和作者分析完善计划，并纳入本机常驻、电脑操作、图片/视频、密码库、安全输入和 VNC 要求。
+**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱和受控恢复（PA-001 至 PA-009）。** 修订 `2026-11-07-r7`，Asia/Shanghai。DSH Personal Agent 简称 **dshpa**。本轮基于现有方案、两个固定版本的本地 DSH 仓库、Grok Bot/Muse/dots 官方资料和作者分析完善计划，并纳入本机常驻、电脑操作、图片/视频、密码库、安全输入和 VNC 要求。
 
 产品定位是：**运行在用户自己电脑上的持续个人工作系统，以一个主 agent 管理目标和任务，按需委派执行，交付可检查成果，同时尽量少消耗人的注意力。** 云服务可选；DSH 本身承担原生运行时和编排，不增加第二个外部主控制器。
 
@@ -28,6 +28,7 @@
 | [原生 Worker 证据](evidence/PA-006-zh.md) | 受限启动、限定范围的控制与报告，以及经核实的释放 |
 | [产物与交付证据](evidence/PA-007-zh.md) | 封存修订、可信验收和有序交付回执 |
 | [本地 Web 收件箱证据](evidence/PA-008-zh.md) | 原生会话、限定范围的任务控制与所有者验收 |
+| [恢复证据](evidence/PA-009-zh.md) | 输入日志、精确读回、取消与受控恢复 |
 
 每份文档有对应英文版本。任务定义在 [implementation-tasks.json](implementation-tasks.json)，含依赖、目标文件、源码参考、步骤、测试路径、验收场景和证据路径。任务状态字段是初始 `planned` 快照，实时进度以 GitHub Project 为准；默认实施目标是 **桌面 alpha（PA-035 及其依赖）**，第一项是 PA-001。
 
