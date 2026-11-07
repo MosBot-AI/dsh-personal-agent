@@ -21,6 +21,9 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
     "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
