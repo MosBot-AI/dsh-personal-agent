@@ -4,9 +4,10 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**Current status: native bundle and host compatibility contracts (PA-001 and PA-002).**
+**The native bundle, host contracts, and work domain are implemented (PA-001 through PA-003).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
+The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
 
 [Implementation Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent workflow](docs/11-github-project-workflow.md)
 
