@@ -2,7 +2,7 @@
 
 [简体中文](README-zh.md)
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, compute and attention controls, durable schedules, and resident host operations are implemented (PA-001 through PA-010, PA-013, PA-018, and PA-021).** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-010, PA-013, PA-018, PA-021, and PA-038).** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
 
 Build a **persistent personal work system on the owner's computer**: one primary agent coordinates goals and tasks, delegates execution and returns inspectable outcomes while conserving human attention. Cloud services are optional. DSH remains the native runtime and orchestration host.
 
@@ -34,6 +34,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Budget and attention evidence](evidence/PA-013.md) | Model claims, resource limits, notification policy, and usage |
 | [Schedule evidence](evidence/PA-018.md) | Versioned routine intent, native wake reconciliation, and logical occurrences |
 | [Resident host evidence](evidence/PA-021.md) | Startup and shutdown, health, provider waits, backup and restore |
+| [Capability plugin evidence](evidence/PA-038.md) | Public API, lifecycle registry, policy consumers and local examples |
 
 Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. Task statuses are initial `planned` snapshots; GitHub Project owns live progress. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
 

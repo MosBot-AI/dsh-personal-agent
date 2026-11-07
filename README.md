@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, compute and attention controls, durable schedules, and resident host operations are implemented (PA-001 through PA-010, PA-013, PA-018, and PA-021).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-010, PA-013, PA-018, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -18,6 +18,7 @@ The [routing evidence](docs/evidence/PA-010.md) covers source intake, subscripti
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
+The [capability plugin evidence](docs/evidence/PA-038.md) covers versioned registration, scoped consumers, and independent keyless examples.
 
 [Implementation Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent workflow](docs/11-github-project-workflow.md)
 
