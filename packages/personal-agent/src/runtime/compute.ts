@@ -1,4 +1,4 @@
-import { contentHasFile, contentHasImage, type GenerateOptions, type StreamChunk, type TokenUsage } from '@deepseek-ai/dsh-llm'
+import { contentHasFile, contentHasImage, LlmError, type GenerateOptions, type LlmFailure, type StreamChunk, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { z } from 'zod'
 import type { BudgetRequest, BudgetService } from './budget.js'
 
@@ -17,6 +17,12 @@ export type ComputeTaskFence = NonNullable<BudgetRequest['task']>
 export interface ComputeIssue {
   readonly code: string
   readonly retryAfterMs?: number
+  readonly inputAdmitted?: boolean
+}
+
+type ProviderIssue = ComputeIssue & {
+  readonly code: 'provider_rate_limited' | 'provider_authentication' | 'provider_unavailable' | 'provider_rejected'
+  readonly retryAfterMs: number
 }
 
 export interface WorkerComputeOptions {
@@ -80,7 +86,27 @@ interface MeteredStream {
   readonly current?: () => boolean
 }
 
-const routeCooldowns = new WeakMap<BudgetService, Map<string, number>>()
+const DEFAULT_PROVIDER_COOLDOWN_MS = 60_000
+const transportCodes = new Set([
+  'TRANSPORT', 'TIMEOUT', 'NETWORK', 'NETWORK_ERROR', 'STREAM_CLOSED', 'SERVER', 'SERVER_ERROR',
+  'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET',
+])
+const authCodes = new Set(['AUTH', 'UNAUTHORIZED', 'FORBIDDEN', 'MISSING_CREDENTIALS', 'HTTP_401', 'HTTP_403'])
+type FailureFacts = Pick<LlmFailure, 'code' | 'status' | 'providerRetryAfterMs'>
+
+export function providerComputeIssue(failure: FailureFacts): ProviderIssue {
+  const { status, code, providerRetryAfterMs: delay } = failure
+  const retryAfterMs = typeof delay === 'number' && Number.isFinite(delay) && delay >= 0
+    ? Math.ceil(delay) : DEFAULT_PROVIDER_COOLDOWN_MS
+  if (status === 429 || code === 'RATE_LIMIT' || code === 'HTTP_429') return { code: 'provider_rate_limited', retryAfterMs }
+  if (status === 401 || status === 403 || authCodes.has(code)) return { code: 'provider_authentication', retryAfterMs: DEFAULT_PROVIDER_COOLDOWN_MS }
+  if (status === 408 || (status !== undefined && status >= 500 && status <= 599)
+    || transportCodes.has(code) || /^HTTP_5\d{2}$/u.test(code)) return { code: 'provider_unavailable', retryAfterMs }
+  return { code: 'provider_rejected', retryAfterMs: DEFAULT_PROVIDER_COOLDOWN_MS }
+}
+
+const routeCooldowns = new WeakMap<BudgetService, Map<string, { code: ProviderIssue['code']; until: number }>>()
 
 function cooldownKey(scope: ComputeScope, provider: string, model: string): string {
   return JSON.stringify([scope.ownerId, scope.profileId, provider, model])
@@ -89,22 +115,25 @@ function cooldownKey(scope: ComputeScope, provider: string, model: string): stri
 export function computeCooldown(budget: BudgetService, scope: ComputeScope, provider: string, model: string): ComputeIssue | undefined {
   const routes = routeCooldowns.get(budget)
   const key = cooldownKey(scope, provider, model)
-  const until = routes?.get(key)
-  if (until === undefined) return undefined
-  const retryAfterMs = Math.ceil(until - performance.now())
-  if (retryAfterMs > 0) return { code: 'provider_rate_limited', retryAfterMs }
+  const cooldown = routes?.get(key)
+  if (!cooldown) return undefined
+  const retryAfterMs = Math.ceil(cooldown.until - performance.now())
+  if (retryAfterMs > 0) return { code: cooldown.code, retryAfterMs }
   routes?.delete(key)
 }
 
-function recordCooldown(budget: BudgetService, scope: ComputeScope, request: GenerateOptions, delay: number | undefined): ComputeIssue {
-  const retryAfterMs = typeof delay === 'number' && Number.isFinite(delay) && delay >= 0 ? Math.ceil(delay) : 60_000
-  const routes = routeCooldowns.get(budget) ?? new Map<string, number>()
+export function recordProviderCooldown(
+  budget: BudgetService, scope: ComputeScope, route: Pick<GenerateOptions, 'provider' | 'model'>, issue: ProviderIssue,
+): ComputeIssue {
+  // A request-specific rejection only parks the owning Worker.
+  if (issue.code === 'provider_rejected') return issue
+  const routes = routeCooldowns.get(budget) ?? new Map()
   routeCooldowns.set(budget, routes)
-  const key = cooldownKey(scope, request.provider, request.model)
+  const key = cooldownKey(scope, route.provider, route.model)
   const now = performance.now()
-  const previous = routes.get(key) ?? 0
-  routes.set(key, Math.max(previous, now + retryAfterMs))
-  return { code: 'provider_rate_limited', retryAfterMs: Math.max(retryAfterMs, Math.ceil(previous - now)) }
+  const previous = routes.get(key)?.until ?? 0
+  routes.set(key, { code: issue.code, until: Math.max(previous, now + issue.retryAfterMs) })
+  return { ...issue, retryAfterMs: Math.max(issue.retryAfterMs, Math.ceil(previous - now)) }
 }
 
 /** The sole next() call is downstream of the synchronous durable claim. */
@@ -142,14 +171,13 @@ export async function* meteredStream({
   const { reservation } = claim
   let usage: TokenUsage | undefined
   let finished = false
+  let terminal = false
   let failed = false
   let emitted = 0
   // Bound streamed content even when an adapter disregards maxTokens.
   const maxOutputBytes = bounds.upperOutputTokens * 64
   try {
     for await (const chunk of next()) {
-      const rateLimit = chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.status === 429
-        ? recordCooldown(budget, scope, request, chunk.reason.failure.providerRetryAfterMs) : undefined
       if (!allowed()) {
         failed = true
         onIssue({ code: 'compute_limit' })
@@ -165,9 +193,11 @@ export async function* meteredStream({
       }
       if (chunk.type === 'usage') usage = chunk.usage
       if (chunk.type === 'finish') {
+        terminal = true
         const { reason } = chunk
         finished = reason.kind !== 'error' && reason.kind !== 'aborted'
-        if (rateLimit) onIssue(rateLimit)
+        const failure = reason.kind === 'error' ? reason.failure : reason.kind === 'aborted' ? { code: 'TRANSPORT' } : undefined
+        if (failure) onIssue(recordProviderCooldown(budget, scope, request, providerComputeIssue(failure)))
         if (finished && usage && (usage.outputTokens > bounds.upperOutputTokens
           || usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0) > bounds.upperInputTokens)) {
           onIssue({ code: 'compute_limit' })
@@ -179,8 +209,14 @@ export async function* meteredStream({
       }
       yield chunk
     }
+    if (!terminal && allowed()) {
+      const issue = recordProviderCooldown(budget, scope, request, providerComputeIssue({ code: 'STREAM_CLOSED' }))
+      onIssue(issue)
+      yield computeDenied(issue.code)
+    }
   } catch (error) {
     failed = true
+    if (error instanceof LlmError && allowed()) onIssue(recordProviderCooldown(budget, scope, request, providerComputeIssue(error.failure)))
     throw error
   } finally {
     try {

@@ -43,3 +43,5 @@ jobs:
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm check
       - name: Verify keyless native Web flow
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:local-flow
+      - name: Verify Linux headless resident profile
+        run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:resident

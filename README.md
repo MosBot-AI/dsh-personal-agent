@@ -136,6 +136,10 @@ Open **Routines** in **Today**, save a draft, then select **Arm schedule**. One-
 
 Local reminders appear in **Today** without a Worker or a model. A task wake checks the exact released wait and current authority and budget before returning the task to the queue. To bind a later task revision, edit the draft and arm it again. **Run now** creates a separate occurrence. It uses its own command identity, independent of the next timed wake. The native Automation page shows opaque wake entries. Manage the routine and its business outcome in **Today**.
 
+## Run as a resident host
+
+Use a dedicated foreground profile or opt in to login startup. The same local inbox provides health checks, online backup and scoped audit export. [Resident operations](docs/operations.md)
+
 ## Restore a standalone work backup
 
 Use a private standalone SQLite backup and an absolute destination path that does not exist. From the repository root after building the workspace, set `BACKUP_FILE` and `RESTORE_DIR` to those paths and run the restore command.

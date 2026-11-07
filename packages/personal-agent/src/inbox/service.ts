@@ -32,6 +32,7 @@ import type { WorkState } from '../domain/transitions.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
 import type { ExecutorResult, WorkerExecutor } from '../runtime/executor.js'
 import { workerInputSchema } from '../runtime/reports.js'
+import type { ResidentOperations } from '../runtime/resident-operations.js'
 import type { EventRouter } from '../runtime/router.js'
 import { StorageError } from '../storage/schema.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
@@ -69,6 +70,8 @@ const requestSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('set_subscription'), subscription: z.unknown() }),
   z.strictObject({ type: z.literal('set_attention_policy'), expectedVersion: versionSchema, policy: z.unknown() }),
   ...routineRequestSchemas,
+  z.strictObject({ type: z.enum(['resident_status', 'resident_backup']) }),
+  z.strictObject({ type: z.literal('resident_audit'), afterSequence: versionSchema.optional() }),
 ])
 
 const nativeSessionSchema = z.strictObject({ id: sessionIdSchema, label: nonEmptyTextSchema.max(1_024) })
@@ -90,6 +93,7 @@ export interface InboxServiceOptions {
     { ok: true; policy: { version: number } } | { ok: false; code: string }
   readonly invalidateResources?: (ref: WorkRef) => void
   readonly routines?: RoutineInbox
+  readonly resident?: ResidentOperations
   readonly now?: () => UtcInstant
 }
 
@@ -257,12 +261,23 @@ export function createInboxService(options: InboxServiceOptions) {
     if (!decoded.success) return failure('invalid_input')
     const request = decoded.data
     if (store.recoveryMode() === 'restore' && request.type !== 'snapshot' && request.type !== 'artifact'
-      && request.type !== 'cancel') return failure('recovery_required')
+      && request.type !== 'cancel' && request.type !== 'resident_status' && request.type !== 'resident_audit') return failure('recovery_required')
 
     try {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
         case 'create_task': return await createTask(ownerToken, request)
+        case 'resident_status':
+        case 'resident_backup':
+        case 'resident_audit': {
+          const resident = options.resident
+          if (!resident) return failure('resource_unavailable')
+          const scope = { ownerId: owner.ownerId, profileId: owner.profileId }
+          const value = request.type === 'resident_status' ? resident.status(scope)
+            : request.type === 'resident_audit' ? resident.audit(scope, request.afterSequence)
+              : await resident.backup()
+          return { ok: true, kind: 'resident', value }
+        }
         case 'save_routine':
         case 'arm_routine':
         case 'pause_routine':

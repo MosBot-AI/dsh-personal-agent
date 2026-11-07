@@ -141,6 +141,8 @@ export type InboxRequest =
   | { type: 'set_attention_policy'; expectedVersion: number; policy: unknown }
   | { type: 'save_routine'; commandId: string; routineId?: string; expectedRevision?: number; draft: RoutineDraft }
   | { type: 'arm_routine' | 'pause_routine' | 'run_routine_now'; commandId: string; routineId: string; expectedRevision: number }
+  | { type: 'resident_status' | 'resident_backup' }
+  | { type: 'resident_audit'; afterSequence?: number }
 
 export type InboxResponse =
   | { ok: true; kind: 'snapshot'; snapshot: InboxSnapshot }
@@ -148,6 +150,7 @@ export type InboxResponse =
   | { ok: true; kind: 'artifact'; artifact: InboxArtifact & { text: string } }
   | { ok: true; kind: 'subscription'; version: number }
   | { ok: true; kind: 'attention_policy'; version: number }
+  | { ok: true; kind: 'resident'; value: object }
   | { ok: false; code: string }
 
 export type InboxPort = (request: InboxRequest, signal?: AbortSignal) => Promise<InboxResponse>

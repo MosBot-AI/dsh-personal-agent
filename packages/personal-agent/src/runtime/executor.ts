@@ -9,7 +9,7 @@ import type { StoredCommandContext, StoredWorkResult, WorkRef, WorkStore } from 
 import { confirmOwnedCancellation } from './cancel.js'
 import { computeLimitsSchema, type ComputeIssue, type ComputeLimits, type WorkerComputeOptions } from './compute.js'
 import { makeWorkerInput, type WorkerInputIntent } from './input-journal.js'
-import type { NativeWorker, NativeWorkerInput, NativeWorkerRuntime } from './native-worker.js'
+import type { NativeWorker, NativeWorkerInput, NativeWorkerRuntime, WorkerObservation } from './native-worker.js'
 import { allowsWorkerData, resolveWorkerDirectory, workerPresetSchema, type WorkerPreset } from './presets.js'
 import { decodeWorkerReport, workerInputSchema, type WorkerReport } from './reports.js'
 import { workerRouteIntentSchema, type WorkerRouteIntent } from './subscriptions.js'
@@ -39,6 +39,7 @@ const MAX_DEPENDENCY_CHAIN = 64
 const OPEN_DRAIN_TIMEOUT_MS = 10_000
 const openingPending = Symbol('opening_pending')
 export { computeWaitPrefix }
+export type { WorkerObservation }
 
 type WorkerInput = z.infer<typeof workerInputSchema>
 type SubscribedInput = z.infer<typeof subscribedInputSchema>
@@ -64,6 +65,7 @@ export interface WorkerExecutorOptions {
   readonly captureResultSummary?: boolean
   readonly onHandback?: (ref: WorkRef, eventId: WorkerRouteIntent['eventId']) => void
   readonly onProgress?: (ref: WorkRef, state: WorkState, report: Extract<WorkerReport, { kind: 'progress' }>) => void
+  readonly onObservation?: (ref: WorkRef, state: WorkState, observation: WorkerObservation) => void
   readonly compute?: WorkerComputeOptions
   readonly now?: () => UtcInstant
 }
@@ -345,6 +347,7 @@ class WorkerExecutor {
       return started
     }
     entry.version = started.state.task.version
+    this.observeSignal(entry, { kind: 'start' })
     const { compute } = this.options
     const limits = this.computeLimits
     entry.opening = Promise.resolve().then(() => {
@@ -353,6 +356,7 @@ class WorkerExecutor {
         sessionId, cwd, provider: preset.provider, model: preset.model,
         resume: saved !== undefined, signal: entry.abort.signal,
         isCurrent: () => this.current(entry) !== undefined && (!entry.routed || authorized(entry.routed.authorize)),
+        onObservation: this.options.onObservation && (observation => this.observeSignal(entry, observation)),
         ...(compute && limits ? { compute: {
           budget: compute.budget, limits, initiallyUnattended: wake !== undefined,
           scope: (unattended: boolean) => {
@@ -564,6 +568,7 @@ class WorkerExecutor {
       }
       if (report.kind === 'progress') {
         entry.report = report
+        this.observeSignal(entry, { kind: 'progress' })
         try {
           const notified = this.options.onProgress?.(entry.ref, state, report)
           void Promise.resolve(notified).catch(() => {
@@ -638,6 +643,14 @@ class WorkerExecutor {
     }
   }
 
+  private observeSignal(entry: Entry, observation: WorkerObservation): void {
+    if (!this.options.onObservation) return
+    try {
+      const state = this.current(entry)
+      if (state) this.options.onObservation(entry.ref, state, observation)
+    } catch { /* Diagnostics are separate from Worker admission. */ }
+  }
+
   private waitForCompute(entry: Entry, state: WorkState, issue: ComputeIssue): void {
     entry.issue = issue.code
     const base = fence(state, this.now())
@@ -645,10 +658,17 @@ class WorkerExecutor {
     const notBefore = issue.code === 'turn_limit' ? indefiniteWait : issue.retryAfterMs === undefined ? undefined
       : issue.retryAfterMs >= Date.parse(indefiniteWait) - now ? indefiniteWait
         : utcInstantSchema.parse(new Date(now + issue.retryAfterMs).toISOString())
-    const resumeCondition = issue.code === 'turn_limit' ? 'The Worker reached the turn limit for this attempt.'
+    let resumeCondition = issue.code === 'turn_limit' ? 'The Worker reached the turn limit for this attempt.'
       : notBefore === indefiniteWait ? 'The provider cooldown exceeds the supported wake horizon.'
         : notBefore === undefined ? 'Wait for authorized compute capacity.'
           : `Recheck authorized compute capacity after ${notBefore}.`
+    if (notBefore !== undefined && notBefore !== indefiniteWait) {
+      if (issue.code === 'provider_authentication') resumeCondition = `Verify model provider authorization before resuming after ${notBefore}.`
+      if (issue.code === 'provider_unavailable') resumeCondition = `Check model provider availability before resuming after ${notBefore}.`
+      if (issue.code === 'provider_rejected') resumeCondition = `Review the model route before resuming after ${notBefore}.`
+    }
+    if (issue.inputAdmitted === true) resumeCondition += ' Review the input already admitted to the native Session before sending again.'
+    if (issue.inputAdmitted === false) resumeCondition += ' The latest input stopped before native Session admission.'
     const result = this.options.store.applyEvent(entry.ref, {
       type: 'wait', ...base,
       wait: {

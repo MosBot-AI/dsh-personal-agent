@@ -74,6 +74,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   if (value.kind === 'subscription' || value.kind === 'attention_policy') {
     return typeof value.version === 'number' && Number.isSafeInteger(value.version) && value.version > 0
   }
+  if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'artifact' && isRecord(value.artifact)) {
     return typeof value.artifact.id === 'string' && typeof value.artifact.mediaType === 'string'
       && Number.isSafeInteger(value.artifact.version) && typeof value.artifact.text === 'string'

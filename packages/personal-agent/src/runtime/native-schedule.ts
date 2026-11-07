@@ -44,6 +44,7 @@ export interface NativeSchedulePort {
   history(id: string): Promise<readonly NativeScheduleReceipt[]>
   retire?(receipt: NativeScheduleReceipt): Promise<boolean>
   cancel?(entry: NativeScheduleEntry): Promise<boolean>
+  nudge?(entry: NativeScheduleEntry, current: () => boolean): Promise<boolean>
   subscribe(onChanged: () => void): () => void
   dispose(): Promise<void>
 }
@@ -294,6 +295,26 @@ export function installNativeScheduleSink(ctx: Context): NativeScheduleSink {
           if (!entry || entry.invalid || entry.status !== candidate.status || entry.wakeAt !== candidate.wakeAt
             || entry.marker !== candidate.marker) return false
           return remove(id, raw.updatedAt)
+        },
+        async nudge(candidate, current) {
+          assertOpen()
+          if (candidate.invalid || candidate.status !== 'active' || candidate.targetSessionId !== target
+            || Date.parse(candidate.wakeAt) > Date.now()) return false
+          const id = candidate.id as ScheduleCatalogEntry['id']
+          const raw = await schedule.view({ id })
+          if ('code' in raw || raw.updatedAt === undefined) return false
+          const entry = project(raw, target)
+          if (entry?.status !== 'active' || entry.invalid || entry.marker !== candidate.marker
+            || entry.wakeAt !== candidate.wakeAt || Date.parse(entry.wakeAt) > Date.now()) return false
+          assertOpen()
+          if (!current()) return false
+          // rc.1 recalculates its timer after an equivalent management edit.
+          // Omitting timing and active preserves the committed occurrence.
+          const result = await schedule.edit({ id, action: 'update', patch: { title: NATIVE_TITLE },
+            expectedUpdatedAt: raw.updatedAt }, target)
+          if ('code' in result || 'deleted' in result) return false
+          const updated = project(result, target)
+          return updated?.status === 'active' && !updated.invalid && updated.marker === entry.marker && updated.wakeAt === entry.wakeAt
         },
         subscribe(onChanged) {
           assertOpen()
