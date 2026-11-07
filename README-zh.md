@@ -4,7 +4,7 @@
 
 dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证产物交付和本地 Web 收件箱（PA-001 至 PA-008）。**
+**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱和受控恢复（PA-001 至 PA-009）。**
 
 [宿主兼容性记录](docs/evidence/host-compatibility-zh.md)说明已验证的原生控制能力，以及后续任务需要处理的边界。
 [工作领域证据](docs/evidence/PA-003-zh.md)覆盖记录校验、命令准入和任务状态转换。
@@ -13,6 +13,7 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 [Worker 证据](docs/evidence/PA-006-zh.md)覆盖原生启动与恢复、报告准入、前台控制和资源清理。
 [产物与交付证据](docs/evidence/PA-007-zh.md)覆盖不可变内容、可信验收和供应商回执处理。
 [本地 Web 收件箱证据](docs/evidence/PA-008-zh.md)覆盖原生会话集成、任务控制、审批和结果验收。
+[恢复证据](docs/evidence/PA-009-zh.md)覆盖输入回执、取消代次和备份恢复。
 
 [实施 Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent 协作流程](docs/11-github-project-workflow-zh.md)
 
@@ -79,6 +80,19 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 ```
 
 打开或新建一条原生对话，然后选择 DSH 侧栏中的 **待办**。创建项目并将任务关联到该对话。明确启动任务，在 Worker 释放后查看候选产物，并在收件箱接受结果。可通过对话链接回到原生记录和输入框。
+
+## 恢复独立工作备份
+
+使用私有的独立 SQLite 备份和一个尚不存在的绝对目标路径。构建工作区后，在仓库根目录将 `BACKUP_FILE` 和 `RESTORE_DIR` 设为这两个路径，再运行恢复命令。
+
+```sh
+node --input-type=module - "$BACKUP_FILE" "$RESTORE_DIR" <<'JS'
+import { restoreWorkStoreBackup } from './packages/personal-agent/lib/storage/restore.js'
+restoreWorkStoreBackup(process.argv[2], process.argv[3])
+JS
+```
+
+源备份保持完整。目标以仅对账模式打开，支持限定范围的检查与精确读回。恢复的授权和备份之后的结果待核对期间，新 Worker 输入、动作领取和交付保持禁用。
 
 ## 校验计划
 
