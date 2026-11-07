@@ -2,7 +2,7 @@
 
 [简体中文](README-zh.md)
 
-**Status: native bundle bootstrap under PA-001.** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
+**Status: native bundle and host compatibility contracts (PA-001 and PA-002).** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
 
 Build a **persistent personal work system on the owner's computer**: one primary agent coordinates goals and tasks, delegates execution and returns inspectable outcomes while conserving human attention. Cloud services are optional. DSH remains the native runtime and orchestration host.
 
@@ -21,6 +21,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [09 Plugin architecture](09-plugin-architecture.md) | Replaceable media/memory, development, configuration, migration and rollback |
 | [10 Model routing and gateway](10-model-routing-and-gateway.md) | Difficulty/effort, user pools, quotas, fallback configuration and implementation comparison |
 | [11 Project workflow](11-github-project-workflow.md) | GitHub board, claims, reporting, acceptance and Actions automation |
+| [Host compatibility evidence](evidence/host-compatibility.md) | Installed DSH agent, session, schedule, and remote access boundaries |
 
 Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. Task statuses are initial `planned` snapshots; GitHub Project owns live progress. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
 

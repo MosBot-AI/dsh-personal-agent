@@ -4,7 +4,9 @@
 
 dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**当前状态为原生 Bundle 启动骨架（PA-001）。**
+**当前状态为原生 Bundle 和宿主兼容性合约（PA-001 和 PA-002）。**
+
+[宿主兼容性记录](docs/evidence/host-compatibility-zh.md)说明已验证的原生控制能力，以及后续任务需要处理的边界。
 
 [实施 Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent 协作流程](docs/11-github-project-workflow-zh.md)
 
