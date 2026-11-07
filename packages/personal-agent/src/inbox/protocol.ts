@@ -1,4 +1,5 @@
 import type { Delivery, TaskStatus } from '../domain/model.js'
+import type { MemoryActiveRecord, MemoryScope } from '@mosbot-ai/dshpa-plugin-api'
 
 export const INBOX_RPC_ENDPOINT = 'dshpa/inbox'
 
@@ -111,6 +112,7 @@ type RoutineDraft = {
 
 export interface InboxSnapshot {
   readonly workerConfigured: boolean
+  readonly memoryConfigured?: boolean
   readonly recoveryMode?: 'reconciling' | 'restore'
   readonly sessions: readonly InboxSession[]
   readonly projects: readonly InboxProject[]
@@ -122,6 +124,8 @@ export interface InboxSnapshot {
 
 type TaskControl = { taskId: string; expectedVersion: number }
 type EvidencePointer = { kind: 'event'; eventId: string } | { kind: 'artifact'; artifactId: string }
+type MemoryControl = { scope: MemoryScope; commandId: string }
+type MemoryRevision = { recordId: string; expectedRevision: number }
 
 export type InboxRequest =
   | { type: 'snapshot' }
@@ -139,6 +143,11 @@ export type InboxRequest =
   | { type: 'context_search'; taskId: string; query: string; limit?: number }
   | { type: 'context_checkpoint'; taskId: string }
   | ({ type: 'context_exclude'; ref: EvidencePointer; reason: 'forgotten' | 'superseded' } & TaskControl)
+  | { type: 'memory_search'; scope: MemoryScope; query: string; limit?: number }
+  | { type: 'memory_inspect'; scope: MemoryScope; recordId: string }
+  | ({ type: 'memory_remember'; text: string; validUntil?: string } & MemoryControl)
+  | ({ type: 'memory_correct'; text: string; validUntil?: string } & MemoryControl & MemoryRevision)
+  | ({ type: 'memory_forget' } & MemoryControl & MemoryRevision)
   | { type: 'set_subscription'; subscription: {
     sourceInstanceId: string; accountId: string; threadId: string; projectId: string; taskId: string;
     mode: 'context' | 'work'; enabled: boolean; expectedVersion?: number; expiresAt?: string;
@@ -157,6 +166,8 @@ export type InboxResponse =
   | { ok: true; kind: 'attention_policy'; version: number }
   | { ok: true; kind: 'resident'; value: object }
   | { ok: true; kind: 'context'; value: object | null }
+  | { ok: true; kind: 'memory_records'; confirmed: readonly MemoryActiveRecord[]; inferred: readonly MemoryActiveRecord[] }
+  | { ok: true; kind: 'memory_change'; state: 'completed' | 'pending'; recordId: string; revision: number }
   | { ok: false; code: string }
 
 export type InboxPort = (request: InboxRequest, signal?: AbortSignal) => Promise<InboxResponse>

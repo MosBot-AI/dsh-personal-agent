@@ -8,6 +8,7 @@ import { SessionId as nativeSessionId, type SessionHeader } from '@deepseek-ai/d
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { z } from 'zod'
 import { createLocalContext, localContextConfigSchema } from '../context/local-context.js'
+import { createLocalMemory, localMemoryConfigSchema } from '../context/memory.js'
 import {
   accountIdSchema, deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema,
   sourceInstanceIdSchema, utcInstantSchema,
@@ -18,6 +19,7 @@ import { ROUTINE_SOURCE } from '../domain/routines.js'
 import { createIdentityBoundary, type SourceToken } from '../policy/identity.js'
 import type { ActionRoute } from '../policy/dispatch.js'
 import { budgetConfigSchema, type BudgetConfig, type BudgetCurrencyUsage } from '../runtime/budget.js'
+import { capabilityRegistryFor } from '../runtime/capability-registry.js'
 import CheckpointedCompactionEngine from '../runtime/checkpoint-compaction.js'
 import CheckpointedToolResultPruner from '../runtime/checkpoint-pruner.js'
 import { computeLimitsSchema } from '../runtime/compute.js'
@@ -56,6 +58,7 @@ export const localInboxConfigSchema = z.strictObject({
   budget: budgetConfigSchema.optional(),
   computeLimits: computeLimitsSchema.optional(),
   context: localContextConfigSchema.optional(),
+  memory: localMemoryConfigSchema.optional(),
   gpu: gpuConfigSchema.optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
@@ -308,6 +311,9 @@ export function activateLocalInbox(
     const limits = computeLimitsSchema.parse(config.computeLimits ?? {})
     const context = config.context && createLocalContext({ ctx, store, identity, ownerToken: token, owner, config: config.context,
       worker: worker && { ...worker, outputReserve: limits.maxOutputTokens, maxInputBytes: limits.maxInputBytes } })
+    const registry = config.memory && capabilityRegistryFor(ctx)
+    if (config.memory && !registry) throw new Error('Enabled memory requires the capability registry')
+    const memory = config.memory && registry ? createLocalMemory({ store, identity, registry, config: config.memory }) : undefined
     if (worker) mkdirSync(config.workRoot, { recursive: true, mode: 0o700 })
     executor = worker ? host.createWorkerExecutor({
       store,
@@ -382,7 +388,7 @@ export function activateLocalInbox(
       store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
-      resident, context,
+      resident, context, memory,
       configureAttention: (_owner, policy, expectedVersion) => attention.configure(scope, policy, expectedVersion),
       invalidateResources: gpu.cancelStale,
       inspectUsage() {
@@ -437,7 +443,7 @@ export function activateLocalInbox(
         if (request.signal.aborted) return new Response('Request ended before admission', { status: 400 })
         let value
         try {
-          value = await service.handle(token, envelope.payload)
+          value = await service.handle(token, envelope.payload, request.signal)
         } catch (error) {
           value = { ok: false, code: error instanceof StorageError ? error.code : 'host_unavailable' }
         }

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { contextEvidencePointerSchema } from '../context/checkpoint.js'
 import type { LocalContext } from '../context/local-context.js'
+import { memoryRequestSchemas, type LocalMemory } from '../context/memory.js'
 import { contextRecallRequestSchema, contextSearchRequestSchema } from '../context/recall.js'
 import {
   artifactIdSchema,
@@ -77,6 +78,7 @@ const requestSchema = z.discriminatedUnion('type', [
     reason: z.enum(['forgotten', 'superseded']) }),
   z.strictObject({ type: z.literal('set_subscription'), subscription: z.unknown() }),
   z.strictObject({ type: z.literal('set_attention_policy'), expectedVersion: versionSchema, policy: z.unknown() }),
+  ...memoryRequestSchemas,
   ...routineRequestSchemas,
   z.strictObject({ type: z.enum(['resident_status', 'resident_backup']) }),
   z.strictObject({ type: z.literal('resident_audit'), afterSequence: versionSchema.optional() }),
@@ -103,6 +105,7 @@ export interface InboxServiceOptions {
   readonly routines?: RoutineInbox
   readonly resident?: ResidentOperations
   readonly context?: LocalContext
+  readonly memory?: LocalMemory
   readonly now?: () => UtcInstant
 }
 
@@ -208,6 +211,7 @@ export function createInboxService(options: InboxServiceOptions) {
     const progress = new Map(usage?.progress.map(item => [item.taskId, item]))
     return { ok: true, kind: 'snapshot', snapshot: {
       workerConfigured: executor !== undefined && worker !== undefined,
+      ...(options.memory ? { memoryConfigured: true } : {}),
       ...(recoveryMode === 'normal' ? {} : { recoveryMode }),
       sessions,
       projects: store.listInboxProjects(owner).map(({ id, title, purpose }) => ({ id, title, purpose })),
@@ -263,7 +267,7 @@ export function createInboxService(options: InboxServiceOptions) {
     }) }))
   }
 
-  async function handle(ownerToken: unknown, input: unknown): Promise<InboxResponse> {
+  async function handle(ownerToken: unknown, input: unknown, signal?: AbortSignal): Promise<InboxResponse> {
     const owner = identity.resolveOwner(ownerToken)
     if (!owner) return failure('permission_denied')
     const decoded = requestSchema.safeParse(input)
@@ -277,6 +281,11 @@ export function createInboxService(options: InboxServiceOptions) {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
         case 'create_task': return await createTask(ownerToken, request)
+        case 'memory_search':
+        case 'memory_inspect':
+        case 'memory_remember':
+        case 'memory_correct':
+        case 'memory_forget': return await options.memory?.handle(ownerToken, request, signal) ?? failure('resource_unavailable')
         case 'context_recall':
         case 'context_search':
         case 'context_checkpoint':

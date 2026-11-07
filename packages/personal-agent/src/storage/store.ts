@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
+import type { MemoryAccess } from '@mosbot-ai/dshpa-plugin-api'
 import { z } from 'zod'
 import { createArtifactStore, readScopedArtifact } from '../artifacts/store.js'
 import { contextPointerSchema, type CheckpointCaptureResult, type ContextEvidencePointer, type ContextExclusionResult } from '../context/checkpoint.js'
@@ -65,6 +66,10 @@ import {
   isContextExcluded, listContextPointers, workerContextSources, workerInputContextAvailable, type ContextPointerPage,
 } from './context.js'
 import { openStorageDatabase, type StorageDatabase } from './database.js'
+import {
+  finishMemoryCommand, getMemoryRecord, getMemorySource, hasMemoryScope, listMemoryRecords, reserveMemoryCommand,
+  type MemoryLedgerActor, type MemoryLedgerPage,
+} from './memory.js'
 import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
 import {
   applyWorkerHandback, cancelUnfinishedRouting, checkWorkerRoute, commitWorkerRoute, getRoutingEvent, getSubscription,
@@ -254,6 +259,34 @@ class WorkStore {
 
   exportAudit(scope: WorkAuditScope, options?: WorkAuditOptions) {
     return this.access(db => exportWorkAudit(db, scope, options))
+  }
+
+  hasMemoryScope(access: MemoryAccess): boolean {
+    return this.access(db => hasMemoryScope(db, access))
+  }
+
+  getMemoryRecord(access: MemoryAccess, id: string) {
+    return this.access(db => getMemoryRecord(db, access, id))
+  }
+
+  listMemoryRecords(access: MemoryAccess, page?: MemoryLedgerPage) {
+    return this.access(db => listMemoryRecords(db, access, page))
+  }
+
+  getMemorySource(access: MemoryAccess, id: string) {
+    return this.access(db => getMemorySource(db, access, id))
+  }
+
+  hasMemorySource(access: MemoryAccess, id: string): boolean {
+    return this.getMemorySource(access, id) !== undefined
+  }
+
+  reserveMemoryCommand(actor: MemoryLedgerActor, input: unknown) {
+    return this.access(db => transaction(db, () => reserveMemoryCommand(db, actor, input)))
+  }
+
+  finishMemoryCommand(actor: MemoryLedgerActor, input: unknown) {
+    return this.access(db => transaction(db, () => finishMemoryCommand(db, actor, input)))
   }
 
   createActionGate(options: ActionGateOptions) {

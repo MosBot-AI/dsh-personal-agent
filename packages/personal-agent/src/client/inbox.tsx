@@ -4,6 +4,7 @@ import type { MessageKey, Translate } from './copy.js'
 import { ApprovalCard, requestId, TaskDetail, TaskStatus } from './task.js'
 import { Usage } from './usage.js'
 import { Reminders, Routines } from './routines.js'
+import { PersonalMemory } from './memory.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
 type ArtifactContent = Extract<InboxResponse, { kind: 'artifact' }>['artifact']
@@ -456,6 +457,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           </li>)}</ul>
         </details>}
         {snapshot?.usage && <Usage usage={snapshot.usage} t={t} />}
+        {snapshot?.memoryConfigured && <PersonalMemory t={t} port={port} projects={snapshot.projects} tasks={snapshot.tasks}
+          connectionKey={connectionKey} currentConnection={() => connection.getSnapshot()} readable={writable}
+          writable={writable && !snapshot.recoveryMode} />}
         {snapshot?.schedules && <Routines routines={snapshot.schedules.routines} tasks={snapshot.tasks} t={t}
           writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('routines')}
           submit={(request, acknowledged) => { void mutate('routines', request, acknowledged) }} />}

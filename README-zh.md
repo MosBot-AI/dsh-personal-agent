@@ -4,7 +4,7 @@
 
 dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱、受控恢复、事件路由、上下文检查点与召回、计算与通知控制、持久调度、常驻宿主运维及能力插件契约（PA-001 至 PA-011、PA-013、PA-018、PA-021 和 PA-038）。**
+**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱、受控恢复、事件路由、上下文检查点与召回、个人记忆、计算与通知控制、持久调度、常驻宿主运维及能力插件契约（PA-001 至 PA-013、PA-018、PA-021 和 PA-038）。**
 
 [宿主兼容性记录](docs/evidence/host-compatibility-zh.md)说明已验证的原生控制能力，以及后续任务需要处理的边界。
 [工作领域证据](docs/evidence/PA-003-zh.md)覆盖记录校验、命令准入和任务状态转换。
@@ -16,6 +16,7 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 [恢复证据](docs/evidence/PA-009-zh.md)覆盖输入回执、取消代次和备份恢复。
 [路由证据](docs/evidence/PA-010-zh.md)覆盖来源准入、订阅、Worker 退回及控制响应。
 [上下文证据](docs/evidence/PA-011-zh.md)覆盖原生检查点保存、引用召回、排除规则及输入预算。
+[个人记忆证据](docs/evidence/PA-012-zh.md)覆盖所有者操作、提供者快照及在提供者返回旧数据时仍生效的排除规则。
 [预算与通知证据](docs/evidence/PA-013-zh.md)覆盖模型领取、资源上限、通知策略及限定范围的用量。
 [调度证据](docs/evidence/PA-018-zh.md)覆盖例行任务意图、原生唤醒对账，以及去重后的提醒和任务唤醒。
 [常驻宿主证据](docs/evidence/PA-021-zh.md)覆盖生命周期、诊断、在线备份和恢复。
@@ -150,6 +151,33 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 搜索检查任务及每种证据中最多 12 个近期符合条件的候选项，每个候选项最多搜索 8 KiB，最多返回 10 条摘要。支持规范化后的中英文文本。通过精确引用可以召回较早的证据或读取大型产物的后续内容。排除规则对该任务持久生效，也会过滤旧检查点中源自被排除证据的内容。
 
 在 Worker 实际发送模型请求前，dshpa 会按当前授权和排除规则检查其保留输入所记录的来源。如果来源授权被撤销或相关事件被排除，旧 Worker Session 将无法再向模型供应商发送请求。请使用仍获授权的证据创建新任务。SQLite 来源记录、DSH Session 日志和备份副本各自遵循保留规则。DSH 压缩当前上下文时，会在 Session 日志中保留原始事件。
+
+### 管理个人记忆
+
+构建独立的本地记忆 Bundle，并安装到已有的 Web Profile。
+
+```sh
+pnpm build
+pnpm exec dsh plugin --profile dshpa-web add "link:$PWD/packages/memory-sqlite"
+```
+
+将以下 `memory` 配置加到 `dshpa` 条目的 `config.inbox` 下。提供者固定引用包含准确的插件版本和配置版本。
+
+```yaml
+memory:
+  provider:
+    kind: memory
+    instanceId: local-memory
+    pluginId: '@mosbot-ai/dshpa-memory-sqlite'
+    pluginVersion: '0.0.0'
+    configRevision: 1
+```
+
+在**今日**中打开**个人记忆**。选择 Profile、项目或任务范围，再显式保存事实。搜索会核对有效期和准确的所选范围。查看时可检查来源回执、置信度、有效期及修订。更正会创建替代记录并隐藏旧记录。遗忘会立即隐藏记录，再请求提供者删除内容并保留墓碑。提供者变更仍在等待时可点**重试**。经过认证的 `dshpa/inbox` RPC 支持相同操作。对 `memory_remember`、`memory_correct` 和 `memory_forget`，可在重启后重发相同载荷和 `commandId`，继续被中断的变更。
+
+自动提取处于关闭状态。显式操作记录所有者确认的事实，提供者契约另行保留推断记录。记忆内容不携带动作授权。外部知识库 `llmwiki` 保持只读。
+
+记忆提供者在自己的数据库中保存事实内容。核心工作库保存范围、修订、摘要哈希、来源回执和排除规则。备份 Profile 时应同时保留两者。提供者的旧副本无法覆盖核心排除规则。已有的提供者快照或备份文件仍可能含有旧内容，分别遵循各自的留存规则。[SQLite 记忆提供者](packages/memory-sqlite/README-zh.md)
 
 ### 设置计算与通知限额
 

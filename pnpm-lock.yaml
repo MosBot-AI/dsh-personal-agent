@@ -76,6 +76,18 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  packages/memory-sqlite:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.1.0
+        version: 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
+      '@mosbot-ai/dshpa-plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
   packages/personal-agent:
     dependencies:
       '@deepseek-ai/cordis':
