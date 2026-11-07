@@ -30,6 +30,7 @@ import {
   type TaskId,
   type UtcInstant,
 } from '../domain/model.js'
+import { ROUTINE_SOURCE, type RoutineRef, type RoutineScope } from '../domain/routines.js'
 import {
   transitionWork,
   workEventSchema,
@@ -59,6 +60,11 @@ import {
   applyWorkerHandback, cancelUnfinishedRouting, checkWorkerRoute, commitWorkerRoute, getRoutingEvent, getSubscription,
   listRoutingEvents, listSubscriptions, putSubscription, recordRoutingEvent, setRoutingDisposition,
 } from './routing.js'
+import {
+  completeRoutineOccurrence, createRoutine, getRoutine, getRoutineRetirement, listArmedRoutines, listRoutineMappings,
+  listRoutineOccurrences, listRoutines, reserveRoutineMapping, retimeRoutineMapping, runRoutineNow,
+  skipRoutineMisfire, updateRoutine, updateRoutineMapping, type RoutineWakeRequest, type RoutineWakeResult,
+} from './routines.js'
 import { sqliteCode, StorageError, transaction } from './schema.js'
 
 const MAX_BYTES = 1024 * 1024
@@ -144,7 +150,8 @@ function decodeIntents(input: CommitIntents): ValidatedIntents | undefined {
   const decoded = intentsSchema.safeParse(input)
   if (!decoded.success) return undefined
   const { effects, deliveries } = decoded.data
-  if (effects?.some(effect => effect.status !== 'prepared')
+  if (decoded.data.sourceEvent?.sourceInstanceId === ROUTINE_SOURCE
+    || effects?.some(effect => effect.status !== 'prepared')
     || deliveries?.some(delivery => delivery.status !== 'pending' || delivery.retries !== 0)) return undefined
   return decoded.data
 }
@@ -156,6 +163,22 @@ function hasIntents(intents: ValidatedIntents): boolean {
 
 function sameScope(left: Scope, right: Scope): boolean {
   return left.ownerId === right.ownerId && left.profileId === right.profileId
+}
+
+function unsettledEffects(db: DatabaseSync, ref: WorkRef, attemptId: AttemptId): boolean {
+  return db.prepare(`
+    SELECT 1 FROM tasks t WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ?
+    AND (
+      EXISTS (
+        SELECT 1 FROM effects e WHERE e.task_id = t.id AND e.attempt_id = ?
+        AND coalesce(e.record ->> '$.status', '') NOT IN ('prepared', 'authorized', 'confirmed', 'failed')
+      )
+      OR EXISTS (
+        SELECT 1 FROM outbox o WHERE o.task_id = t.id AND o.attempt_id = ?
+        AND coalesce(o.record ->> '$.status', '') NOT IN ('pending', 'accepted', 'delivered', 'read', 'failed')
+      )
+    )
+  `).get(ref.taskId, ref.ownerId, ref.profileId, attemptId, attemptId) !== undefined
 }
 
 function commandFingerprint(
@@ -235,6 +258,7 @@ class WorkStore {
   }
 
   recordRoutingEvent(event: SourceEvent, digest: string, metadata: { projectId: ProjectId; authority: RoutingAuthority }) {
+    if (event.sourceInstanceId === ROUTINE_SOURCE) return { ok: false, code: 'invalid_input' } as const
     if (!hasBoundedJson(event)) return { ok: false, code: 'invalid_input' } as const
     return this.access(db => transaction(db, () => recordRoutingEvent(db, event, digest, metadata)))
   }
@@ -265,6 +289,63 @@ class WorkStore {
 
   putSubscription(input: unknown, expectedVersion?: number) {
     return this.access(db => transaction(db, () => putSubscription(db, input, expectedVersion)))
+  }
+
+  createRoutine(scope: RoutineScope, input: unknown, at: UtcInstant) {
+    return this.access(db => transaction(db, () => createRoutine(db, scope, input, at)))
+  }
+
+  updateRoutine(ref: RoutineRef, input: unknown) {
+    return this.access(db => transaction(db, () => updateRoutine(db, ref, input)))
+  }
+
+  getRoutine(ref: RoutineRef) {
+    return this.access(db => getRoutine(db, ref))
+  }
+
+  listRoutines(scope: RoutineScope, limit?: number) {
+    return this.access(db => listRoutines(db, scope, limit))
+  }
+
+  listArmedRoutines() {
+    return this.access(listArmedRoutines)
+  }
+
+  listRoutineMappings(scope?: RoutineScope) {
+    return this.access(db => listRoutineMappings(db, scope))
+  }
+
+  listRoutineOccurrences(scope: RoutineScope, limit?: number) {
+    return this.access(db => listRoutineOccurrences(db, scope, limit))
+  }
+
+  reserveRoutineMapping(ref: RoutineRef, input: unknown) {
+    return this.access(db => transaction(db, () => reserveRoutineMapping(db, ref, input)))
+  }
+
+  updateRoutineMapping(ref: RoutineRef, input: unknown) {
+    return this.access(db => transaction(db, () => updateRoutineMapping(db, ref, input)))
+  }
+
+  retimeRoutineMapping(ref: RoutineRef, input: unknown) {
+    return this.access(db => transaction(db, () => retimeRoutineMapping(db, ref, input)))
+  }
+
+  skipRoutineMisfire(ref: RoutineRef, input: unknown) {
+    return this.access(db => transaction(db, () => skipRoutineMisfire(db, ref, input)))
+  }
+
+  completeRoutineOccurrence(ref: RoutineRef, input: unknown) {
+    return this.access(db => transaction(db, () => completeRoutineOccurrence(db, ref, input,
+      request => this.wakeRoutineGoal(db, request))))
+  }
+
+  runRoutineNow(ref: RoutineRef, input: unknown) {
+    return this.access(db => transaction(db, () => runRoutineNow(db, ref, input, request => this.wakeRoutineGoal(db, request))))
+  }
+
+  getRoutineRetirement(nativeId: string) {
+    return this.access(db => getRoutineRetirement(db, nativeId))
   }
 
   listColdWork(after: string): WorkState[] {
@@ -465,19 +546,7 @@ class WorkStore {
   }
 
   hasUnsettledEffects(ref: WorkRef, attemptId: AttemptId): boolean {
-    return this.access(db => db.prepare(`
-      SELECT 1 FROM tasks t WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ?
-      AND (
-        EXISTS (
-          SELECT 1 FROM effects e WHERE e.task_id = t.id AND e.attempt_id = ?
-          AND coalesce(e.record ->> '$.status', '') NOT IN ('prepared', 'authorized', 'confirmed', 'failed')
-        )
-        OR EXISTS (
-          SELECT 1 FROM outbox o WHERE o.task_id = t.id AND o.attempt_id = ?
-          AND coalesce(o.record ->> '$.status', '') NOT IN ('pending', 'accepted', 'delivered', 'read', 'failed')
-        )
-      )
-    `).get(ref.taskId, ref.ownerId, ref.profileId, attemptId, attemptId) !== undefined)
+    return this.access(db => unsettledEffects(db, ref, attemptId))
   }
 
   getDelivery(ref: WorkRef, deliveryId: DeliveryId) {
@@ -714,6 +783,49 @@ class WorkStore {
       WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ?
     `).get(ref.taskId, ref.ownerId, ref.profileId)
     return row === undefined ? undefined : this.decodeWork(row)
+  }
+
+  private wakeRoutineGoal(db: DatabaseSync, request: RoutineWakeRequest): RoutineWakeResult {
+    const { routine, goal, occurrence, authority, admission } = request
+    const ref = { ownerId: routine.ownerId, profileId: routine.profileId, taskId: goal.taskId }
+    const before = this.loadWork(db, ref)
+    const project = db.prepare(`
+      SELECT record FROM projects WHERE id = ? AND owner_id = ? AND profile_id = ?
+    `).get(goal.projectId, ref.ownerId, ref.profileId)
+    if (!before || before.task.projectId !== goal.projectId || !project || decodeRecord(project.record, projectSchema).status !== 'active') {
+      return { status: 'skipped', reason: 'target_unavailable' }
+    }
+    const { task, attempt } = before
+    if (attempt.id !== goal.attemptId || attempt.generation !== goal.generation || task.generation !== goal.generation) {
+      return { status: 'skipped', reason: 'stale_attempt' }
+    }
+    if (task.version !== goal.expectedVersion) return { status: 'skipped', reason: 'version_conflict' }
+    if (attempt.mandate.policyVersion !== authority.policyVersion) return { status: 'skipped', reason: 'authority_changed' }
+    if (task.status !== 'waiting_event' || task.wait?.reason !== 'event' || task.wait.referenceId !== goal.waitReference) {
+      return { status: 'skipped', reason: 'wait_unavailable' }
+    }
+    const native = attempt.worker !== undefined || attempt.sessionId !== undefined || attempt.agentId !== undefined
+    if (native && attempt.worker?.releasedAt === undefined) return { status: 'skipped', reason: 'runtime_not_quiescent' }
+    if (unsettledEffects(db, ref, attempt.id)) return { status: 'skipped', reason: 'effects_unsettled' }
+    const at = occurrence.observedAt
+    const result = transitionWork(before, {
+      type: 'wake', at, expectedVersion: goal.expectedVersion, attemptId: goal.attemptId,
+      generation: goal.generation, reason: 'event', referenceId: goal.waitReference,
+      policyVersion: authority.policyVersion, runtimeQuiescent: true, ...admission,
+    })
+    if (!result.ok) return { status: 'skipped', reason: 'wait_unavailable' }
+    const sourceEvent = sourceEventSchema.parse({
+      id: `${occurrence.id}-source`, ownerId: ref.ownerId, profileId: ref.profileId,
+      sourceInstanceId: ROUTINE_SOURCE, externalEventId: occurrence.id, externalRevision: String(routine.revision),
+      actor: { kind: 'service', externalActorId: routine.id }, occurredAt: occurrence.intendedAt, receivedAt: at,
+      body: { kind: 'routine_wake', routineId: routine.id, routineRevision: routine.revision, occurrenceId: occurrence.id },
+      provenance: { description: 'Verified internal Routine occurrence' },
+    })
+    if (this.sourceAlreadyStored(db, sourceEvent)) {
+      throw new StorageError('corrupt', 'Routine wake source exists without its occurrence')
+    }
+    this.persist(db, before, result, 'wake', at, { sourceEvent }, recordEncoder())
+    return { status: 'queued', taskId: task.id, taskVersion: result.state.task.version, sourceEventId: sourceEvent.id }
   }
 
   private decodeWork(row: Record<string, unknown>): WorkState {

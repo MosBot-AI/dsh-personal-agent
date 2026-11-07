@@ -40,6 +40,69 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('records one native timed reminder and one independently keyed manual reminder without a model', async () => {
+    const host = await openWebHost(probe, { configOnly: true, patch: [
+      '- id: schedule',
+      '  inject: [dshpaScheduleResolverReady]',
+      '- id: dshpa',
+      '  config:',
+      '    inbox:',
+      "      storageDirectory: !!js dshHomePath('routine-inbox')",
+      "      workRoot: !!js dshHomePath('routine-work')",
+      '      routines: true',
+      '      sourceAccounts:',
+      '        - sourceInstanceId: pa008-fixture-connector',
+      '          accountId: pa008-fixture-account',
+      '          verifiedAt: "2026-11-07T08:00:00.000Z"',
+      '        - sourceInstanceId: dshpa-internal-routine',
+      '          accountId: fixture-forged-routine',
+      '          verifiedAt: "2026-11-07T08:00:00.000Z"',
+    ] })
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const response = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(response.status === 200 && response.result?.ok, host.diagnostics())
+      return response.result.value
+    }
+    async function snapshot() {
+      const response = await inbox({ type: 'snapshot' })
+      assert.ok(response.ok && response.kind === 'snapshot' && response.snapshot.schedules, JSON.stringify(response))
+      return { schedules: response.snapshot.schedules, sessions: response.snapshot.sessions, usage: response.snapshot.usage }
+    }
+    const intendedAt = new Date(Date.now() + 3_500).toISOString()
+    updated(await inbox({ type: 'save_routine', commandId: 'pa018-save-reminder', draft: {
+      title: 'Review the native wake', timing: { kind: 'at', at: intendedAt }, misfire: 'skip',
+      target: { kind: 'reminder', text: 'Read this in the local inbox.' },
+    } }))
+    const draft = (await snapshot()).schedules.routines[0]
+    assert.ok(draft)
+    expect(draft.state).toBe('draft')
+    expect(draft.nextAt).toBeUndefined()
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'arm_routine', commandId: 'pa018-forged-arm', routineId: draft.id,
+      expectedRevision: draft.revision })).toMatchObject({ status: 401 })
+    updated(await inbox({ type: 'arm_routine', commandId: 'pa018-arm-reminder', routineId: draft.id, expectedRevision: draft.revision }))
+    const armed = (await snapshot()).schedules.routines[0]
+    assert.ok(armed && armed.state === 'armed')
+    expect(armed.nextAt).toBe(intendedAt)
+    const manual = { type: 'run_routine_now', commandId: 'pa018-run-manually', routineId: armed.id, expectedRevision: armed.revision } as const
+    updated(await inbox(manual))
+    updated(await inbox(manual))
+    expect((await snapshot()).schedules.reminders).toHaveLength(1)
+
+    let current = await snapshot()
+    const deadline = performance.now() + 7_000
+    while (current.schedules.reminders.length < 2 && performance.now() < deadline) {
+      await delay(40)
+      current = await snapshot()
+    }
+    expect(current.schedules.reminders, host.diagnostics()).toHaveLength(2)
+    expect(new Set(current.schedules.reminders.map(item => item.id)).size).toBe(2)
+    expect(current.schedules.reminders).toContainEqual(expect.objectContaining({ intendedAt, text: 'Read this in the local inbox.' }))
+    expect(current.schedules.routines[0]).toMatchObject({ state: 'ended', last: { status: 'reminded' } })
+    expect(current.sessions.some(session => session.id.startsWith('dshpa-routine-sink-'))).toBe(false)
+    expect(current.usage).toMatchObject({ calls: 0, workerSlots: { active: 0 }, attention: { unsolicited: 0 } })
+  }, 25_000)
+
   it('serves the browser factory and keeps authenticated chat, task controls, approval and artifact review connected', async () => {
     const host = await openWebHost(probe)
     const cookie = await host.exchange()

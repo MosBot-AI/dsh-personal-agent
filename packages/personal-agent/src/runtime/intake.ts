@@ -4,6 +4,7 @@ import {
   generationSchema, nonEmptyTextSchema, projectIdSchema, sourceEventIdSchema, sourceEventSchema,
   taskIdSchema, utcInstantSchema, versionSchema, type SourceEvent, type UtcInstant,
 } from '../domain/model.js'
+import { ROUTINE_SOURCE } from '../domain/routines.js'
 import type { IdentityBoundary } from '../policy/identity.js'
 import type { RoutingAuthority } from './subscriptions.js'
 
@@ -40,7 +41,7 @@ function digest(value: unknown): string {
 /** Only a source token issued to an independently authenticated adapter can admit an external event. */
 export function authenticateEvent(identity: IdentityBoundary, token: unknown, input: unknown, at: UtcInstant) {
   const source = identity.resolveSource(token)
-  if (!source) return { ok: false, code: 'permission_denied' } as const
+  if (!source || source.sourceInstanceId === ROUTINE_SOURCE) return { ok: false, code: 'permission_denied' } as const
   const decoded = adapterEventSchema.safeParse(input)
   if (!decoded.success) return { ok: false, code: 'invalid_input' } as const
   const {

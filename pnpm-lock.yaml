@@ -66,6 +66,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: 0.2.2-rc.1
         version: 0.2.2-rc.1(71e9b8099add9aaf7bb42662f07c41a3)
+      '@deepseek-ai/dsh-util-time':
+        specifier: 0.2.2-rc.1
+        version: 0.2.2-rc.1(@deepseek-ai/cordis@4.1.0)
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -88,6 +91,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-workspace':
         specifier: 0.2.2-rc.1
         version: 0.2.2-rc.1(@deepseek-ai/cordis@4.1.0)
+      '@deepseek-ai/dsh-schedule':
+        specifier: 0.2.2-rc.1
+        version: 0.2.2-rc.1(085cedcaaf30a1ca370a8fe8930e2ac1)
 
 packages:
 
