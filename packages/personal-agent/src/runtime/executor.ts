@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import {
-  artifactIdSchema, generationSchema, nonEmptyTextSchema, sessionIdSchema, taskIdSchema, utcInstantSchema,
-  versionSchema, WORKER_INPUT_LIMIT, type UtcInstant,
+  artifactIdSchema, computeWaitPrefix, generationSchema, indefiniteWait, nonEmptyTextSchema, sessionIdSchema, taskIdSchema,
+  utcInstantSchema, versionSchema, waitAllowsWake, WORKER_INPUT_LIMIT, type UtcInstant,
 } from '../domain/model.js'
 import type { WorkEvent, WorkState } from '../domain/transitions.js'
 import type { StoredCommandContext, StoredWorkResult, WorkRef, WorkStore } from '../storage/store.js'
 import { confirmOwnedCancellation } from './cancel.js'
+import { computeLimitsSchema, type ComputeIssue, type ComputeLimits, type WorkerComputeOptions } from './compute.js'
 import { makeWorkerInput, type WorkerInputIntent } from './input-journal.js'
 import type { NativeWorker, NativeWorkerInput, NativeWorkerRuntime } from './native-worker.js'
 import { allowsWorkerData, resolveWorkerDirectory, workerPresetSchema, type WorkerPreset } from './presets.js'
@@ -37,6 +38,7 @@ const concurrencySchema = z.int().min(1).max(32)
 const MAX_DEPENDENCY_CHAIN = 64
 const OPEN_DRAIN_TIMEOUT_MS = 10_000
 const openingPending = Symbol('opening_pending')
+export { computeWaitPrefix }
 
 type WorkerInput = z.infer<typeof workerInputSchema>
 type SubscribedInput = z.infer<typeof subscribedInputSchema>
@@ -61,6 +63,8 @@ export interface WorkerExecutorOptions {
   readonly concurrency?: number
   readonly captureResultSummary?: boolean
   readonly onHandback?: (ref: WorkRef, eventId: WorkerRouteIntent['eventId']) => void
+  readonly onProgress?: (ref: WorkRef, state: WorkState, report: Extract<WorkerReport, { kind: 'progress' }>) => void
+  readonly compute?: WorkerComputeOptions
   readonly now?: () => UtcInstant
 }
 
@@ -167,11 +171,13 @@ class WorkerExecutor {
   private readonly presets = new Map<string, WorkerPreset>()
   private readonly limit: number
   private readonly now: () => UtcInstant
+  private readonly computeLimits?: ComputeLimits
   private closed = false
 
   constructor(private readonly options: WorkerExecutorOptions) {
     this.limit = concurrencySchema.parse(options.concurrency ?? 2)
     this.now = options.now ?? (() => utcInstantSchema.parse(new Date().toISOString()))
+    if (options.compute) this.computeLimits = computeLimitsSchema.parse(options.compute.limits ?? {})
     for (const raw of options.presets) {
       const preset = workerPresetSchema.parse(raw)
       if (this.presets.has(preset.id)) throw new Error('Duplicate worker preset')
@@ -182,7 +188,38 @@ class WorkerExecutor {
   query(ref: WorkRef) {
     const state = this.options.store.getWork(ref)
     const entry = this.entryFor(ref)
-    return { state, active: entry !== undefined, report: entry?.report, issue: entry?.issue }
+    const wait = state?.task.wait
+    const computeIssue = wait?.reason === 'resource' && wait.referenceId.startsWith(computeWaitPrefix)
+      ? wait.referenceId.slice(computeWaitPrefix.length) : undefined
+    let liveIssue: string | undefined
+    try { liveIssue = entry?.native?.readComputeIssue?.()?.code } catch { /* Query remains available. */ }
+    return { state, active: entry !== undefined, report: entry?.report, issue: entry?.issue ?? liveIssue ?? computeIssue }
+  }
+
+  snapshot() {
+    return { active: this.entries.size, limit: this.limit }
+  }
+
+  /** Advisory only. No slot or durable monetary reservation is consumed. */
+  canStart(ref: WorkRef, presetId: string, unattended = false): boolean {
+    if (this.closed) return false
+    const { compute, store } = this.options
+    const preset = this.presets.get(presetId)
+    const state = store.getWork(ref)
+    if (!preset || !state) return false
+    if (!compute || !this.computeLimits) return true
+    try {
+      return compute.budget.canBegin({
+        ownerId: ref.ownerId, profileId: ref.profileId, provider: preset.provider, model: preset.model,
+        unattended, upperInputTokens: 1, upperOutputTokens: this.computeLimits.maxOutputTokens,
+        task: {
+          taskId: ref.taskId, attemptId: state.attempt.id, generation: state.attempt.generation,
+          expectedVersion: state.task.version,
+        },
+      })
+    } catch {
+      return false
+    }
   }
 
   async launch(ref: WorkRef, input: unknown): Promise<ExecutorResult> {
@@ -236,7 +273,9 @@ class WorkerExecutor {
     if (state.task.status !== 'waiting_event' || state.task.wait?.reason !== 'event') {
       return { ok: false, code: 'invalid_transition' }
     }
-    if (state.task.wait.referenceId !== requested.referenceId) return { ok: false, code: 'condition_unmet' }
+    if (state.task.wait.referenceId !== requested.referenceId || !waitAllowsWake(state.task.wait, this.now())) {
+      return { ok: false, code: 'condition_unmet' }
+    }
     if (this.entries.has(ref.taskId)) return { ok: false, code: 'already_active' }
     if (this.entries.size >= this.limit) return { ok: false, code: 'capacity' }
     const { worker: saved, sessionId, scope } = state.attempt
@@ -306,12 +345,28 @@ class WorkerExecutor {
       return started
     }
     entry.version = started.state.task.version
+    const { compute } = this.options
+    const limits = this.computeLimits
     entry.opening = Promise.resolve().then(() => {
       if (entry.routed && !authorized(entry.routed.authorize)) throw new Error('Subscribed wake authority changed')
       return runtime.open({
         sessionId, cwd, provider: preset.provider, model: preset.model,
         resume: saved !== undefined, signal: entry.abort.signal,
         isCurrent: () => this.current(entry) !== undefined && (!entry.routed || authorized(entry.routed.authorize)),
+        ...(compute && limits ? { compute: {
+          budget: compute.budget, limits, initiallyUnattended: wake !== undefined,
+          scope: (unattended: boolean) => {
+            const current = this.current(entry)
+            if (!current) return undefined
+            return {
+              ownerId: entry.ref.ownerId, profileId: entry.ref.profileId, unattended,
+              task: {
+                taskId: entry.ref.taskId, attemptId: entry.attemptId, generation: entry.generation,
+                expectedVersion: current.task.version,
+              },
+            }
+          },
+        } } : {}),
       })
     })
     try {
@@ -470,6 +525,7 @@ class WorkerExecutor {
     return {
       cursor: input.cursor, text: input.content, messageId: input.messageId, digest: input.digest,
       authorize: routed?.authorize,
+      unattended: routed !== undefined,
       acknowledge: () => (!routed || authorized(routed.authorize))
         && this.options.store.acknowledgeWorkerInput(ref, input, this.now()),
     }
@@ -491,14 +547,31 @@ class WorkerExecutor {
         void this.retire(entry)
         return
       }
+      const computeIssue = worker.readComputeIssue?.()
+      if (computeIssue) {
+        this.waitForCompute(entry, state, computeIssue)
+        return
+      }
       const text = worker.readReport()
       const report = text === undefined ? undefined : decodeWorkerReport(text)
       if (!report || report.cursor !== input.cursor) {
         entry.issue = 'report_unavailable'
         return
       }
+      if ((report.kind === 'waiting' || report.kind === 'blocked') && report.wait.referenceId.startsWith(computeWaitPrefix)) {
+        entry.issue = 'report_unavailable'
+        return
+      }
       if (report.kind === 'progress') {
         entry.report = report
+        try {
+          const notified = this.options.onProgress?.(entry.ref, state, report)
+          void Promise.resolve(notified).catch(() => {
+            if (entry.cursor === input.cursor) entry.issue = 'attention_unavailable'
+          })
+        } catch {
+          entry.issue = 'attention_unavailable'
+        }
         return
       }
       if (report.kind === 'handback') {
@@ -563,6 +636,28 @@ class WorkerExecutor {
     } catch {
       if (!entry.retiring && entry.cursor === input.cursor) entry.issue = 'host_unavailable'
     }
+  }
+
+  private waitForCompute(entry: Entry, state: WorkState, issue: ComputeIssue): void {
+    entry.issue = issue.code
+    const base = fence(state, this.now())
+    const now = Date.parse(base.at)
+    const notBefore = issue.code === 'turn_limit' ? indefiniteWait : issue.retryAfterMs === undefined ? undefined
+      : issue.retryAfterMs >= Date.parse(indefiniteWait) - now ? indefiniteWait
+        : utcInstantSchema.parse(new Date(now + issue.retryAfterMs).toISOString())
+    const resumeCondition = issue.code === 'turn_limit' ? 'The Worker reached the turn limit for this attempt.'
+      : notBefore === indefiniteWait ? 'The provider cooldown exceeds the supported wake horizon.'
+        : notBefore === undefined ? 'Wait for authorized compute capacity.'
+          : `Recheck authorized compute capacity after ${notBefore}.`
+    const result = this.options.store.applyEvent(entry.ref, {
+      type: 'wait', ...base,
+      wait: {
+        reason: 'resource', referenceId: `${computeWaitPrefix}${issue.code}`,
+        ...(notBefore === undefined ? {} : { notBefore }),
+        resumeCondition,
+      },
+    })
+    if (result.ok) void this.retire(entry)
   }
 
   private dependencyChain(ref: WorkRef, predecessor: string): WorkRef['taskId'][] | undefined {

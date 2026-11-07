@@ -101,6 +101,32 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('shows metered, uncertain, and unpriced usage separately alongside routine progress', async () => {
+    const work = task('progress', { progress: { summary: 'Latest scoped update.', at: verifiedAt } })
+    const { node } = await mount(async () => ({ ok: true, kind: 'snapshot', snapshot: snapshot({
+      tasks: [work], usage: {
+        day: '2026-11-07', currencies: [{ currency: 'USD', spentMicros: 50_000, reservedMicros: 100_000,
+          uncertainMicros: 200_000, olderHeldMicros: 25_000, dailyLimitMicros: 1_000_000, overflow: false }],
+        calls: 7, unknownCalls: 2, uncertainCalls: 1, routing: 'pricing_unavailable',
+        tokens: { input: 70, output: 20, cacheRead: 40, cacheWrite: 6 },
+        workerSlots: { active: 4, limit: 4 }, gpu: { active: 1, queued: 2, limit: 1 },
+        attention: { mode: 'observe', version: 1, day: '2026-11-07', timeZone: 'Asia/Shanghai', unsolicited: 0, limit: 3,
+          suppressed: 8, recent: [{ id: 'one', reason: 'quiet_hours', at: verifiedAt }] },
+      },
+    }) }))
+    const usage = node.querySelector('.dshpa-usage')
+    expect(usage?.querySelector('summary')?.textContent).toBe('Compute and attention usage')
+    const fields = Object.fromEntries([...usage!.querySelectorAll('dt')].map(label =>
+      [label.textContent, label.nextElementSibling?.textContent]))
+    expect(fields).toMatchObject({ 'Calls with unknown price': '2', 'Calls awaiting reconciliation': '1',
+      'Worker slots': '4 / 4', 'Heavy GPU jobs queued': '2', 'Cache read tokens': '40', 'Proactive mode': 'Observe',
+      'Background assessment': 'Pricing required' })
+    expect(fields['Uncertain ceiling']).toMatch(/USD\s+0\.20/u)
+    expect(usage?.textContent).toContain('quiet_hours')
+    await click(taskButton(node, work.outcome))
+    expect(node.querySelector('[aria-label="Latest progress"]')?.textContent).toContain('Latest scoped update.')
+  })
+
   it('presents exact approvals and blocking questions before results and other work', async () => {
     const waiting = task('question', {
       status: 'waiting_input',

@@ -6,8 +6,10 @@ import {
   artifactIdSchema,
   attemptIdSchema,
   commandIdSchema,
+  computeWaitPrefix,
   conversationIdSchema,
   conversationSchema,
+  indefiniteWait,
   mandateRefSchema,
   nonEmptyTextSchema,
   projectIdSchema,
@@ -20,6 +22,7 @@ import {
   taskIdSchema,
   utcInstantSchema,
   versionSchema,
+  waitAllowsWake,
   workerCursorSchema,
   type SessionId,
   type TaskId,
@@ -32,7 +35,7 @@ import { workerInputSchema } from '../runtime/reports.js'
 import type { EventRouter } from '../runtime/router.js'
 import { StorageError } from '../storage/schema.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
-import type { InboxResponse, InboxSession, InboxTask } from './protocol.js'
+import type { InboxResponse, InboxSession, InboxTask, InboxUsage } from './protocol.js'
 
 const LOCAL_SOURCE = sourceInstanceIdSchema.parse('dshpa-local-inbox')
 const MAX_SESSIONS = 64
@@ -63,6 +66,7 @@ const requestSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({ type: z.literal('artifact'), taskId: taskIdSchema, artifactId: artifactIdSchema }),
   z.strictObject({ type: z.literal('set_subscription'), subscription: z.unknown() }),
+  z.strictObject({ type: z.literal('set_attention_policy'), expectedVersion: versionSchema, policy: z.unknown() }),
 ])
 
 const nativeSessionSchema = z.strictObject({ id: sessionIdSchema, label: nonEmptyTextSchema.max(1_024) })
@@ -76,6 +80,13 @@ export interface InboxServiceOptions {
   readonly worker?: { readonly presetId: string; readonly cwd: string; readonly dataScope: readonly string[] }
   readonly actionGate?: ReturnType<WorkStore['createActionGate']>
   readonly router?: EventRouter
+  readonly inspectUsage?: (owner: OwnerIdentity) => {
+    readonly usage: InboxUsage
+    readonly progress: readonly { taskId: string; attemptId: string; generation: number; summary: string; at: string }[]
+  }
+  readonly configureAttention?: (owner: OwnerIdentity, policy: unknown, expectedVersion: number) =>
+    { ok: true; policy: { version: number } } | { ok: false; code: string }
+  readonly invalidateResources?: (ref: WorkRef) => void
   readonly now?: () => UtcInstant
 }
 
@@ -101,6 +112,13 @@ function nativeReleased(state: WorkState): boolean {
   return state.attempt.startedAt === undefined || state.attempt.worker?.releasedAt !== undefined
 }
 
+function computeWait(state: WorkState) {
+  const { task } = state
+  return (task.status === 'waiting_resource' || task.status === 'paused')
+    && task.wait?.reason === 'resource' && task.wait.referenceId.startsWith(computeWaitPrefix)
+    ? task.wait : undefined
+}
+
 function terminal(state: WorkState): boolean {
   return state.task.status === 'completed' || state.task.status === 'cancelled' || state.task.status === 'failed'
 }
@@ -118,8 +136,9 @@ export function createInboxService(options: InboxServiceOptions) {
       && !store.hasUnsettledEffects(ref, state.attempt.id)
   }
 
-  function projectTask(owner: OwnerIdentity, state: WorkState): InboxTask {
+  function projectTask(owner: OwnerIdentity, state: WorkState, progress?: InboxTask['progress']): InboxTask {
     const { task } = state
+    const wait = computeWait(state)
     const ref = refFor(owner, task.id)
     const conversation = task.conversationId === undefined ? undefined : store.getConversation(owner, task.conversationId)
     const verification = task.status === 'completed' ? store.getVerification(ref, task.version) : undefined
@@ -139,10 +158,14 @@ export function createInboxService(options: InboxServiceOptions) {
       status: task.status,
       version: task.version,
       runtime: executor?.query(ref).active ? 'active' : nativeReleased(state) || terminal(state) ? 'inactive' : 'unknown',
-      ...(task.wait === undefined ? {} : { wait: { reason: task.wait.reason, referenceId: task.wait.referenceId, prompt: task.wait.resumeCondition } }),
+      ...(task.wait === undefined ? {} : { wait: { reason: task.wait.reason, referenceId: task.wait.referenceId,
+        prompt: task.wait.resumeCondition, ...(task.wait.notBefore === undefined || task.wait.notBefore === indefiniteWait
+          ? {} : { notBefore: task.wait.notBefore }) } }),
       artifacts,
       canAccept: artifacts.length === candidates.length && ownerCanAccept(ref, state, owner),
+      ...(wait ? { canResumeCompute: nativeReleased(state) && wait.notBefore !== indefiniteWait } : {}),
       deliveries: store.listInboxDeliveries(ref).map(delivery => ({ id: delivery.id, status: delivery.status })),
+      ...(progress === undefined ? {} : { progress }),
       ...(verification === undefined ? {} : { verifiedAt: verification.verifiedAt }),
     }
   }
@@ -164,13 +187,20 @@ export function createInboxService(options: InboxServiceOptions) {
       preview: JSON.stringify(action.payload, null, 2),
     })) ?? []
     const recoveryMode = store.recoveryMode()
+    const usage = options.inspectUsage?.(owner)
+    const progress = new Map(usage?.progress.map(item => [item.taskId, item]))
     return { ok: true, kind: 'snapshot', snapshot: {
       workerConfigured: executor !== undefined && worker !== undefined,
       ...(recoveryMode === 'normal' ? {} : { recoveryMode }),
       sessions,
       projects: store.listInboxProjects(owner).map(({ id, title, purpose }) => ({ id, title, purpose })),
-      tasks: work.map(state => projectTask(owner, state)),
+      tasks: work.map(state => {
+        const latest = progress.get(state.task.id)
+        return projectTask(owner, state, latest?.attemptId === state.attempt.id && latest.generation === state.task.generation
+          ? { summary: latest.summary, at: latest.at } : undefined)
+      }),
       approvals,
+      ...(usage === undefined ? {} : { usage: usage.usage }),
     } }
   }
 
@@ -233,6 +263,11 @@ export function createInboxService(options: InboxServiceOptions) {
           if (!result) return failure('resource_unavailable')
           return result.ok ? { ok: true, kind: 'subscription', version: result.subscription.version } : failure(result.code)
         }
+        case 'set_attention_policy': {
+          const result = options.configureAttention?.(owner, request.policy, request.expectedVersion)
+          if (!result) return failure('resource_unavailable')
+          return result.ok ? { ok: true, kind: 'attention_policy', version: result.policy.version } : failure(result.code)
+        }
         case 'create_project': {
           const projectId = projectIdSchema.parse(`inbox-${stableId('project', owner.ownerId, owner.profileId, owner.clientId, request.commandId)}`)
           const existing = store.getProject(owner, projectId)
@@ -278,10 +313,11 @@ export function createInboxService(options: InboxServiceOptions) {
       if (request.type === 'pause' || request.type === 'cancel') {
         const command = { type: `work.${request.type}`, taskId: ref.taskId, commandId: request.commandId,
           expectedVersion: request.expectedVersion, conversationId: conversation.id, payload: {} }
-        if (request.type === 'cancel') return updated(executor?.cancel(command, context) ?? store.applyCommand(command, context))
-        if (executor) return updated(executor.pause(command, context))
-        return state.task.status === 'queued'
-          ? updated(store.applyCommand(command, context)) : failure('runtime_not_quiescent')
+        const result = request.type === 'cancel' ? executor?.cancel(command, context) ?? store.applyCommand(command, context)
+          : executor ? executor.pause(command, context)
+            : state.task.status === 'queued' ? store.applyCommand(command, context) : undefined
+        if (result?.ok) options.invalidateResources?.(ref)
+        return result ? updated(result) : failure('runtime_not_quiescent')
       }
 
       if (request.expectedVersion !== state.task.version) return failure('version_conflict')
@@ -306,6 +342,7 @@ export function createInboxService(options: InboxServiceOptions) {
       switch (request.type) {
         case 'start': {
           if (state.task.status !== 'queued') return failure('invalid_transition')
+          if (!executor.canStart(ref, worker.presetId)) return failure('budget_exceeded')
           const source = store.getWakeSource(ref, state.task.version)
           const answer = source?.sourceInstanceId === LOCAL_SOURCE ? answerBodySchema.safeParse(source.body) : undefined
           const outcome = state.task.requestedOutcome
@@ -318,14 +355,23 @@ export function createInboxService(options: InboxServiceOptions) {
           return result.ok ? { ok: true, kind: 'updated', taskId: ref.taskId } : failure(result.code)
         }
         case 'resume': {
-          if (state.task.status !== 'paused' || state.task.wait) return failure('invalid_transition')
+          const wait = computeWait(state)
+          if (wait && !waitAllowsWake(wait, at)) return failure('condition_unmet')
+          if (wait && state.task.status === 'waiting_resource') return updated(store.applyEvent(ref, {
+            type: 'wake', at, expectedVersion: request.expectedVersion, attemptId: state.attempt.id,
+            generation: state.attempt.generation, reason: 'resource', referenceId: wait.referenceId,
+            policyVersion: owner.policyVersion, grantsCurrent: true, budgetAvailable: executor.canStart(ref, worker.presetId),
+            conditionSatisfied: true, runtimeQuiescent: true,
+          }))
+          if (state.task.status !== 'paused' || (state.task.wait && !wait)) return failure('invalid_transition')
           return updated(store.applyCommand({
             type: 'work.resume', taskId: ref.taskId, commandId: request.commandId, expectedVersion: request.expectedVersion,
             conversationId: conversation.id, payload: {},
           }, { ...context, resume: {
             taskId: ref.taskId, attemptId: state.attempt.id, generation: state.attempt.generation,
             expectedVersion: request.expectedVersion, policyVersion: owner.policyVersion,
-            grantsCurrent: true, budgetAvailable: true, conditionSatisfied: true, runtimeQuiescent: true,
+            grantsCurrent: true, budgetAvailable: executor.canStart(ref, worker.presetId),
+            conditionSatisfied: true, runtimeQuiescent: true,
           } }))
         }
         case 'answer': {
@@ -338,7 +384,7 @@ export function createInboxService(options: InboxServiceOptions) {
           return updated(store.applyEvent(ref, {
             type: 'wake', at, expectedVersion: request.expectedVersion, attemptId: state.attempt.id,
             generation: state.attempt.generation, reason: 'input', referenceId: request.referenceId,
-            policyVersion: owner.policyVersion, grantsCurrent: true, budgetAvailable: true,
+            policyVersion: owner.policyVersion, grantsCurrent: true, budgetAvailable: executor.canStart(ref, worker.presetId),
             conditionSatisfied: true, runtimeQuiescent: true,
           }, { sourceEvent: sourceEventSchema.parse({
             id: `inbox-${eventKey}`, ownerId: owner.ownerId, profileId: owner.profileId, sourceInstanceId: LOCAL_SOURCE,

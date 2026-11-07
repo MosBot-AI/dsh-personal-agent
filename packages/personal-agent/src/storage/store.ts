@@ -43,6 +43,8 @@ import {
   verificationRecordSchema, type VerificationCommit, type VerificationOptions,
 } from '../domain/verification.js'
 import { createActionGate, type ActionGateOptions } from '../policy/dispatch.js'
+import { createAttention, type AttentionOptions } from '../runtime/attention.js'
+import { createBudget, markColdBudgetReservations, type BudgetOptions, type BudgetService } from '../runtime/budget.js'
 import { consumeWorkerReleaseProof } from '../runtime/executor.js'
 import {
   acknowledgeWorkerInput, insertWorkerInput, readWorkerInputs, recordInputObservation,
@@ -180,6 +182,7 @@ function commandFingerprint(
 /** The store holds the profile writer lock until close. All commit inputs are data. */
 class WorkStore {
   private closed = false
+  private budget?: BudgetService
   private outbox?: ReturnType<typeof createOutbox>
   private effectRecovery?: ReturnType<typeof createEffectRecovery>
   readonly artifacts = createArtifactStore(operation => this.access(operation))
@@ -199,6 +202,16 @@ class WorkStore {
 
   createActionGate(options: ActionGateOptions) {
     return createActionGate(operation => this.access(operation), options, dispatchPermitted)
+  }
+
+  createBudget(options: BudgetOptions): BudgetService {
+    if (this.budget) throw new Error('A budget is already open for this store')
+    this.budget = createBudget(operation => this.access(operation), options, dispatchPermitted)
+    return this.budget
+  }
+
+  createAttention(options: AttentionOptions = {}) {
+    return createAttention(operation => this.access(operation), options, () => this.outbox?.deliver)
   }
 
   createOutbox(options: OutboxOptions) {
@@ -813,7 +826,10 @@ class WorkStore {
 export function openWorkStore(directory: string): WorkStore {
   const storage = openStorageDatabase(directory)
   try {
-    markStartupRecovery(storage.db)
+    transaction(storage.db, () => {
+      markColdBudgetReservations(storage.db)
+      markStartupRecovery(storage.db)
+    })
     return new WorkStore(storage)
   } catch (error) {
     if (error instanceof StorageError && error.code === 'corrupt') return storage.quarantine(error)

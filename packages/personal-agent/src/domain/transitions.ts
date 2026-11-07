@@ -12,6 +12,7 @@ import {
   taskSchema,
   utcInstantSchema,
   versionSchema,
+  waitAllowsWake,
   waitReasonSchema,
   workerCursorSchema,
   workerExecutionSchema,
@@ -372,6 +373,7 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
           return reject('condition_unmet')
         }
       }
+      if (!waitAllowsWake(task.wait, event.at)) return reject('condition_unmet')
       const error = admissionError(attempt, event)
       if (error !== undefined) return reject(error)
       return advance(state, 'queued', { ...attempt, status: 'queued' }, event.at)
@@ -386,7 +388,8 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
       return task.status === 'queued' ? startWork(state, event) : reject('invalid_transition')
     case 'wake_worker': {
       if (task.status !== 'waiting_event' || task.wait?.reason !== 'event') return reject('invalid_transition')
-      if (task.wait.referenceId !== event.referenceId || (task.wait.deadline !== undefined && event.at >= task.wait.deadline)) {
+      if (task.wait.referenceId !== event.referenceId || (task.wait.deadline !== undefined && event.at >= task.wait.deadline)
+        || !waitAllowsWake(task.wait, event.at)) {
         return reject('condition_unmet')
       }
       if (attempt.worker?.releasedAt === undefined) return reject('runtime_not_quiescent')

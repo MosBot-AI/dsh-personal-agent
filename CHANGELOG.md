@@ -18,6 +18,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Add a local DSH Web inbox for project work, Worker controls, exact approval, and reviewable results alongside native conversations.
 - Journal native inputs and recover exact claims after restart, with generation-fenced cancellation and reconciliation-only backup restore.
 - Route authenticated source events through versioned subscriptions and a bounded assessment queue while keeping owner controls responsive.
+- Reserve and reconcile model costs before dispatch, enforce compute limits and a separate heavy GPU queue, and expose scoped usage and attention decisions in the local inbox.
 - Map 43 implementation tasks into GitHub Project and English Issues with native dependencies, reporting protocol, live readiness and acceptance-gated Actions reconciliation.
 
 - Specify configurable model routing with difficulty-based model/effort selection, quota-aware fallbacks, an optional LiteLLM adapter and implementation/evaluation tasks.

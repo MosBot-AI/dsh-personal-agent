@@ -34,7 +34,7 @@ function runPhases(...phases: string[]) {
 }
 
 describe('bounded native DSH workers', () => {
-  it('keeps Inbox control responsive with four held Workers and a pending assessment', () => {
+  it('keeps Inbox control responsive with four metered Workers and a pending assessment', () => {
     runPhases('controls')
   }, nativeProfileTimeoutMs + 1_000)
 

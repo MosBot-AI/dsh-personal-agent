@@ -25,6 +25,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function isCount(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function isUsage(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.day !== 'string' || !Array.isArray(value.currencies)
+    || !isRecord(value.workerSlots) || !isRecord(value.gpu) || !isRecord(value.tokens)) return false
+  const { workerSlots, gpu, attention, tokens } = value
+  return [value.calls, value.unknownCalls, value.uncertainCalls, workerSlots.active, workerSlots.limit, gpu.active, gpu.limit, gpu.queued,
+    tokens.input, tokens.output, tokens.cacheRead, tokens.cacheWrite].every(isCount)
+    && typeof value.routing === 'string' && ['off', 'configured', 'pricing_unavailable', 'provider_unavailable'].includes(value.routing)
+    && value.currencies.every(row => isRecord(row) && typeof row.currency === 'string' && /^[A-Z]{3}$/u.test(row.currency)
+      && [row.spentMicros, row.reservedMicros, row.uncertainMicros, row.olderHeldMicros].every(isCount)
+      && (row.dailyLimitMicros === undefined || isCount(row.dailyLimitMicros)) && typeof row.overflow === 'boolean')
+    && (attention === undefined || (isRecord(attention) && ['off', 'observe', 'prepare', 'act'].includes(String(attention.mode))
+      && typeof attention.day === 'string' && typeof attention.timeZone === 'string'
+      && [attention.version, attention.unsolicited, attention.limit, attention.suppressed].every(isCount)
+      && Array.isArray(attention.recent) && attention.recent.every(row => isRecord(row)
+        && typeof row.id === 'string' && typeof row.reason === 'string' && typeof row.at === 'string')))
+}
+
 function isInboxResponse(value: unknown): value is InboxResponse {
   if (!isRecord(value)) return false
   if (value.ok === false) return typeof value.code === 'string'
@@ -33,7 +54,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     return (value.taskId === undefined || typeof value.taskId === 'string')
       && (value.projectId === undefined || typeof value.projectId === 'string')
   }
-  if (value.kind === 'subscription') {
+  if (value.kind === 'subscription' || value.kind === 'attention_policy') {
     return typeof value.version === 'number' && Number.isSafeInteger(value.version) && value.version > 0
   }
   if (value.kind === 'artifact' && isRecord(value.artifact)) {
@@ -44,6 +65,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     const snapshot = value.snapshot
     return typeof snapshot.workerConfigured === 'boolean' && Array.isArray(snapshot.sessions)
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
+      && (snapshot.usage === undefined || isUsage(snapshot.usage))
   }
   return false
 }

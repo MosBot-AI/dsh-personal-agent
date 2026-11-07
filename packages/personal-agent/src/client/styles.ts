@@ -48,7 +48,7 @@ export const inboxStyles = `
 .dshpa-fields dt { color: var(--dshpa-muted); }
 .dshpa-fields dd { margin: 0; }
 .dshpa-fields code { font-size: 11px; overflow-wrap: anywhere; }
-.dshpa-preview > summary, .dshpa-projects > summary { cursor: pointer; color: var(--dshpa-muted); font-size: 12px; }
+.dshpa-preview > summary, .dshpa-projects > summary, .dshpa-usage > summary { cursor: pointer; color: var(--dshpa-muted); font-size: 12px; }
 .dshpa-preview pre { background: var(--dshpa-base); border-radius: 7px; padding: 8px 9px; margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; font-size: 12px; }
 .dshpa-task-list, .dshpa-artifacts, .dshpa-deliveries, .dshpa-projects ul { margin: 0; padding: 0; list-style: none; }
 .dshpa-task-list { display: grid; gap: 6px; }

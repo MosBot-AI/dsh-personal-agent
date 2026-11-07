@@ -86,7 +86,40 @@ Open or create a native conversation, then select **Today** in the DSH sidebar. 
 
 The local Web host publishes the `dshpaRouting` service for in-process adapters. The owner can declare previously verified accounts in `inbox.sourceAccounts` with `sourceInstanceId`, `accountId` and the UTC `verifiedAt` instant. An adapter authenticates the account independently of message content before binding its source token. It submits the original occurrence time and a stable external event ID and revision. The owner manages versioned `work` or `context` subscriptions through the authenticated inbox `set_subscription` operation. Work delivery uses the exact source, account, thread, project and task. A `routed` receipt includes the current native input journal status. Context subscriptions record the association without feeding or waking a Worker.
 
-Semantic assessment is optional. For a deployment that incurs no model charges, add an `inbox.routing` block with `provider`, `model`, permitted `dataScope` labels and `unmetered: true`. The assessor evaluates bounded batches and returns proposals for owner review. Exact work subscriptions can route without this block when `inbox.worker.unmetered` is `true` or a trusted policy permits the input. An event-triggered Worker wake requires a trusted wake policy for the current grant, budget, and wait condition. Connector enrollment and metered background dispatch are separate implementation tasks.
+Semantic assessment is optional. Add an `inbox.routing` block with `provider`, `model` and permitted `dataScope` labels. The assessor evaluates bounded batches and returns proposals for owner review. Both assessments and subscribed Worker input require known pricing with limits or an explicitly unmetered route. An event-triggered Worker wake also requires a trusted policy for the current grant and wait condition. Provider account enrollment belongs to the connector tasks.
+
+### Set compute and attention limits
+
+In the same `inbox` block, `budget` binds exact provider and model IDs to a pricing version, per-call ceiling, and limits. The following values illustrate the shape. Use the rates for your own deployment. Monetary values are integer millionths of the configured currency.
+
+```yaml
+budget:
+  pricingVersion: owner-quote-1
+  routes:
+    - provider: YOUR_CONFIGURED_PROVIDER
+      model: YOUR_CONFIGURED_MODEL
+      currency: USD
+      pricing:
+        kind: known
+        inputMicrosPerMillion: 1000000
+        outputMicrosPerMillion: 4000000
+        cacheReadMicrosPerMillion: 100000
+        cacheWriteMicrosPerMillion: 1000000
+        ceilingMicros: 200000
+  limits:
+    - currency: USD
+      ownerDayMicros: 1000000
+      taskMicros: 400000
+      maxCallsPerDay: 40
+      maxCallsPerTask: 8
+      maxConcurrent: 2
+```
+
+For a route that incurs no model charges, use `unmetered: true` in its `worker` or `routing` block. Owner-started Workers without pricing are recorded as unknown and use bounded call counts. Budget days use UTC. Uncertain claims remain held across restarts and UTC day boundaries until reconciled. The **Compute and attention usage** panel shows recorded costs at configured rates, outstanding ceilings, unknown calls, token counts, and resource occupancy.
+
+`inbox.computeLimits` sets `maxInputBytes`, `maxOutputTokens`, `maxTurns`, `maxStepsPerTurn` and `maxWallTimeMs`. `inbox.gpu` sets `concurrency`, `maxQueued` and `timeoutMs`. Heavy GPU work uses a separate in-process queue with one slot by default. The installed host's private Workers have no tools, and a provider rate limit releases the Worker after teardown and records when the owner can resume.
+
+Proactive notifications default to `off`. The authenticated inbox `set_attention_policy` operation takes `expectedVersion` and a `policy` with `mode`, `timeZone`, `quietHours` and `urgentRules`. The default quiet interval is 22:00–08:00 UTC. Use an IANA zone for local time. Unsolicited notifications reserve up to three slots per owner and local day across channels. Explicit reminders and required decisions have separate rules. Routine progress stays in the task view. Trusted carriers use `dshpaAttention` to record a candidate and hand off an eligible exact delivery through the existing Outbox.
 
 ## Restore a standalone work backup
 

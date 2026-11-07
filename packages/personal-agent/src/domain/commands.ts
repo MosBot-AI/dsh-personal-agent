@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   attemptIdSchema,
   commandIdSchema,
+  computeWaitPrefix,
   conversationIdSchema,
   generationSchema,
   projectIdSchema,
@@ -246,7 +247,7 @@ const reportFields = {
 
 export const workerReportSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...reportFields, type: z.literal('ready'), artifactIds: artifactIdsSchema }),
-  z.strictObject({ ...reportFields, type: z.literal('wait'), wait: waitReasonSchema }),
+  z.strictObject({ ...reportFields, type: z.literal('wait'), wait: waitReasonSchema.omit({ notBefore: true }) }),
 ])
 
 export interface WorkerReportContext {
@@ -268,7 +269,7 @@ export function handleWorkerReport(input: unknown, context: WorkerReportContext)
     return { ok: false, code: 'permission_denied' }
   }
   // The scheduler verifies the dependency graph before admitting a dependency wait.
-  if (report.type === 'wait' && report.wait.reason === 'dependency') {
+  if (report.type === 'wait' && (report.wait.reason === 'dependency' || report.wait.referenceId.startsWith(computeWaitPrefix))) {
     return { ok: false, code: 'permission_denied' }
   }
   return transitionWork(state, { ...report, at })

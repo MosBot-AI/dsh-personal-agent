@@ -112,6 +112,7 @@ export function TaskDetail(props: TaskDetailProps) {
     {wait && <aside className="dshpa-card dshpa-attention">
       <h3>{asking ? t('detail.pendingInput') : t(`task.status.${task.status}`)}</h3>
       <p>{wait.prompt}</p>
+      {wait.notBefore && <p className="dshpa-muted">{t('detail.retryAfter')} <time dateTime={wait.notBefore}>{formatTime(wait.notBefore, t)}</time></p>}
       {asking && <form className="dshpa-form" onSubmit={answer}>
         <label>{t('form.answer')}
           <textarea required rows={3} maxLength={4000} value={props.answerDraft}
@@ -129,13 +130,19 @@ export function TaskDetail(props: TaskDetailProps) {
         onClick={() => props.submit({ type: 'start', ...control, cursor: requestId() })}>{t('action.start')}</button>}
       {!stopped && task.status !== 'paused' && <button type="button" disabled={disabled}
         onClick={() => props.submit({ type: 'pause', ...control, commandId: requestId() })}>{t('action.pause')}</button>}
-      {task.status === 'paused' && <button type="button" className="dshpa-primary" disabled={disabled || task.runtime !== 'inactive'}
+      {(task.status === 'paused' && task.canResumeCompute !== false || task.canResumeCompute === true) && <button type="button" className="dshpa-primary"
+        disabled={disabled || task.runtime !== 'inactive' || !props.workerConfigured}
         onClick={() => props.submit({ type: 'resume', ...control, commandId: requestId() })}>{t('action.resume')}</button>}
       {!stopped && <button type="button" className="dshpa-danger" disabled={disabled}
         onClick={() => props.submit({ type: 'cancel', ...control, commandId: requestId() })}>{t('action.cancel')}</button>}
     </div>
     {task.status === 'queued' && !props.workerConfigured && <p className="dshpa-muted">{t('detail.noWorker')}</p>}
     {task.status === 'running' && <p className="dshpa-muted">{t('detail.controlNotice')}</p>}
+    {task.progress && <section className="dshpa-card" aria-label={t('detail.progress')}>
+      <h3>{t('detail.progress')}</h3>
+      <p>{task.progress.summary}</p>
+      <time className="dshpa-muted" dateTime={task.progress.at}>{formatTime(task.progress.at, t)}</time>
+    </section>}
     {task.status === 'running' && task.runtime === 'active' && <form className="dshpa-form dshpa-card" onSubmit={redirect}>
       <label>{t('form.redirect')}
         <textarea required rows={3} maxLength={4000} value={props.redirectDraft}

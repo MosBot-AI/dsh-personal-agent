@@ -38,6 +38,7 @@ import { migration001 } from '../../packages/personal-agent/src/storage/migratio
 import { migration002 } from '../../packages/personal-agent/src/storage/migrations/002.js'
 import { migration003 } from '../../packages/personal-agent/src/storage/migrations/003.js'
 import { migration004 } from '../../packages/personal-agent/src/storage/migrations/004.js'
+import { migration005 } from '../../packages/personal-agent/src/storage/migrations/005.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -49,6 +50,7 @@ import {
   V2_BACKUP_SUFFIX,
   V3_BACKUP_SUFFIX,
   V4_BACKUP_SUFFIX,
+  V5_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -496,7 +498,7 @@ describe('SQLite failure recovery', () => {
   })
 })
 
-describe('SQLite v1 to v5 upgrade', () => {
+describe('SQLite v1 to v6 upgrade', () => {
   it('preserves original work and backs up a consistent v1 view including committed WAL rows', () => {
     const v1 = createVersionFixture(1, true)
     try {
@@ -583,7 +585,7 @@ describe('SQLite v1 to v5 upgrade', () => {
   })
 })
 
-describe('SQLite v2 to v5 upgrade', () => {
+describe('SQLite v2 to v6 upgrade', () => {
   it('preserves committed WAL work and authorization claims in an owner-private v2 backup', () => {
     const v2 = createVersionFixture(2, true)
     try {
@@ -652,7 +654,7 @@ describe('SQLite v2 to v5 upgrade', () => {
   })
 })
 
-describe('SQLite v3 to v5 upgrade', () => {
+describe('SQLite v3 to v6 upgrade', () => {
   it('preserves committed WAL verification, artifact bytes and receipt bindings', () => {
     const v3 = createVersionFixture(3, true)
     try {
@@ -712,7 +714,7 @@ describe('SQLite v3 to v5 upgrade', () => {
   })
 })
 
-describe('SQLite v4 to v5 upgrade', () => {
+describe('SQLite v4 to v6 upgrade', () => {
   it('retains legacy source dedupe rows, Worker input journals and the recovery fence in a v4 backup', () => {
     const v4 = createVersionFixture(4, true)
     const recoveryRows = (db: DatabaseSync) => ['source_events', 'worker_inputs', 'runtime_recovery']
@@ -740,6 +742,58 @@ describe('SQLite v4 to v5 upgrade', () => {
       }
     } finally {
       v4.db.close()
+    }
+  })
+})
+
+describe('SQLite v5 to v6 upgrade', () => {
+  it('preserves committed routing and recovery records while initializing budget and attention ledgers', () => {
+    const v5 = createVersionFixture(4, true)
+    const rows = (db: DatabaseSync) => ['source_events', 'routing_receipts', 'worker_inputs', 'runtime_recovery']
+      .map(table => db.prepare(`SELECT * FROM ${table}`).all())
+    try {
+      transaction(v5.db, () => {
+        v5.db.exec(migration005)
+        v5.db.exec('PRAGMA user_version = 5')
+        const source = v5.db.prepare("SELECT record FROM source_events WHERE id = 'source-event-v4'").get()?.record
+        if (typeof source !== 'string') throw new Error('Missing legacy source fixture')
+        const existing = sourceEventSchema.parse(JSON.parse(source))
+        const event = sourceEventSchema.parse({
+          ...existing, actor: { ...existing.actor, accountId: 'fixture-account' }, body: {
+            kind: 'candidate', projectId: 'project-v1', dataScope: ['fixture-public'], text: 'Keep the settled routing event.',
+            policyVersion: 'policy-v1', accountVerifiedAt: existing.occurredAt,
+          },
+        })
+        v5.db.prepare('UPDATE source_events SET record = ? WHERE id = ?').run(JSON.stringify(event), event.id)
+        v5.db.prepare(`
+          INSERT INTO routing_receipts
+            (event_id, owner_id, profile_id, project_id, digest, policy_version, account_verified_at, version, disposition)
+          VALUES (?, ?, ?, 'project-v1', ?, 'policy-v1', ?, 2, ?)
+        `).run(event.id, event.ownerId, event.profileId, 'a'.repeat(64), event.occurredAt,
+          JSON.stringify({ kind: 'assessed', decision: { kind: 'ignore' } }))
+      })
+      const original = rows(v5.db)
+      const storage = openStorageDatabase(v5.directory)
+      try {
+        expect(storage.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+        expect(rows(storage.db)).toEqual(original)
+        expect(storage.db.prepare('SELECT * FROM budget_reservations').all()).toEqual([])
+        expect(storage.db.prepare('SELECT * FROM attention_decisions').all()).toEqual([])
+        expect(storage.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      } finally {
+        storage.close()
+      }
+      const backupPath = v5.path + V5_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(backupPath).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(backupPath, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(5)
+        expect(rows(backup)).toEqual(original)
+      } finally {
+        backup.close()
+      }
+    } finally {
+      v5.db.close()
     }
   })
 })
