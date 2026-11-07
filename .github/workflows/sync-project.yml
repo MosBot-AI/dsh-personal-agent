@@ -1,0 +1,51 @@
+name: Reconcile implementation project
+
+on:
+  issues:
+    types: [opened, edited, reopened, closed, labeled, unlabeled]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dshpa-project-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Only trusted default-branch code runs with the Project credential.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Invalidate acceptance when an Issue is reopened
+        if: github.event_name == 'issues' && github.event.action == 'reopened'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue edit "$ISSUE_NUMBER" --repo "$GH_REPO" --remove-label 'acceptance:verified'
+      - name: Check Project credential availability
+        id: credential
+        env:
+          GH_TOKEN: ${{ secrets.DSHPA_PROJECT_TOKEN }}
+        run: |
+          if [ -n "$GH_TOKEN" ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Project automation is inactive: configure DSHPA_PROJECT_TOKEN.'
+            echo 'Project writes were not performed. Configure DSHPA_PROJECT_TOKEN with repository read and organization Projects write access; the default GITHUB_TOKEN cannot update this Project.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Reconcile dependency readiness and verified completion
+        if: steps.credential.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DSHPA_PROJECT_TOKEN }}
+        run: python3 scripts/project_sync.py --apply

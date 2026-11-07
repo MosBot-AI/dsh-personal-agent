@@ -19,7 +19,9 @@
     "one_active_task_per_agent": true,
     "implementation_commands_exist": false,
     "live_credentials_required_for_live_claims": true,
-    "status_requires_evidence": true
+    "status_requires_evidence": true,
+    "progress_source": "GitHub Project and linked Issues",
+    "status_semantics": "Planning snapshot; never overwrite live Project progress from this file"
   },
   "tasks": [
     {

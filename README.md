@@ -6,6 +6,8 @@ dshpa is a planned personal agent built on DeepSeek Harness. It is designed to r
 
 **Current status: architecture and implementation plan only. The application is not implemented yet.**
 
+[Implementation Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent workflow](docs/11-github-project-workflow.md)
+
 ## Planned capabilities
 
 - Continuous conversation, durable tasks, goals, reminders and correctable memory.

@@ -20,8 +20,9 @@
 | [05 调研与架构判断](05-research-and-product-lessons-zh.md) | 三款产品、专家/设计者分析、Superagent 理念与证据局限 |
 | [09 插件规范](09-plugin-architecture-zh.md) | 用户如何更换媒体/记忆实现，插件如何开发、配置、迁移和回滚 |
 | [10 模型调度与网关](10-model-routing-and-gateway-zh.md) | 难度/effort 自动选择、模型池、额度和兜底配置及实现比较 |
+| [11 Project 执行协议](11-github-project-workflow-zh.md) | GitHub 看板、认领、进度、验收与 Actions 自动化 |
 
-每份文档有对应英文版本。任务定义在 [implementation-tasks.json](implementation-tasks.json)，含依赖、目标文件、源码参考、步骤、测试路径、验收场景和证据路径。任务全部为 `planned`；默认实施目标是 **桌面 alpha（PA-035 及其依赖）**，第一项是 PA-001。
+每份文档有对应英文版本。任务定义在 [implementation-tasks.json](implementation-tasks.json)，含依赖、目标文件、源码参考、步骤、测试路径、验收场景和证据路径。任务状态字段是初始 `planned` 快照，实时进度以 GitHub Project 为准；默认实施目标是 **桌面 alpha（PA-035 及其依赖）**，第一项是 PA-001。
 
 ## 本轮的关键取舍
 

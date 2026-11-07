@@ -4,6 +4,8 @@
 
 The engineering baseline is specific enough to begin implementation. **This delivery is documentation only; future pnpm commands and product paths do not exist until their owning tasks implement them.** The plan checker is currently executable.
 
+Before implementation read the [GitHub Project protocol](11-github-project-workflow.md), use `scripts/project_ready.py` for live candidates, and claim/report in Project/Issues. Execution states below belong to GitHub; manifest status remains a planning snapshot.
+
 ## 1. Handoff prompt
 
 For a future explicit implementation request:

@@ -70,6 +70,15 @@ Preserve proper names, identifiers and necessary verbatim evidence in their orig
 
 Issues should state the problem, scope and verifiable acceptance criteria; bug reports include reproduction and expected/actual behavior. PR descriptions lead with the problem and resulting behavior, then relevant validation, compatibility and linked Issues. Keep titles and descriptions aligned with the final diff. Report only checks actually run and explain skipped checks.
 
+## GitHub Project execution
+
+- Use [dshpa Implementation](https://github.com/orgs/MosBot-AI/projects/3) and its linked Issues as the live progress ledger. Read [the execution protocol](docs/11-github-project-workflow.md) and `docs/github-project.json` before implementation.
+- Use GitHub CLI for Project, Issue, PR and progress operations. Run `python3 scripts/project_ready.py` to find live dependency-ready work; the task manifest owns scope, not live progress.
+- Claim one task before editing: recheck competing claims, self-assign, record the agent/run identity and branch in English, and set In progress. Project fields are not atomic locks; resolve competing claims before proceeding.
+- Report meaningful progress and blockers in the Issue, link real evidence, and keep Project fields current. Use In review for reviewable work; never mark a skipped mandatory live check as complete.
+- Done requires merged implementation, verified applicable acceptance, an Evidence link, `acceptance:verified`, and Issue closure as completed. Recheck downstream readiness. Do not treat not-planned closure as success.
+- Plan validation runs in GitHub Actions. Project reconciliation additionally needs `DSHPA_PROJECT_TOKEN`; never expose tokens in chat, committed files, logs or PR code. Only trusted default-branch code may run with that credential.
+
 ## Completion checks
 
 - Review the affected English/Chinese pairs and their links.

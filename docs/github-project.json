@@ -1,0 +1,510 @@
+{
+  "schema_version": 1,
+  "repository": "MosBot-AI/dsh-personal-agent",
+  "owner": "MosBot-AI",
+  "project": {
+    "id": "PVT_kwDOFIcP2s4Bqkm6",
+    "number": 3,
+    "title": "dshpa Implementation",
+    "url": "https://github.com/orgs/MosBot-AI/projects/3",
+    "public": false
+  },
+  "fields": {
+    "Title": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L30",
+      "name": "Title",
+      "type": "ProjectV2Field"
+    },
+    "Assignees": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L34",
+      "name": "Assignees",
+      "type": "ProjectV2Field"
+    },
+    "Status": {
+      "id": "PVTSSF_lADOFIcP2s4Bqkm6zho7L38",
+      "name": "Status",
+      "options": [
+        {
+          "id": "59b0d01a",
+          "name": "Backlog"
+        },
+        {
+          "id": "e47d8da8",
+          "name": "Ready"
+        },
+        {
+          "id": "b2f51a09",
+          "name": "In progress"
+        },
+        {
+          "id": "4fe366fc",
+          "name": "Blocked"
+        },
+        {
+          "id": "fec48bfb",
+          "name": "In review"
+        },
+        {
+          "id": "16e7abfb",
+          "name": "Done"
+        }
+      ],
+      "type": "ProjectV2SingleSelectField"
+    },
+    "Labels": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4A",
+      "name": "Labels",
+      "type": "ProjectV2Field"
+    },
+    "Linked pull requests": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4E",
+      "name": "Linked pull requests",
+      "type": "ProjectV2Field"
+    },
+    "Milestone": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4I",
+      "name": "Milestone",
+      "type": "ProjectV2Field"
+    },
+    "Repository": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4M",
+      "name": "Repository",
+      "type": "ProjectV2Field"
+    },
+    "Reviewers": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4U",
+      "name": "Reviewers",
+      "type": "ProjectV2Field"
+    },
+    "Parent issue": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4Y",
+      "name": "Parent issue",
+      "type": "ProjectV2Field"
+    },
+    "Sub-issues progress": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4c",
+      "name": "Sub-issues progress",
+      "type": "ProjectV2Field"
+    },
+    "Created": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4g",
+      "name": "Created",
+      "type": "ProjectV2Field"
+    },
+    "Updated": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4k",
+      "name": "Updated",
+      "type": "ProjectV2Field"
+    },
+    "Closed": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L4o",
+      "name": "Closed",
+      "type": "ProjectV2Field"
+    },
+    "Phase": {
+      "id": "PVTSSF_lADOFIcP2s4Bqkm6zho7L84",
+      "name": "Phase",
+      "options": [
+        {
+          "id": "79d967bd",
+          "name": "M0"
+        },
+        {
+          "id": "79dca20d",
+          "name": "M1"
+        },
+        {
+          "id": "3b735671",
+          "name": "M2"
+        },
+        {
+          "id": "b811c670",
+          "name": "M3"
+        },
+        {
+          "id": "c11204ca",
+          "name": "M4"
+        },
+        {
+          "id": "4f6bc08b",
+          "name": "M5"
+        }
+      ],
+      "type": "ProjectV2SingleSelectField"
+    },
+    "Release": {
+      "id": "PVTSSF_lADOFIcP2s4Bqkm6zho7L-E",
+      "name": "Release",
+      "options": [
+        {
+          "id": "62a6fa5b",
+          "name": "alpha"
+        },
+        {
+          "id": "37e4de69",
+          "name": "desktop-alpha"
+        },
+        {
+          "id": "703edd55",
+          "name": "beta"
+        },
+        {
+          "id": "8411a1f6",
+          "name": "v1"
+        }
+      ],
+      "type": "ProjectV2SingleSelectField"
+    },
+    "Priority": {
+      "id": "PVTSSF_lADOFIcP2s4Bqkm6zho7L_k",
+      "name": "Priority",
+      "options": [
+        {
+          "id": "df66de48",
+          "name": "P0"
+        },
+        {
+          "id": "7ead9ea6",
+          "name": "P1"
+        },
+        {
+          "id": "0483e087",
+          "name": "P2"
+        }
+      ],
+      "type": "ProjectV2SingleSelectField"
+    },
+    "Task ID": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7L_8",
+      "name": "Task ID",
+      "type": "ProjectV2Field"
+    },
+    "Execution agent": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7MB8",
+      "name": "Execution agent",
+      "type": "ProjectV2Field"
+    },
+    "Evidence": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7MDY",
+      "name": "Evidence",
+      "type": "ProjectV2Field"
+    },
+    "Last update": {
+      "id": "PVTF_lADOFIcP2s4Bqkm6zho7ME4",
+      "name": "Last update",
+      "type": "ProjectV2Field"
+    }
+  },
+  "views": [
+    {
+      "id": "PVTV_lADOFIcP2s4Bqkm6zgMckwA",
+      "number": 1,
+      "name": "Overview board",
+      "layout": "BOARD_LAYOUT",
+      "filter": null,
+      "groupByFields": {
+        "nodes": []
+      }
+    },
+    {
+      "id": "PVTV_lADOFIcP2s4Bqkm6zgMclCI",
+      "number": 2,
+      "name": "Delivery board",
+      "layout": "BOARD_LAYOUT",
+      "filter": "",
+      "groupByFields": {
+        "nodes": []
+      }
+    },
+    {
+      "id": "PVTV_lADOFIcP2s4Bqkm6zgMclCM",
+      "number": 3,
+      "name": "Ready to start",
+      "layout": "TABLE_LAYOUT",
+      "filter": "status:Ready",
+      "groupByFields": {
+        "nodes": []
+      }
+    },
+    {
+      "id": "PVTV_lADOFIcP2s4Bqkm6zgMclCQ",
+      "number": 4,
+      "name": "Desktop alpha",
+      "layout": "TABLE_LAYOUT",
+      "filter": "Release:alpha,desktop-alpha",
+      "groupByFields": {
+        "nodes": []
+      }
+    },
+    {
+      "id": "PVTV_lADOFIcP2s4Bqkm6zgMclCc",
+      "number": 5,
+      "name": "Needs attention",
+      "layout": "BOARD_LAYOUT",
+      "filter": "status:Blocked,\"In review\"",
+      "groupByFields": {
+        "nodes": []
+      }
+    }
+  ],
+  "tasks": {
+    "PA-001": {
+      "number": 1,
+      "id": "I_kwDOVl1pnM8AAAABdOPRYw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/1",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmg8"
+    },
+    "PA-002": {
+      "number": 2,
+      "id": "I_kwDOVl1pnM8AAAABdOPSZg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/2",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmjA"
+    },
+    "PA-003": {
+      "number": 3,
+      "id": "I_kwDOVl1pnM8AAAABdOPTfQ",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/3",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmlA"
+    },
+    "PA-004": {
+      "number": 4,
+      "id": "I_kwDOVl1pnM8AAAABdOPVAg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/4",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmnM"
+    },
+    "PA-005": {
+      "number": 5,
+      "id": "I_kwDOVl1pnM8AAAABdOPWfg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/5",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmpM"
+    },
+    "PA-006": {
+      "number": 6,
+      "id": "I_kwDOVl1pnM8AAAABdOPXdQ",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/6",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmqk"
+    },
+    "PA-007": {
+      "number": 7,
+      "id": "I_kwDOVl1pnM8AAAABdOPYnw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/7",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmtY"
+    },
+    "PA-008": {
+      "number": 8,
+      "id": "I_kwDOVl1pnM8AAAABdOPaMA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/8",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmwo"
+    },
+    "PA-009": {
+      "number": 9,
+      "id": "I_kwDOVl1pnM8AAAABdOPbNw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/9",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvmyg"
+    },
+    "PA-010": {
+      "number": 10,
+      "id": "I_kwDOVl1pnM8AAAABdOPcKA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/10",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvm08"
+    },
+    "PA-011": {
+      "number": 11,
+      "id": "I_kwDOVl1pnM8AAAABdOPdCg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/11",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvm3c"
+    },
+    "PA-012": {
+      "number": 13,
+      "id": "I_kwDOVl1pnM8AAAABdOPfHw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/13",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvm7g"
+    },
+    "PA-013": {
+      "number": 14,
+      "id": "I_kwDOVl1pnM8AAAABdOPgQg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/14",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvm9k"
+    },
+    "PA-014": {
+      "number": 15,
+      "id": "I_kwDOVl1pnM8AAAABdOPhPA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/15",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvm_U"
+    },
+    "PA-015": {
+      "number": 16,
+      "id": "I_kwDOVl1pnM8AAAABdOPiYw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/16",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnAs"
+    },
+    "PA-016": {
+      "number": 17,
+      "id": "I_kwDOVl1pnM8AAAABdOPjhQ",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/17",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnDc"
+    },
+    "PA-017": {
+      "number": 18,
+      "id": "I_kwDOVl1pnM8AAAABdOPklw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/18",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnF8"
+    },
+    "PA-018": {
+      "number": 19,
+      "id": "I_kwDOVl1pnM8AAAABdOPluA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/19",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnHs"
+    },
+    "PA-019": {
+      "number": 20,
+      "id": "I_kwDOVl1pnM8AAAABdOPm2A",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/20",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnJA"
+    },
+    "PA-020": {
+      "number": 21,
+      "id": "I_kwDOVl1pnM8AAAABdOPoLw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/21",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnK8"
+    },
+    "PA-021": {
+      "number": 22,
+      "id": "I_kwDOVl1pnM8AAAABdOPpeg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/22",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnMo"
+    },
+    "PA-022": {
+      "number": 23,
+      "id": "I_kwDOVl1pnM8AAAABdOPqtA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/23",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnOk"
+    },
+    "PA-023": {
+      "number": 24,
+      "id": "I_kwDOVl1pnM8AAAABdOPsAw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/24",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnQc"
+    },
+    "PA-024": {
+      "number": 28,
+      "id": "I_kwDOVl1pnM8AAAABdOPw5A",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/28",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnX0"
+    },
+    "PA-025": {
+      "number": 29,
+      "id": "I_kwDOVl1pnM8AAAABdOPyLw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/29",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnZM"
+    },
+    "PA-026": {
+      "number": 30,
+      "id": "I_kwDOVl1pnM8AAAABdOPzJw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/30",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnas"
+    },
+    "PA-027": {
+      "number": 31,
+      "id": "I_kwDOVl1pnM8AAAABdOP0Kw",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/31",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvncU"
+    },
+    "PA-028": {
+      "number": 32,
+      "id": "I_kwDOVl1pnM8AAAABdOP1TA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/32",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvneM"
+    },
+    "PA-029": {
+      "number": 42,
+      "id": "I_kwDOVl1pnM8AAAABdOQB4Q",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/42",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvojk"
+    },
+    "PA-030": {
+      "number": 43,
+      "id": "I_kwDOVl1pnM8AAAABdOQDig",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/43",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvolo"
+    },
+    "PA-031": {
+      "number": 25,
+      "id": "I_kwDOVl1pnM8AAAABdOPtog",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/25",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnSw"
+    },
+    "PA-032": {
+      "number": 27,
+      "id": "I_kwDOVl1pnM8AAAABdOPvzQ",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/27",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnWQ"
+    },
+    "PA-033": {
+      "number": 33,
+      "id": "I_kwDOVl1pnM8AAAABdOP2uA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/33",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnfs"
+    },
+    "PA-034": {
+      "number": 34,
+      "id": "I_kwDOVl1pnM8AAAABdOP30g",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/34",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnkE"
+    },
+    "PA-035": {
+      "number": 41,
+      "id": "I_kwDOVl1pnM8AAAABdOQAUA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/41",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvohk"
+    },
+    "PA-036": {
+      "number": 35,
+      "id": "I_kwDOVl1pnM8AAAABdOP5Dg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/35",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnnE"
+    },
+    "PA-037": {
+      "number": 26,
+      "id": "I_kwDOVl1pnM8AAAABdOPurQ",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/26",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnUY"
+    },
+    "PA-038": {
+      "number": 12,
+      "id": "I_kwDOVl1pnM8AAAABdOPeKg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/12",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvm5c"
+    },
+    "PA-039": {
+      "number": 36,
+      "id": "I_kwDOVl1pnM8AAAABdOP6Fg",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/36",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnp0"
+    },
+    "PA-040": {
+      "number": 37,
+      "id": "I_kwDOVl1pnM8AAAABdOP7cQ",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/37",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvnrc"
+    },
+    "PA-041": {
+      "number": 38,
+      "id": "I_kwDOVl1pnM8AAAABdOP88A",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/38",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvob8"
+    },
+    "PA-042": {
+      "number": 39,
+      "id": "I_kwDOVl1pnM8AAAABdOP-KA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/39",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvod4"
+    },
+    "PA-043": {
+      "number": 40,
+      "id": "I_kwDOVl1pnM8AAAABdOP_TA",
+      "url": "https://github.com/MosBot-AI/dsh-personal-agent/issues/40",
+      "item_id": "PVTI_lADOFIcP2s4Bqkm6zhGvofs"
+    }
+  }
+}

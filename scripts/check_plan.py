@@ -138,7 +138,7 @@ def main():
     ready = [task_id for task_id in order if tasks[task_id]["status"] == "planned"
              and all(tasks[d]["status"] == "done" for d in tasks[task_id]["depends_on"])]
     print(f"Plan valid: {len(tasks)} tasks, {len(scenarios)} scenarios, acyclic dependencies, bilingual documents and local links.")
-    print("Ready: " + (", ".join(ready) or "none"))
+    print("Plan-only ready: " + (", ".join(ready) or "none") + "; use scripts/project_ready.py for live progress.")
     if args.check_sources:
         print("All pinned local source references exist.")
     return 0

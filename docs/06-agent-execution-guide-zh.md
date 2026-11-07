@@ -4,6 +4,8 @@
 
 本计划已经给出可开始实现的工程基线。**本轮交付仅为方案，下面的 pnpm 命令和产品文件在 PA-001 等任务完成前尚不存在。** 不要直接启动任意模型/账户来“试一下”。当前真正可运行的是计划校验脚本。
 
+实施前必须先读 [GitHub Project 协议](11-github-project-workflow-zh.md)；通过 `scripts/project_ready.py` 读取实时候选，并在 Project/Issue 认领和汇报。下文的 done/blocked 等执行状态以 GitHub 为准，manifest 仅保留计划快照。
+
 ## 1. 交接提示词
 
 在未来明确要求 agent 开始开发时，可以使用：

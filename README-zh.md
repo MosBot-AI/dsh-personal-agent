@@ -6,6 +6,8 @@ dshpa 是基于 DeepSeek Harness 规划的个人智能体，目标是常驻用�
 
 **当前状态：仅有架构和实施计划，应用尚未实现。**
 
+[实施 Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent 协作流程](docs/11-github-project-workflow-zh.md)
+
 ## 规划能力
 
 - 持续对话、持久任务、目标、提醒及可更正的记忆。

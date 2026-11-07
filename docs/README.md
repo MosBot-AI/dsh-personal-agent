@@ -20,8 +20,9 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [05 Research](05-research-and-product-lessons.md) | Products, expert/designer analysis, Superagent principles and evidence limits |
 | [09 Plugin architecture](09-plugin-architecture.md) | Replaceable media/memory, development, configuration, migration and rollback |
 | [10 Model routing and gateway](10-model-routing-and-gateway.md) | Difficulty/effort, user pools, quotas, fallback configuration and implementation comparison |
+| [11 Project workflow](11-github-project-workflow.md) | GitHub board, claims, reporting, acceptance and Actions automation |
 
-Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. All tasks are `planned`. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
+Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. Task statuses are initial `planned` snapshots; GitHub Project owns live progress. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
 
 ## Key choices
 
