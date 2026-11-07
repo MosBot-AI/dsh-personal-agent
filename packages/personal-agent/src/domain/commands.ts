@@ -172,11 +172,16 @@ function createWork(
 
 /** Validate the public envelope and apply an owner operation without I/O. */
 export function handleWorkCommand(input: unknown, context: WorkCommandContext): WorkCommandResult {
-  const { actor, state, at, project, conversation } = context
-  if (actor?.role !== 'owner') return { ok: false, code: 'permission_denied' }
+  if (context.actor?.role !== 'owner') return { ok: false, code: 'permission_denied' }
   const decoded = workCommandSchema.safeParse(input)
   if (!decoded.success) return { ok: false, code: 'invalid_command' }
-  const command = decoded.data
+  return applyWorkCommand(decoded.data, context)
+}
+
+/** Apply a decoded command against the caller's current, scoped snapshot. */
+export function applyWorkCommand(command: WorkCommand, context: WorkCommandContext): WorkCommandResult {
+  const { actor, state, at, project, conversation } = context
+  if (actor?.role !== 'owner') return { ok: false, code: 'permission_denied' }
   if ((project !== undefined && !sameScope(actor, project))
     || (conversation !== undefined && !sameScope(actor, conversation))) {
     return { ok: false, code: 'not_found' }
