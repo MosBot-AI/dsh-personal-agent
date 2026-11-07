@@ -127,6 +127,15 @@ export function listRoutingEvents(db: DatabaseSync, scope: Scope, limit = 64): S
     .all(scope.ownerId, scope.profileId, scanLimitSchema.parse(limit)).map(decodeReceipt)
 }
 
+export function replayRoutingEvents(db: DatabaseSync, scope: Scope, key: {
+  projectId: ProjectId; sourceInstanceId: string; accountId: string; threadId: string
+}): StoredRoutingEvent[] {
+  return db.prepare(`${receiptSelect} WHERE r.owner_id = ? AND r.profile_id = ? AND r.project_id = ?
+    AND (s.record ->> '$.sourceInstanceId') = ? AND (s.record ->> '$.actor.accountId') = ?
+    AND (s.record ->> '$.threadId') = ? ORDER BY r.rowid DESC LIMIT 100`)
+    .all(scope.ownerId, scope.profileId, key.projectId, key.sourceInstanceId, key.accountId, key.threadId).map(decodeReceipt)
+}
+
 /** Caller holds a write transaction. A legacy source record never becomes a new event. */
 export function recordRoutingEvent(db: DatabaseSync, input: SourceEvent, digest: string, metadata: unknown):
   | { ok: true; duplicate: boolean; receipt: RoutingReceipt }

@@ -44,6 +44,7 @@ import { migration006 } from '../../packages/personal-agent/src/storage/migratio
 import { migration007 } from '../../packages/personal-agent/src/storage/migrations/007.js'
 import { migration008 } from '../../packages/personal-agent/src/storage/migrations/008.js'
 import { migration009 } from '../../packages/personal-agent/src/storage/migrations/009.js'
+import { migration010 } from '../../packages/personal-agent/src/storage/migrations/010.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -60,6 +61,7 @@ import {
   V7_BACKUP_SUFFIX,
   V8_BACKUP_SUFFIX,
   V9_BACKUP_SUFFIX,
+  V10_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -970,6 +972,29 @@ describe('SQLite v9 to v10 upgrade', () => {
         expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(9)
         expect(backup.prepare('SELECT * FROM tasks').all()).toEqual(tasks)
       } finally { backup.close() }
+    } finally { source.db.close() }
+  })
+})
+
+describe('SQLite v10 to v11 upgrade', () => {
+  it('installs proactive evidence and local notice accounting with a private v10 backup', () => {
+    const source = createVersionFixture(4, true)
+    try {
+      transaction(source.db, () => {
+        for (const migration of [migration005, migration006, migration007, migration008, migration009, migration010]) source.db.exec(migration)
+        source.db.exec("PRAGMA user_version = 10; UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1")
+      })
+      const tasks = source.db.prepare('SELECT * FROM tasks').all()
+      migrateSchema(source.db)
+      expect(source.db.prepare('SELECT mode FROM runtime_recovery WHERE id = 1').get()?.mode).toBe('restore')
+      expect(source.db.prepare('SELECT * FROM tasks').all()).toEqual(tasks)
+      expect(source.db.prepare('SELECT count(*) AS total FROM attention_local_notices').get()?.total).toBe(0)
+      expect(source.db.prepare('SELECT count(*) AS total FROM proactive_rules').get()?.total).toBe(0)
+      const path = source.path + V10_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(path).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(path, { readOnly: true })
+      try { expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(10) }
+      finally { backup.close() }
     } finally { source.db.close() }
   })
 })

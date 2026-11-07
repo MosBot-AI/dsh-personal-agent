@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import type { GenerateOptions, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { OwnerId, ProfileId } from '../domain/model.js'
-import { computeLimitsSchema, meteredStream, type WorkerComputeOptions } from './compute.js'
-import type { RoutingAssessor } from './router.js'
+import { computeCooldown, computeLimitsSchema, conservativeRequestBounds, meteredStream, type WorkerComputeOptions } from './compute.js'
+import type { AssessmentCandidate, RoutingAssessor } from './router.js'
 
 declare module '@deepseek-ai/dsh-llm/types' {
   interface LlmRequestPurposeMap {
@@ -22,25 +22,27 @@ export function createDshRoutingAssessor(
   llm: Pick<LlmRuntime, 'stream'>,
   route: { provider: string; model: string },
   compute?: RoutingComputeOptions,
-): RoutingAssessor {
+) {
   const document = readFileSync(new URL('../../prompts/router.md', import.meta.url), 'utf8')
   const system = /\n## Instructions\n\n([\s\S]+)$/u.exec(document)?.[1]?.trim()
   if (!system) throw new Error('The dshpa Router instructions are missing')
   const { provider, model } = route
   const limits = compute && computeLimitsSchema.parse(compute.limits ?? {})
-  return async (batch, signal) => {
+  const scope = compute && { ownerId: compute.ownerId, profileId: compute.profileId, unattended: true }
+  function requestFor(batch: readonly AssessmentCandidate[], signal?: AbortSignal): GenerateOptions {
+    return { provider, model, system, signal, purpose: 'dshpa-routing', maxTokens: limits?.maxOutputTokens ?? 1_536,
+      messages: [{ role: 'user', content: [{ type: 'text', text: JSON.stringify(batch) }] }] }
+  }
+  const assess: RoutingAssessor = async (batch, signal) => {
     if (activeAssessments.has(llm)) throw new Error('The DSH routing assessor is still in flight')
     activeAssessments.add(llm)
     try {
       let text = ''
       const requestSignal = limits ? AbortSignal.any([signal, AbortSignal.timeout(limits.maxWallTimeMs)]) : signal
-      const request: GenerateOptions = {
-        provider, model, system, signal: requestSignal, purpose: 'dshpa-routing', maxTokens: limits?.maxOutputTokens ?? 1_536,
-        messages: [{ role: 'user', content: [{ type: 'text', text: JSON.stringify(batch) }] }],
-      }
-      const stream = compute && limits ? meteredStream({
+      const request = requestFor(batch, requestSignal)
+      const stream = compute && limits && scope ? meteredStream({
         budget: compute.budget, request: Object.freeze(request), limits,
-        scope: { ownerId: compute.ownerId, profileId: compute.profileId, unattended: true },
+        scope,
         next: () => llm.stream(request), onIssue: () => {},
       }) : llm.stream(request)
       for await (const chunk of stream) {
@@ -59,4 +61,9 @@ export function createDshRoutingAssessor(
       activeAssessments.delete(llm)
     }
   }
+  return Object.assign(assess, { canAssess(batch: readonly AssessmentCandidate[]): boolean {
+    if (!compute || !limits || !scope || activeAssessments.has(llm) || computeCooldown(compute.budget, scope, provider, model)) return false
+    const bounds = conservativeRequestBounds(requestFor(batch), limits)
+    return !!bounds && compute.budget.canBegin({ ...scope, provider, model, ...bounds })
+  } })
 }

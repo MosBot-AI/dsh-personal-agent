@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { knowledgeRequestSchemas, type LocalKnowledge } from '../connectors/local-knowledge.js'
 import { connectorRequestSchemas, type ReadConnector } from '../connectors/registry.js'
+import { proactiveRequests, type ProactiveService } from '../runtime/proactive.js'
 import { contextEvidencePointerSchema } from '../context/checkpoint.js'
 import type { LocalContext } from '../context/local-context.js'
 import { memoryRequestSchemas, type LocalMemory } from '../context/memory.js'
@@ -92,6 +93,7 @@ const requestSchema = z.discriminatedUnion('type', [
   ...memoryRequestSchemas,
   ...knowledgeRequestSchemas,
   ...connectorRequestSchemas,
+  ...proactiveRequests,
   ...routineRequestSchemas,
   z.strictObject({ type: z.enum(['resident_status', 'resident_backup']) }),
   z.strictObject({ type: z.literal('resident_audit'), afterSequence: versionSchema.optional() }),
@@ -120,6 +122,7 @@ export interface InboxServiceOptions {
   readonly context?: LocalContext
   readonly memory?: LocalMemory
   readonly knowledge?: LocalKnowledge
+  readonly proactive?: ProactiveService
   readonly githubRead?: { readonly connector: ReadConnector; readonly scope: Pick<OwnerIdentity, 'ownerId' | 'profileId'>;
     readonly projectId?: ProjectId }
   readonly now?: () => UtcInstant
@@ -240,6 +243,7 @@ export function createInboxService(options: InboxServiceOptions) {
       ...(options.memory ? { memoryConfigured: true } : {}),
       ...(options.knowledge ? { knowledgeConfigured: true } : {}),
       ...(options.githubRead ? { githubRead: { projectId: options.githubRead.projectId } } : {}),
+      ...(options.proactive ? { proactiveConfigured: true, proactiveNotices: options.proactive.notices() } : {}),
       ...(recoveryMode === 'normal' ? {} : { recoveryMode }),
       sessions,
       projects: store.listInboxProjects(owner).map(({ id, title, purpose, kind }) => ({ id, title, purpose, kind })),
@@ -345,6 +349,12 @@ export function createInboxService(options: InboxServiceOptions) {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
         case 'create_task': return await createTask(ownerToken, request)
+        case 'proactive_state':
+        case 'proactive_save_rule':
+        case 'proactive_replay':
+        case 'proactive_mode':
+        case 'proactive_feedback':
+        case 'proactive_artifact': return options.proactive?.handle(request) ?? failure('resource_unavailable')
         case 'knowledge_status':
         case 'knowledge_search':
         case 'knowledge_read': {

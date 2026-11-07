@@ -2,6 +2,8 @@ import type { Delivery, TaskStatus } from '../domain/model.js'
 import type { MemoryActiveRecord, MemoryScope } from '@mosbot-ai/dshpa-plugin-api'
 import type { ProjectPlanInput } from '../domain/projects.js'
 import type { ConnectorBinding, ConnectorRecord } from '../connectors/registry.js'
+import type { ProactiveDraftInput, ProactiveMode } from '../domain/proactive.js'
+import type { ProactiveService } from '../runtime/proactive.js'
 
 export const INBOX_RPC_ENDPOINT = 'dshpa/inbox'
 
@@ -151,6 +153,8 @@ export interface InboxSnapshot {
   readonly memoryConfigured?: boolean
   readonly knowledgeConfigured?: boolean
   readonly githubRead?: { readonly projectId?: string }
+  readonly proactiveConfigured?: boolean
+  readonly proactiveNotices?: readonly { id: string; at: string; summary: string }[]
   readonly recoveryMode?: 'reconciling' | 'restore'
   readonly sessions: readonly InboxSession[]
   readonly projects: readonly InboxProject[]
@@ -173,6 +177,13 @@ export type InboxRequest =
   | { type: 'connector_status'; projectId?: string }
   | { type: 'connector_read'; projectId?: string; read: { operation: 'issues'; cursor?: string }
       | { operation: 'comments'; issue: number; cursor?: string } }
+  | { type: 'proactive_state' }
+  | { type: 'proactive_save_rule'; ruleId: string; expectedVersion: number | null; draft: ProactiveDraftInput }
+  | { type: 'proactive_replay'; ruleId: string; expectedVersion: number }
+  | { type: 'proactive_mode'; ruleId: string; expectedVersion: number; mode: ProactiveMode;
+      grant?: 'read_source' | 'surface_private_brief' }
+  | { type: 'proactive_feedback'; candidateId: string; useful: boolean }
+  | { type: 'proactive_artifact'; candidateId: string }
   | { type: 'create_project'; commandId: string; title: string; purpose: string }
   | { type: 'create_task'; commandId: string; projectId: string; sessionId: string; outcome: string }
   | { type: 'save_plan'; commandId: string; projectId?: string; expectedRevision?: number; draft: ProjectPlanInput; rationale: string }
@@ -221,6 +232,7 @@ export type InboxResponse =
   | { ok: true; kind: 'connector_status'; binding: ConnectorBinding; fingerprint: string }
   | { ok: true; kind: 'connector_page'; binding: ConnectorBinding; fingerprint: string;
       items: readonly ConnectorRecord[]; nextCursor?: string }
+  | Extract<ReturnType<ProactiveService['handle']>, { ok: true }>
   | { ok: true; kind: 'project_plan'; plan: InboxPlan }
   | { ok: true; kind: 'project_review'; projects: readonly InboxReviewProject[]; needsPriority: boolean; at: string }
   | { ok: true; kind: 'memory_records'; confirmed: readonly MemoryActiveRecord[]; inferred: readonly MemoryActiveRecord[] }

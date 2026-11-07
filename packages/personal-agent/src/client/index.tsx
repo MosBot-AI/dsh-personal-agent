@@ -93,6 +93,23 @@ function isTextList(value: unknown): boolean {
 }
 
 function isPriority(value: unknown): boolean { return value === 'high' || value === 'normal' || value === 'low' }
+const initiativeModes = new Set(['off', 'observe', 'prepare', 'act'])
+
+function isProactiveState(value: Record<string, unknown>): boolean {
+  const { policy, rules, candidates } = value
+  if (!isRecord(policy) || !isCount(policy.version) || !initiativeModes.has(String(policy.mode))
+    || typeof policy.timeZone !== 'string' || !Array.isArray(policy.urgentRules) || policy.urgentRules.length > 64
+    || !Array.isArray(rules) || rules.length > 32 || !Array.isArray(candidates) || candidates.length > 100) return false
+  return rules.every(rule => isRecord(rule) && typeof rule.id === 'string' && isCount(rule.version) && typeof rule.current === 'boolean'
+    && initiativeModes.has(String(rule.mode)) && isRecord(rule.draft) && isRecord(rule.evidence)
+    && [rule.draft.title, rule.draft.projectId, rule.draft.taskId, rule.draft.sourceInstanceId, rule.draft.accountId,
+      rule.draft.threadId, rule.draft.query].every(field => typeof field === 'string')
+    && [rule.evidence.useful, rule.evidence.reviewed, rule.evidence.prepared].every(isCount)
+    && (rule.replay === undefined || (isRecord(rule.replay) && isCount(rule.replay.examined) && isCount(rule.replay.matched))))
+    && candidates.every(item => isRecord(item) && typeof item.id === 'string' && isMemoryInstant(item.at)
+      && typeof item.reason === 'string' && (item.summary === undefined || typeof item.summary === 'string')
+      && (item.artifactId === undefined || typeof item.artifactId === 'string'))
+}
 
 function isKnowledgeRootId(value: unknown): boolean {
   return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/u.test(value)
@@ -152,6 +169,8 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   }
   if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'context') return value.value === null || Array.isArray(value.value) || isRecord(value.value)
+  if (value.kind === 'proactive_state') return isProactiveState(value)
+  if (value.kind === 'proactive_artifact') return typeof value.candidateId === 'string' && typeof value.text === 'string' && value.text.length <= 1024
   if (value.kind === 'connector_status' || value.kind === 'connector_page') {
     if (!isConnectorBinding(value.binding) || typeof value.fingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(value.fingerprint)) return false
     if (value.kind === 'connector_status') return true
@@ -203,6 +222,10 @@ function isInboxResponse(value: unknown): value is InboxResponse {
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
       && (snapshot.memoryConfigured === undefined || typeof snapshot.memoryConfigured === 'boolean')
       && (snapshot.knowledgeConfigured === undefined || typeof snapshot.knowledgeConfigured === 'boolean')
+      && (snapshot.proactiveConfigured === undefined || typeof snapshot.proactiveConfigured === 'boolean')
+      && (snapshot.proactiveNotices === undefined || (Array.isArray(snapshot.proactiveNotices) && snapshot.proactiveNotices.length <= 3
+        && snapshot.proactiveNotices.every(item => isRecord(item) && typeof item.id === 'string' && isMemoryInstant(item.at)
+          && typeof item.summary === 'string' && item.summary.length <= 1024)))
       && (snapshot.githubRead === undefined || (isRecord(snapshot.githubRead)
         && (snapshot.githubRead.projectId === undefined || typeof snapshot.githubRead.projectId === 'string')))
       && (snapshot.usage === undefined || isUsage(snapshot.usage))

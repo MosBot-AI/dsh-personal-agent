@@ -37,6 +37,7 @@ import { isRoutineSinkSession, type NativeSchedulePort } from '../runtime/native
 import { createSessionReadback } from '../runtime/recovery-session.js'
 import { createRouter, type EventRouter } from '../runtime/router.js'
 import { createDshRoutingAssessor } from '../runtime/routing-model.js'
+import { createProactive, type ProactiveService } from '../runtime/proactive.js'
 import { createScheduleAdapter } from '../runtime/schedule-adapter.js'
 import { StorageError } from '../storage/schema.js'
 import { openWorkStore, type WorkStore } from '../storage/store.js'
@@ -57,6 +58,7 @@ export const localInboxConfigSchema = z.strictObject({
   storageDirectory: pathSchema,
   workRoot: pathSchema,
   routines: z.boolean().default(false),
+  proactive: z.boolean().default(false),
   resident: residentConfigSchema.optional(),
   sourceAccounts: profileSchema.shape.verifiedAccounts.max(64).optional(),
   budget: budgetConfigSchema.optional(),
@@ -262,6 +264,7 @@ export function activateLocalInbox(
   const store = options.takeResidentStore?.() ?? openWorkStore(config.storageDirectory)
   let router: EventRouter | undefined
   let schedules: ReturnType<typeof createScheduleAdapter> | undefined
+  let proactive: ProactiveService | undefined
   let executor: WorkerExecutor | undefined
   let resident: ResidentOperations | undefined
   let detachResident: (() => void) | undefined
@@ -318,6 +321,9 @@ export function activateLocalInbox(
     const assess = config.routing && llm && routingStatus === 'configured' ? createDshRoutingAssessor(llm, config.routing, {
       budget, ...scope, limits: config.computeLimits,
     }) : undefined
+    proactive = config.proactive ? createProactive({ store, identity, scope, attention, assess, canAssess: assess?.canAssess,
+      assessmentRoute: config.routing && { provider: config.routing.provider, model: config.routing.model },
+      assessmentDataScope: config.routing?.dataScope }) : undefined
     const worker = config.worker
     const limits = computeLimitsSchema.parse(config.computeLimits ?? {})
     const context = config.context && createLocalContext({ ctx, store, identity, ownerToken: token, owner, config: config.context,
@@ -359,6 +365,7 @@ export function activateLocalInbox(
       },
     }) : undefined
     const eventRouter = createRouter({ store, identity, executor, assess, assessmentDataScope: config.routing?.dataScope,
+      proactive: proactive?.consider,
       authorizeDelivery: (state, event) => Boolean(worker && routeHasPrice(worker)
         && (options.authorizeRoutedInput === undefined || options.authorizeRoutedInput(state, event))),
       authorizeWake: options.authorizeEventWake })
@@ -404,9 +411,13 @@ export function activateLocalInbox(
       store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
-      resident, context, memory, knowledge,
+      resident, context, memory, knowledge, proactive,
       githubRead: connector && { connector, scope, projectId: github?.projectId },
-      configureAttention: (_owner, policy, expectedVersion) => attention.configure(scope, policy, expectedVersion),
+      configureAttention: (_owner, policy, expectedVersion) => {
+        const result = attention.configure(scope, policy, expectedVersion)
+        if (result.ok) proactive?.invalidate()
+        return result
+      },
       invalidateResources: gpu.cancelStale,
       inspectUsage() {
         const spend = budget.snapshot(scope)
@@ -490,7 +501,7 @@ export function activateLocalInbox(
         const detached = remove()
         try {
           eventRouter.close()
-          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations])
+          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close()])
           if (!workersReleased || !gpuReleased) throw new Error('Inbox compute cleanup remains unverified')
         } finally {
           try { detachResident?.() } finally { await detached }
@@ -504,8 +515,8 @@ export function activateLocalInbox(
       router?.close()
     } finally {
       detachResident?.()
-      if (startup || schedules || resident || detachInbox) {
-        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.()])
+      if (startup || schedules || resident || detachInbox || proactive) {
+        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.(), proactive?.close()])
           .then(() => store.close()).catch(() => undefined)
       }
       else store.close()
