@@ -213,6 +213,7 @@ export const workerExecutionSchema = z.strictObject({
   model: nonEmptyTextSchema,
   inputCursor: workerCursorSchema,
   inputHistory: z.array(workerCursorSchema).min(1).max(WORKER_INPUT_LIMIT),
+  releasedAt: utcInstantSchema.optional(),
 }).refine(worker => worker.inputHistory.at(-1) === worker.inputCursor
   && new Set(worker.inputHistory).size === worker.inputHistory.length,
 { path: ['inputHistory'], error: 'Worker history must end at the current unique cursor' })
@@ -266,6 +267,11 @@ export const attemptSchema = z.strictObject({
     attempt.startedAt !== undefined && attempt.heartbeatAt >= attempt.startedAt &&
     (attempt.endedAt === undefined || attempt.heartbeatAt <= attempt.endedAt)
   ), { path: ['heartbeatAt'], error: 'Heartbeat must occur within the attempt lifetime' })
+  .refine(attempt => {
+    const releasedAt = attempt.worker?.releasedAt
+    return releasedAt === undefined || (attempt.status !== 'running' && attempt.startedAt !== undefined
+      && releasedAt >= attempt.startedAt && (attempt.endedAt === undefined || releasedAt <= attempt.endedAt))
+  }, { path: ['worker', 'releasedAt'], error: 'Worker release must occur within the attempt lifetime' })
 
 export type Owner = z.infer<typeof ownerSchema>
 export type Profile = z.infer<typeof profileSchema>

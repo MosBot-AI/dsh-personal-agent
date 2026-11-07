@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
+import { createArtifactStore, readScopedArtifact } from '../artifacts/store.js'
 import {
   applyWorkCommand,
   workCommandSchema,
@@ -28,10 +29,17 @@ import {
   transitionWork,
   workEventSchema,
   workStateSchema,
+  type WorkEvent,
   type WorkState,
   type WorkTransitionResult,
 } from '../domain/transitions.js'
+import {
+  artifactProofs, collectArtifacts, createVerifier, criteriaSatisfied, exactEffectReceipt, readyToVerify,
+  verificationRecordSchema, type VerificationCommit, type VerificationOptions,
+} from '../domain/verification.js'
 import { createActionGate, type ActionGateOptions } from '../policy/dispatch.js'
+import { consumeWorkerReleaseProof } from '../runtime/executor.js'
+import { createOutbox, type OutboxOptions } from '../runtime/outbox.js'
 import { openStorageDatabase, type StorageDatabase } from './database.js'
 import { sqliteCode, StorageError, transaction } from './schema.js'
 
@@ -155,16 +163,53 @@ function commandFingerprint(
 /** The store holds the profile writer lock until close. All commit inputs are data. */
 class WorkStore {
   private closed = false
+  private outbox?: ReturnType<typeof createOutbox>
+  readonly artifacts = createArtifactStore(operation => this.access(operation))
 
   constructor(private readonly storage: StorageDatabase) {}
 
   close(): void {
+    if (this.outbox?.isActive()) throw new StorageError('busy', 'The outbox still has provider operations in flight')
+    this.closeDatabase()
+  }
+
+  private closeDatabase(): void {
     this.closed = true
     this.storage.close()
   }
 
   createActionGate(options: ActionGateOptions) {
     return createActionGate(operation => this.access(operation), options)
+  }
+
+  createOutbox(options: OutboxOptions) {
+    if (this.outbox) throw new Error('An outbox is already open for this store')
+    this.outbox = createOutbox(operation => this.access(operation), options)
+    return this.outbox
+  }
+
+  createVerifier(options: VerificationOptions) {
+    return createVerifier({
+      readWork: ref => this.getWork(ref),
+      readArtifact: (ref, id) => this.artifacts.read(ref, id),
+      readEffect: (ref, id) => this.getEffect(ref, id),
+      commit: (ref, evidence) => this.commitVerification(ref, evidence),
+    }, options)
+  }
+
+  getVerification(ref: WorkRef, version: number) {
+    return this.access(db => {
+      const row = db.prepare(`
+        SELECT v.record FROM work_verifications v JOIN tasks t ON t.id = v.task_id
+        WHERE v.task_id = ? AND v.version = ? AND t.owner_id = ? AND t.profile_id = ?
+      `).get(ref.taskId, version, ref.ownerId, ref.profileId)
+      if (!row) return undefined
+      const evidence = decodeRecord(row.record, verificationRecordSchema)
+      if (evidence.taskId !== ref.taskId || evidence.version !== version) {
+        throw new StorageError('corrupt', 'Verification scope does not match its work event')
+      }
+      return evidence
+    })
   }
 
   insertProject(input: unknown): void {
@@ -212,11 +257,18 @@ class WorkStore {
 
   hasUnsettledEffects(ref: WorkRef, attemptId: AttemptId): boolean {
     return this.access(db => db.prepare(`
-      SELECT 1 FROM effects e JOIN tasks t ON t.id = e.task_id
-      WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ? AND e.attempt_id = ?
-        AND coalesce(e.record ->> '$.status', '') NOT IN ('prepared', 'authorized', 'confirmed', 'failed')
-      LIMIT 1
-    `).get(ref.taskId, ref.ownerId, ref.profileId, attemptId) !== undefined)
+      SELECT 1 FROM tasks t WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ?
+      AND (
+        EXISTS (
+          SELECT 1 FROM effects e WHERE e.task_id = t.id AND e.attempt_id = ?
+          AND coalesce(e.record ->> '$.status', '') NOT IN ('prepared', 'authorized', 'confirmed', 'failed')
+        )
+        OR EXISTS (
+          SELECT 1 FROM outbox o WHERE o.task_id = t.id AND o.attempt_id = ?
+          AND coalesce(o.record ->> '$.status', '') NOT IN ('pending', 'accepted', 'delivered', 'read', 'failed')
+        )
+      )
+    `).get(ref.taskId, ref.ownerId, ref.profileId, attemptId, attemptId) !== undefined)
   }
 
   getDelivery(ref: WorkRef, deliveryId: DeliveryId) {
@@ -287,18 +339,104 @@ class WorkStore {
     const event = workEventSchema.safeParse(input)
     const intents = decodeIntents(intentInput)
     if (!event.success || !intents) return { ok: false, code: 'invalid_input' }
-    if (!('generation' in event.data)
+    if (!('generation' in event.data) || event.data.type === 'verify' || event.data.type === 'release_worker'
+      || (event.data.type === 'reconcile' && event.data.outcome.status === 'completed')
       || (intents.sourceEvent && !sameScope(ref, intents.sourceEvent))) {
       return { ok: false, code: 'permission_denied' }
     }
+    return this.applyRuntimeEvent(ref, event.data, intents)
+  }
 
+  confirmWorkerRelease(proof: unknown): StoredWorkResult {
+    const release = consumeWorkerReleaseProof(proof, this)
+    if (!release) return { ok: false, code: 'permission_denied' }
+    return this.applyRuntimeEvent(release.ref, release.event, {})
+  }
+
+  private applyRuntimeEvent(ref: WorkRef, event: WorkEvent, intents: ValidatedIntents): StoredWorkResult {
     return this.commit(db => {
       const before = this.loadWork(db, ref)
       if (!before) return { ok: false, code: 'not_found' }
-      const result = transitionWork(before, event.data)
+      const result = transitionWork(before, event)
       if (!result.ok) return result
+      if (event.type === 'ready'
+        && !collectArtifacts(before, event.artifactIds, id => readScopedArtifact(db, ref, id))) {
+        return { ok: false, code: 'acceptance_unsatisfied' }
+      }
       if (this.sourceAlreadyStored(db, intents.sourceEvent)) return { ok: false, code: 'source_duplicate' }
-      const receipt = this.persist(db, before, result, event.data.type, event.data.at, intents, recordEncoder())
+      const receipt = this.persist(db, before, result, event.type, event.at, intents, recordEncoder())
+      return { ...receipt, replayed: false }
+    })
+  }
+
+  private commitVerification(ref: WorkRef, evidence: VerificationCommit): StoredWorkResult {
+    const intents = decodeIntents({ deliveries: evidence.deliveries })
+    if (!intents) return { ok: false, code: 'invalid_input' }
+    return this.commit(db => {
+      const before = this.loadWork(db, ref)
+      if (!before) return { ok: false, code: 'not_found' }
+      if (before.task.version !== evidence.expectedVersion) return { ok: false, code: 'version_conflict' }
+      if (before.attempt.id !== evidence.attemptId || before.attempt.generation !== evidence.generation
+        || before.task.generation !== evidence.generation) return { ok: false, code: 'stale_attempt' }
+      if (!readyToVerify(before)) return { ok: false, code: 'invalid_transition' }
+      const artifacts = collectArtifacts(before, before.attempt.artifactIds, id => readScopedArtifact(db, ref, id))
+      if (!artifacts || !criteriaSatisfied(before, evidence.criteria)
+        || JSON.stringify(artifactProofs(artifacts)) !== JSON.stringify(evidence.artifacts)) {
+        return { ok: false, code: 'acceptance_unsatisfied' }
+      }
+      if (evidence.effectReceipt) {
+        const row = db.prepare('SELECT record FROM effects WHERE operation_id = ? AND task_id = ?')
+          .get(evidence.effectReceipt.operationId, ref.taskId)
+        const current = exactEffectReceipt(before, row && decodeRecord(row.record, effectSchema))
+        if (JSON.stringify(current) !== JSON.stringify(evidence.effectReceipt)) {
+          return { ok: false, code: 'acceptance_unsatisfied' }
+        }
+      } else if (before.task.acceptance.requiresReceipt) {
+        return { ok: false, code: 'acceptance_unsatisfied' }
+      }
+
+      if (intents.deliveries?.length) {
+        const row = db.prepare('SELECT record FROM conversations WHERE id = ? AND owner_id = ? AND profile_id = ?')
+          .get(before.task.conversationId ?? null, ref.ownerId, ref.profileId)
+        if (!row) return { ok: false, code: 'permission_denied' }
+        const { originalDestination } = decodeRecord(row.record, conversationSchema)
+        const verified = new Set(evidence.artifacts.map(proof => proof.id))
+        if (intents.deliveries.some(delivery => !sameScope(ref, delivery)
+          || delivery.destination.sourceInstanceId !== originalDestination.sourceInstanceId
+          || delivery.destination.externalDestinationId !== originalDestination.externalDestinationId
+          || delivery.payload.artifactIds.some(id => !verified.has(id)))) {
+          return { ok: false, code: 'permission_denied' }
+        }
+      }
+      const result = transitionWork(before, {
+        type: 'verify',
+        expectedVersion: evidence.expectedVersion,
+        attemptId: evidence.attemptId,
+        generation: evidence.generation,
+        at: evidence.at,
+        evidence: {
+          criteriaSatisfied: true,
+          artifactIds: evidence.artifacts.map(proof => proof.id),
+          receiptId: evidence.effectReceipt?.providerReceiptId,
+        },
+      })
+      if (!result.ok) return result
+      const encode = recordEncoder()
+      const receipt = this.persist(db, before, result, 'verify', evidence.at, intents, encode)
+      const record = verificationRecordSchema.parse({
+        taskId: ref.taskId,
+        attemptId: evidence.attemptId,
+        generation: evidence.generation,
+        version: result.state.task.version,
+        verifiedAt: evidence.at,
+        criteria: evidence.criteria,
+        artifacts: evidence.artifacts,
+        effectReceipt: evidence.effectReceipt,
+      })
+      db.prepare(`
+        INSERT INTO work_verifications (task_id, attempt_id, generation, version, record)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(record.taskId, record.attemptId, record.generation, record.version, encode(record))
       return { ...receipt, replayed: false }
     })
   }
@@ -317,7 +455,7 @@ class WorkStore {
       // A failed rollback must not expose the unfinished transaction to readers.
       if (db.isTransaction) {
         try {
-          this.close()
+          this.closeDatabase()
         } catch (closeError) {
           throw new AggregateError([error, closeError], 'Failed to close the unfinished work transaction')
         }

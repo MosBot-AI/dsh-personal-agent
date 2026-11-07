@@ -3,7 +3,7 @@ import { z } from 'zod'
 import {
   nonEmptyTextSchema, sessionIdSchema, taskIdSchema, utcInstantSchema, versionSchema, WORKER_INPUT_LIMIT, type UtcInstant,
 } from '../domain/model.js'
-import type { WorkState } from '../domain/transitions.js'
+import type { WorkEvent, WorkState } from '../domain/transitions.js'
 import type { StoredCommandContext, StoredWorkResult, WorkRef, WorkStore } from '../storage/store.js'
 import type { NativeWorker, NativeWorkerRuntime } from './native-worker.js'
 import { allowsWorkerData, resolveWorkerDirectory, workerPresetSchema, type WorkerPreset } from './presets.js'
@@ -47,6 +47,18 @@ interface Entry {
   failure?: string
   report?: WorkerReport
   issue?: string
+}
+
+type ReleaseEvent = Extract<WorkEvent, { type: 'release_worker' }>
+const releaseProofs = new WeakMap<object, { store: WorkStore; ref: WorkRef; event: ReleaseEvent }>()
+
+/** Consume the executor's one-use evidence of a stopped native Worker. */
+export function consumeWorkerReleaseProof(proof: unknown, store: WorkStore) {
+  if (typeof proof !== 'object' || proof === null) return undefined
+  const release = releaseProofs.get(proof)
+  if (!release || release.store !== store) return undefined
+  releaseProofs.delete(proof)
+  return release
 }
 
 function fence(state: WorkState, at: UtcInstant) {
@@ -281,8 +293,10 @@ class WorkerExecutor {
         entry.issue = 'report_unavailable'
         return
       }
-      entry.report = report
-      if (report.kind === 'progress') return
+      if (report.kind === 'progress') {
+        entry.report = report
+        return
+      }
       if (report.kind === 'failed') {
         entry.failure = report.summary
       } else {
@@ -305,6 +319,7 @@ class WorkerExecutor {
           return
         }
       }
+      entry.report = report
       void this.retire(entry)
     } catch {
       if (!entry.retiring && entry.cursor === input.cursor) entry.issue = 'host_unavailable'
@@ -349,13 +364,22 @@ class WorkerExecutor {
     if (state?.attempt.id === entry.attemptId) {
       const base = fence(state, this.now())
       const uncertainEffects = () => store.hasUnsettledEffects(entry.ref, entry.attemptId)
-      const event = state.task.status === 'cancelling'
+      const event: WorkEvent | undefined = state.task.status === 'cancelling'
         ? { type: 'confirm_cancel', ...base, runtimeQuiescent: true, uncertainEffects: uncertainEffects() }
         : entry.failure !== undefined && state.task.status === 'running' && state.task.generation === entry.generation
           ? { type: 'fail', ...base, runtimeQuiescent: true, uncertainEffects: uncertainEffects(), reason: entry.failure }
-          : undefined
+          : worker && state.task.status === 'verifying' && state.attempt.worker && state.attempt.worker.releasedAt === undefined
+            ? { type: 'release_worker', ...base }
+            : undefined
       if (event) {
-        const result = store.applyEvent(entry.ref, event)
+        let result: StoredWorkResult
+        if (event.type === 'release_worker') {
+          const proof = Object.freeze({})
+          releaseProofs.set(proof, { store, ref: entry.ref, event })
+          result = store.confirmWorkerRelease(proof)
+        } else {
+          result = store.applyEvent(entry.ref, event)
+        }
         if (!result.ok) {
           entry.issue = result.code
           return false
