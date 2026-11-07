@@ -110,6 +110,26 @@ function isKnowledgeSource(value: unknown): boolean {
     && value.path.split('/').every(part => part.length && !part.startsWith('.') && !/[\\\p{Cc}]/u.test(part))
 }
 
+function isConnectorBinding(value: unknown): value is { account: { id: number; login: string };
+  repository: { id: number; owner: string; name: string } } {
+  const login = (raw: unknown) => typeof raw === 'string' && /^[a-zA-Z\d][a-zA-Z\d-]{0,38}$/u.test(raw)
+  return isRecord(value) && isRecord(value.account) && isRecord(value.repository)
+    && typeof value.account.id === 'number' && isCount(value.account.id) && value.account.id > 0 && login(value.account.login)
+    && typeof value.repository.id === 'number' && isCount(value.repository.id) && value.repository.id > 0
+    && login(value.repository.owner) && typeof value.repository.name === 'string' && /^[a-zA-Z\d_.-]{1,100}$/u.test(value.repository.name)
+    && value.repository.name !== '.' && value.repository.name !== '..'
+}
+
+function isConnectorItem(value: unknown, path: string): boolean {
+  if (!isRecord(value) || typeof value.id !== 'number' || !isCount(value.id) || value.id === 0
+    || typeof value.number !== 'number' || !isCount(value.number) || value.number === 0 || typeof value.author !== 'string'
+    || typeof value.text !== 'string' || value.text.length > 4096 || !isMemoryInstant(value.createdAt) || !isMemoryInstant(value.updatedAt)
+    || (value.authorId !== undefined && (typeof value.authorId !== 'number' || !isCount(value.authorId) || value.authorId === 0))) return false
+  if (value.kind === 'comment') return value.title === undefined && value.url === `${path}/issues/${value.number}#issuecomment-${value.id}`
+  return (value.kind === 'issue' || value.kind === 'pull') && typeof value.title === 'string' && value.title.length <= 512
+    && value.url === `${path}/${value.kind === 'pull' ? 'pull' : 'issues'}/${value.number}`
+}
+
 function isPlanDraft(value: unknown): boolean {
   return isRecord(value) && typeof value.title === 'string' && typeof value.purpose === 'string' && isPriority(value.priority)
     && isTextList(value.successCriteria) && Array.isArray(value.milestones) && value.milestones.length <= 64
@@ -121,7 +141,7 @@ function isPlanDraft(value: unknown): boolean {
 
 function isInboxResponse(value: unknown): value is InboxResponse {
   if (!isRecord(value)) return false
-  if (value.ok === false) return typeof value.code === 'string'
+  if (value.ok === false) return typeof value.code === 'string' && (value.retryAt === undefined || isMemoryInstant(value.retryAt))
   if (value.ok !== true) return false
   if (value.kind === 'updated') {
     return (value.taskId === undefined || typeof value.taskId === 'string')
@@ -132,6 +152,14 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   }
   if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'context') return value.value === null || Array.isArray(value.value) || isRecord(value.value)
+  if (value.kind === 'connector_status' || value.kind === 'connector_page') {
+    if (!isConnectorBinding(value.binding) || typeof value.fingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(value.fingerprint)) return false
+    if (value.kind === 'connector_status') return true
+    const { owner, name } = value.binding.repository
+    const path = `https://github.com/${owner}/${name}`
+    return Array.isArray(value.items) && value.items.length <= 20 && value.items.every(item => isConnectorItem(item, path))
+      && (value.nextCursor === undefined || typeof value.nextCursor === 'string' && value.nextCursor.length === 36)
+  }
   if (value.kind === 'knowledge_status') return isKnowledgeRoots(value.roots)
   if (value.kind === 'knowledge_search') {
     return isKnowledgeRoots(value.roots) && Array.isArray(value.hits) && value.hits.length <= 20
@@ -175,6 +203,8 @@ function isInboxResponse(value: unknown): value is InboxResponse {
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
       && (snapshot.memoryConfigured === undefined || typeof snapshot.memoryConfigured === 'boolean')
       && (snapshot.knowledgeConfigured === undefined || typeof snapshot.knowledgeConfigured === 'boolean')
+      && (snapshot.githubRead === undefined || (isRecord(snapshot.githubRead)
+        && (snapshot.githubRead.projectId === undefined || typeof snapshot.githubRead.projectId === 'string')))
       && (snapshot.usage === undefined || isUsage(snapshot.usage))
       && (snapshot.schedules === undefined || isSchedules(snapshot.schedules))
   }

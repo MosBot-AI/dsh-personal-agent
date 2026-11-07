@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -8,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { contextCheckpointSchema } from '../../packages/personal-agent/src/context/checkpoint.js'
+import { inspectMcpReadFingerprint } from '../../packages/personal-agent/src/connectors/mcp.js'
 import {
   INBOX_RPC_ENDPOINT,
   type InboxPort,
@@ -48,6 +50,79 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('reads only the pinned GitHub MCP facade through the authenticated owner carrier', async () => {
+    const calls: string[] = []
+    let changed = false
+    const binding = { account: { id: 17, login: 'Owner' }, repository: { id: 42, owner: 'Org', name: 'Repo' } }
+    const server = createServer(async (request, response) => {
+      try {
+        assert.equal(request.method, 'POST')
+        assert.equal(request.url, '/mcp')
+        assert.equal(request.headers.authorization, undefined)
+        let input = ''
+        for await (const chunk of request) input += chunk.toString('utf8')
+        const message = JSON.parse(input)
+        if (message.method === 'notifications/initialized') { response.writeHead(202).end(); return }
+        let result: unknown
+        if (message.method === 'initialize') result = { protocolVersion: '2025-06-18', serverInfo: { name: 'web-fixture', version: '1' }, capabilities: { tools: {} } }
+        else if (message.method === 'tools/list') result = { tools: ['inspect', 'issues', 'comments'].map(name => ({
+          name: `dshpa_github_${name}`, inputSchema: { type: 'object' }, description: changed ? 'Changed capability' : 'Pinned read capability',
+        })) }
+        else {
+          assert.equal(message.method, 'tools/call')
+          calls.push(message.params.name)
+          if (message.params.name === 'dshpa_github_inspect') {
+            assert.deepEqual(message.params.arguments, {})
+            result = { structuredContent: { binding } }
+          }
+          else {
+            assert.equal(message.params.name, 'dshpa_github_issues')
+            assert.deepEqual(message.params.arguments.binding, binding)
+            result = { structuredContent: { binding, operation: 'issues', page: 1, hasNext: false,
+              items: [{ id: 9, number: 3, kind: 'issue', author: 'reviewer', title: 'Scoped read fixture', text: 'Old source only.',
+                createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }] } }
+          }
+        }
+        response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
+      } catch { response.writeHead(400).end() }
+    })
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const address = server.address()
+      assert.ok(address && typeof address !== 'string')
+      const url = `http://127.0.0.1:${address.port}/mcp`
+      const fingerprint = await inspectMcpReadFingerprint(url)
+      const host = await openWebHost(memoryProbe, { patch: [
+        '- id: dshpa', '  config:', '    inbox:',
+        "      storageDirectory: !!js dshHomePath('connector-inbox')", '      workRoot: !!js process.cwd()',
+        '      githubRead:', '        binding:', '          account: { id: 17, login: Owner }',
+        '          repository: { id: 42, owner: Org, name: Repo }', '        transport:', '          kind: mcp',
+        `          url: ${url}`, `          fingerprint: "${fingerprint}"`,
+      ] })
+      const cookie = await host.exchange()
+      const query = { type: 'connector_read', read: { operation: 'issues' } } as const
+      expect(await host.rpc(INBOX_RPC_ENDPOINT, query)).toMatchObject({ status: 401 })
+      expect(await host.rpc(INBOX_RPC_ENDPOINT, query, await host.exchange(true))).toMatchObject({ status: 403 })
+      expect(await host.rpc(INBOX_RPC_ENDPOINT, { ...query, projectId: 'foreign' }, cookie))
+        .toMatchObject({ result: { value: { ok: false, code: 'permission_denied' } } })
+      expect(calls).toEqual([])
+      expect(await host.rpc(INBOX_RPC_ENDPOINT, query, cookie)).toMatchObject({ result: { value: {
+        ok: true, kind: 'connector_page', binding, items: [{ url: 'https://github.com/Org/Repo/issues/3' }],
+      } } })
+      expect(calls).toEqual(['dshpa_github_inspect', 'dshpa_github_issues'])
+      changed = true
+      expect(await host.rpc(INBOX_RPC_ENDPOINT, query, cookie))
+        .toMatchObject({ result: { value: { ok: false, code: 'capability_changed' } } })
+      expect(calls).toHaveLength(2)
+      expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'snapshot' }, cookie)).toMatchObject({ result: { value: {
+        snapshot: { githubRead: {}, tasks: [] },
+      } } })
+    } finally {
+      server.closeAllConnections()
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    }
+  }, 25_000)
+
   it('searches explicit local documents through the owner carrier and rejects stale source revisions', async () => {
     const host = await openWebHost(memoryProbe, { patch: [
       '- id: dshpa', '  config:', '    inbox:',

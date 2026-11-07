@@ -8,10 +8,13 @@ import { SessionId as nativeSessionId, type SessionHeader } from '@deepseek-ai/d
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { z } from 'zod'
 import { createLocalKnowledge, localKnowledgeConfigSchema } from '../connectors/local-knowledge.js'
+import { createGitHubReadTransport } from '../connectors/github.js'
+import { createMcpReadTransport, mcpLoopbackUrlSchema } from '../connectors/mcp.js'
+import { connectorBindingSchema, createReadConnector } from '../connectors/registry.js'
 import { createLocalContext, localContextConfigSchema } from '../context/local-context.js'
 import { createLocalMemory, localMemoryConfigSchema } from '../context/memory.js'
 import {
-  accountIdSchema, deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema,
+  accountIdSchema, deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema, projectIdSchema, sha256DigestSchema,
   sourceInstanceIdSchema, utcInstantSchema,
   type Profile, type SessionId, type SourceEvent,
 } from '../domain/model.js'
@@ -61,6 +64,12 @@ export const localInboxConfigSchema = z.strictObject({
   context: localContextConfigSchema.optional(),
   memory: localMemoryConfigSchema.optional(),
   knowledge: localKnowledgeConfigSchema.optional(),
+  githubRead: z.strictObject({
+    binding: connectorBindingSchema,
+    projectId: projectIdSchema.max(256).optional(),
+    transport: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('github') }),
+      z.strictObject({ kind: z.literal('mcp'), url: mcpLoopbackUrlSchema, fingerprint: sha256DigestSchema })]).default({ kind: 'github' }),
+  }).optional(),
   gpu: gpuConfigSchema.optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
@@ -317,6 +326,10 @@ export function activateLocalInbox(
     if (config.memory && !registry) throw new Error('Enabled memory requires the capability registry')
     const memory = config.memory && registry ? createLocalMemory({ store, identity, registry, config: config.memory }) : undefined
     const knowledge = config.knowledge ? createLocalKnowledge(config.knowledge) : undefined
+    const github = config.githubRead
+    const connector = github && createReadConnector({ binding: github.binding, projectId: github.projectId,
+      transport: github.transport.kind === 'github' ? createGitHubReadTransport({ binding: github.binding })
+        : createMcpReadTransport({ binding: github.binding, url: github.transport.url, expectedFingerprint: github.transport.fingerprint }) })
     if (worker) mkdirSync(config.workRoot, { recursive: true, mode: 0o700 })
     executor = worker ? host.createWorkerExecutor({
       store,
@@ -392,6 +405,7 @@ export function activateLocalInbox(
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
       resident, context, memory, knowledge,
+      githubRead: connector && { connector, scope, projectId: github?.projectId },
       configureAttention: (_owner, policy, expectedVersion) => attention.configure(scope, policy, expectedVersion),
       invalidateResources: gpu.cancelStale,
       inspectUsage() {
@@ -472,6 +486,7 @@ export function activateLocalInbox(
         const operations = resident?.close()
         identity.release(token)
         knowledge?.close()
+        connector?.close()
         const detached = remove()
         try {
           eventRouter.close()

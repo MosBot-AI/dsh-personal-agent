@@ -4,7 +4,7 @@
 
 dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱、受控恢复、事件路由、上下文检查点与召回、个人记忆、目标计划、本地知识、计算与通知控制、持久调度、常驻宿主运维及能力插件契约（PA-001 至 PA-015、PA-018、PA-021 和 PA-038）。**
+**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱、受控恢复、事件路由、上下文检查点与召回、个人记忆、目标计划、本地知识、GitHub 只读连接、计算与通知控制、持久调度、常驻宿主运维及能力插件契约（PA-001 至 PA-016、PA-018、PA-021 和 PA-038）。**
 
 [宿主兼容性记录](docs/evidence/host-compatibility-zh.md)说明已验证的原生控制能力，以及后续任务需要处理的边界。
 [工作领域证据](docs/evidence/PA-003-zh.md)覆盖记录校验、命令准入和任务状态转换。
@@ -19,6 +19,7 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 [个人记忆证据](docs/evidence/PA-012-zh.md)覆盖所有者操作、提供者快照及在提供者返回旧数据时仍生效的排除规则。
 [目标计划证据](docs/evidence/PA-014-zh.md)覆盖修订、Worker 草稿、任务前置依赖及按需回顾。
 [本地知识证据](docs/evidence/PA-015-zh.md)覆盖显式目录、增量索引及来源撤权。
+[GitHub 只读连接器证据](docs/evidence/PA-016-zh.md)覆盖真实回读、限定范围的游标及 MCP 能力复核。
 [预算与通知证据](docs/evidence/PA-013-zh.md)覆盖模型领取、资源上限、通知策略及限定范围的用量。
 [调度证据](docs/evidence/PA-018-zh.md)覆盖例行任务意图、原生唤醒对账，以及去重后的提醒和任务唤醒。
 [常驻宿主证据](docs/evidence/PA-021-zh.md)覆盖生命周期、诊断、在线备份和恢复。
@@ -212,6 +213,29 @@ knowledge:
 内存索引复用未变化的记录，并在返回结果前核对当前文件。文件和目录必须能从已配置目录直接到达，路径中不得经过符号链接。隐藏条目、硬链接、二进制内容及超限文件会被跳过。内置类型白名单为 `.md`、`.markdown`、`.txt`、`.rst`、`.csv` 和 `.json`，默认使用 Markdown 和纯文本。每个目录有 4 MiB 的派生文本预算。标为部分可用的目录可能只返回部分结果。
 
 来源文本作为证据展示，与 Worker 自动输入、个人记忆和原生压缩摘要分开。来源目录保持只读，索引在重启后按需重建。
+
+### 只读访问一个 GitHub 仓库
+
+在 `dshpa` 条目的 `config.inbox` 下添加 `githubRead`。填写实际的 GitHub 用户和仓库数字 ID，以及当前名称。若指定准确的 dshpa `projectId`，所配置的项目必须处于活跃状态。未绑定项目时，读取归属本地所有者 Profile。
+
+```yaml
+githubRead:
+  binding:
+    account: { id: 12345, login: your-login }
+    repository: { id: 123456, owner: your-org, name: your-repository }
+  transport:
+    kind: github
+```
+
+从秘密存储将 `DSHPA_GITHUB_READ_TOKEN` 注入受信任的宿主环境。使用范围仅覆盖所选仓库读取的凭据。在**今日**的 **GitHub 只读**面板中验证连接，并读取 Issue 和评论页。连接器使用固定的 GET 端点，在每页前核对账号和仓库，并遵循提供者的限流退避。分页游标绑定原始操作和 Issue。历史正文保持为只读证据。[GitHub REST 分页](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api) · [GitHub REST 限流](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
+
+经过审查的 MCP 门面可以替换 REST 传输。将 `kind` 设为 `mcp`，`url` 填写字面回环 HTTP 端点，`fingerprint` 填写已批准的 SHA-256 能力指纹。门面使用无状态的 MCP 2025-06-18。构建工作区后，可用以下命令仅发现指纹：
+
+```sh
+node --input-type=module -e 'import { inspectMcpReadFingerprint } from "./packages/personal-agent/lib/connectors/mcp.js"; console.log(await inspectMcpReadFingerprint(process.argv[1]))' http://127.0.0.1:39017/mcp
+```
+
+门面公开 `dshpa_github_inspect`、`dshpa_github_issues` 和 `dshpa_github_comments`。检查工具接收空参数，并在 `structuredContent` 中返回独立绑定的 `binding`。分页工具接收 `binding`、`operation`、`page`、`limit`，评论还接收 `issue`。它们返回结构化的 `binding`、`operation`、`page`、`items`、`hasNext`，评论还返回 `issue`。每行包含数字 `id` 和 `number`、`kind`（`issue`、`pull` 或 `comment`）、`author`、可选的数字 `authorId`、UTC 毫秒格式的 `createdAt` 和 `updatedAt`、`text`，Issue 和 PR 还包含 `title`。门面的 GitHub 账号和权限应限制在所选仓库。连接器不会向 MCP 发送 GitHub 凭据，并在调用前后核对工具指纹。[MCP 传输](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) · [MCP 工具](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
 
 ### 设置计算与通知限额
 

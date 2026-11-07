@@ -1,6 +1,7 @@
 import type { Delivery, TaskStatus } from '../domain/model.js'
 import type { MemoryActiveRecord, MemoryScope } from '@mosbot-ai/dshpa-plugin-api'
 import type { ProjectPlanInput } from '../domain/projects.js'
+import type { ConnectorBinding, ConnectorRecord } from '../connectors/registry.js'
 
 export const INBOX_RPC_ENDPOINT = 'dshpa/inbox'
 
@@ -149,6 +150,7 @@ export interface InboxSnapshot {
   readonly workerConfigured: boolean
   readonly memoryConfigured?: boolean
   readonly knowledgeConfigured?: boolean
+  readonly githubRead?: { readonly projectId?: string }
   readonly recoveryMode?: 'reconciling' | 'restore'
   readonly sessions: readonly InboxSession[]
   readonly projects: readonly InboxProject[]
@@ -168,6 +170,9 @@ export type InboxRequest =
   | { type: 'knowledge_status' }
   | { type: 'knowledge_search'; rootId?: string; query: string; limit?: number }
   | { type: 'knowledge_read'; ref: KnowledgeSource['ref']; revision: string; offset?: number; maxBytes?: number }
+  | { type: 'connector_status'; projectId?: string }
+  | { type: 'connector_read'; projectId?: string; read: { operation: 'issues'; cursor?: string }
+      | { operation: 'comments'; issue: number; cursor?: string } }
   | { type: 'create_project'; commandId: string; title: string; purpose: string }
   | { type: 'create_task'; commandId: string; projectId: string; sessionId: string; outcome: string }
   | { type: 'save_plan'; commandId: string; projectId?: string; expectedRevision?: number; draft: ProjectPlanInput; rationale: string }
@@ -213,10 +218,13 @@ export type InboxResponse =
   | { ok: true; kind: 'knowledge_status'; roots: readonly KnowledgeRootStatus[] }
   | { ok: true; kind: 'knowledge_search'; roots: readonly KnowledgeRootStatus[]; hits: readonly (KnowledgeSource & { snippet: string })[] }
   | { ok: true; kind: 'knowledge_page'; source: KnowledgeSource; text: string; totalBytes: number; nextOffset?: number }
+  | { ok: true; kind: 'connector_status'; binding: ConnectorBinding; fingerprint: string }
+  | { ok: true; kind: 'connector_page'; binding: ConnectorBinding; fingerprint: string;
+      items: readonly ConnectorRecord[]; nextCursor?: string }
   | { ok: true; kind: 'project_plan'; plan: InboxPlan }
   | { ok: true; kind: 'project_review'; projects: readonly InboxReviewProject[]; needsPriority: boolean; at: string }
   | { ok: true; kind: 'memory_records'; confirmed: readonly MemoryActiveRecord[]; inferred: readonly MemoryActiveRecord[] }
   | { ok: true; kind: 'memory_change'; state: 'completed' | 'pending'; recordId: string; revision: number }
-  | { ok: false; code: string }
+  | { ok: false; code: string; retryAt?: string }
 
 export type InboxPort = (request: InboxRequest, signal?: AbortSignal) => Promise<InboxResponse>
