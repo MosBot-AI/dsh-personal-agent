@@ -12,6 +12,7 @@ import {
   type Profile, type SessionId, type SourceEvent,
 } from '../domain/model.js'
 import type { WorkState } from '../domain/transitions.js'
+import { ROUTINE_SOURCE } from '../domain/routines.js'
 import { createIdentityBoundary, type SourceToken } from '../policy/identity.js'
 import type { ActionRoute } from '../policy/dispatch.js'
 import { budgetConfigSchema, type BudgetConfig, type BudgetCurrencyUsage } from '../runtime/budget.js'
@@ -20,12 +21,15 @@ import { createGpuQueue, gpuConfigSchema } from '../runtime/gpu-queue.js'
 import type { AttentionExternalRequest } from '../runtime/attention.js'
 import type { HostAdapter } from '../runtime/host-adapter.js'
 import { createRecovery } from '../runtime/recovery.js'
+import { isRoutineSinkSession, type NativeSchedulePort } from '../runtime/native-schedule.js'
 import { createSessionReadback } from '../runtime/recovery-session.js'
 import { createRouter, type EventRouter } from '../runtime/router.js'
 import { createDshRoutingAssessor } from '../runtime/routing-model.js'
+import { createScheduleAdapter } from '../runtime/schedule-adapter.js'
 import { StorageError } from '../storage/schema.js'
 import { openWorkStore } from '../storage/store.js'
 import { INBOX_RPC_ENDPOINT, type InboxSession, type InboxUsage } from './protocol.js'
+import { createRoutineInbox, routineAuthority } from './routines.js'
 import { createInboxService } from './service.js'
 
 const pathSchema = z.string().refine(path => isAbsolute(path) && !path.includes('\0'), 'Expected an absolute path')
@@ -39,6 +43,7 @@ const MAX_INBOX_REQUEST_BYTES = 512 * 1024
 export const localInboxConfigSchema = z.strictObject({
   storageDirectory: pathSchema,
   workRoot: pathSchema,
+  routines: z.boolean().default(false),
   sourceAccounts: profileSchema.shape.verifiedAccounts.max(64).optional(),
   budget: budgetConfigSchema.optional(),
   computeLimits: computeLimitsSchema.optional(),
@@ -135,7 +140,7 @@ function readLocalIdentity(directory: string) {
 }
 
 function isPrimary(header: SessionHeader): boolean {
-  return header.origin !== 'subagent' && !/^dshpa-[0-9a-f]{64}$/.test(header.id)
+  return header.origin !== 'subagent' && !/^dshpa-[0-9a-f]{64}$/.test(header.id) && !isRoutineSinkSession(header.id)
 }
 
 function nativeSessions(ctx: Context) {
@@ -196,6 +201,7 @@ export interface LocalInboxOptions {
   readonly authorizeRoutedInput?: (state: WorkState, event: SourceEvent) => boolean
   readonly authorizeEventWake?: (state: WorkState, event: SourceEvent) => boolean
   readonly allowAttentionDelivery?: (request: AttentionExternalRequest) => boolean
+  readonly schedule?: NativeSchedulePort
 }
 
 /** Mount the inbox on the existing local Web carrier. The caller owns the Host plugin scope. */
@@ -206,6 +212,7 @@ export function activateLocalInbox(
   options: LocalInboxOptions = {},
 ) {
   const config = localInboxConfigSchema.parse(input)
+  if (config.routines && options.schedule === undefined) throw new Error('Enabled routines require the private native schedule carrier')
   const connection: HostConnectionHandle | undefined = ctx.get('connection')
   const listener = ctx.get('webServer') as { readonly host?: unknown } | undefined
   if (!connection || connection.allowsRemoteAuthorities !== false
@@ -214,6 +221,7 @@ export function activateLocalInbox(
   }
   const store = openWorkStore(config.storageDirectory)
   let router: EventRouter | undefined
+  let schedules: ReturnType<typeof createScheduleAdapter> | undefined
   try {
     const local = readLocalIdentity(config.storageDirectory)
     const profile = profileSchema.parse({
@@ -285,7 +293,8 @@ export function activateLocalInbox(
     const routing = Object.freeze({
       bindSource(authenticatedMetadata: unknown) {
         const source = sourceBindingSchema.safeParse(authenticatedMetadata)
-        return source.success ? identity.bindSource({ ...source.data, ownerId: local.ownerId, profileId: local.profileId }) : undefined
+        return source.success && source.data.sourceInstanceId !== ROUTINE_SOURCE
+          ? identity.bindSource({ ...source.data, ownerId: local.ownerId, profileId: local.profileId }) : undefined
       },
       releaseSource(token: SourceToken) { identity.release(token) },
       receive: eventRouter.receive,
@@ -295,9 +304,29 @@ export function activateLocalInbox(
     const actionGate = store.createActionGate({ identity, routes: options.actionRoutes ?? [] })
     const recovery = createRecovery(store, { readSession: createSessionReadback(ctx) })
     const startupRecovery = recovery.reconcileStartup().catch(() => undefined)
+    const schedule = config.routines && options.schedule ? createScheduleAdapter({
+      store, native: options.schedule,
+      currentAuthority(requested) {
+        const current = identity.resolveOwner(token)
+        return current && requested.ownerId === current.ownerId && requested.profileId === current.profileId
+          ? routineAuthority(current) : undefined
+      },
+      authorizeGoalWake(routine, state) {
+        const ref = { ownerId: routine.ownerId, profileId: routine.profileId, taskId: state.task.id }
+        return {
+          grantsCurrent: state.attempt.mandate.policyVersion === routine.authority?.policyVersion
+            && (state.attempt.scope?.capabilities.length ?? 0) === 0,
+          budgetAvailable: executor?.canStart(ref, 'local-model', true) === true,
+          conditionSatisfied: state.task.status === 'waiting_event' && !executor?.query(ref).active,
+        }
+      },
+    }) : undefined
+    schedules = schedule
+    if (schedule) void startupRecovery.then(() => schedule.reconcile()).catch(() => undefined)
     const service = createInboxService({
       store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
+      routines: schedule && createRoutineInbox(store, schedule),
       configureAttention: (_owner, policy, expectedVersion) => attention.configure(scope, policy, expectedVersion),
       invalidateResources: gpu.cancelStale,
       inspectUsage() {
@@ -363,14 +392,14 @@ export function activateLocalInbox(
     })
 
     return Object.freeze({
-      store, executor, identity, actionGate, ownerToken, owner, recovery, routing, attention,
+      store, executor, identity, actionGate, ownerToken, owner, recovery, routing, attention, schedules: schedule,
       compute: Object.freeze({ budget, gpu }),
       async dispose() {
         identity.release(token)
         const detached = remove()
         try {
           eventRouter.close()
-          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close()])
+          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close()])
           if (!workersReleased || !gpuReleased) throw new Error('Inbox compute cleanup remains unverified')
         } finally {
           await detached
@@ -383,7 +412,8 @@ export function activateLocalInbox(
     try {
       router?.close()
     } finally {
-      store.close()
+      if (schedules) void schedules.close().then(() => store.close(), () => store.close()).catch(() => undefined)
+      else store.close()
     }
     throw error
   }

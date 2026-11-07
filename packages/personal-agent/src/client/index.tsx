@@ -46,6 +46,23 @@ function isUsage(value: unknown): boolean {
         && typeof row.id === 'string' && typeof row.reason === 'string' && typeof row.at === 'string')))
 }
 
+function isSchedules(value: unknown): boolean {
+  if (!isRecord(value) || !Array.isArray(value.routines) || !Array.isArray(value.reminders)) return false
+  const hasText = (...fields: unknown[]) => fields.every(field => typeof field === 'string')
+  return value.routines.every(row => {
+    if (!isRecord(row) || !isRecord(row.timing) || !isRecord(row.target) || !hasText(row.id, row.title)
+      || !isCount(row.revision) || !['draft', 'armed', 'paused', 'ended'].some(state => state === row.state)
+      || (row.nextAt !== undefined && typeof row.nextAt !== 'string') || (row.issue !== undefined && typeof row.issue !== 'boolean')
+      || (row.misfire !== 'skip' && row.misfire !== 'latest')) return false
+    const last = row.last
+    if (last !== undefined && (!isRecord(last) || !['reminded', 'queued', 'skipped'].some(status => status === last.status)
+      || !hasText(last.at) || (last.reason !== undefined && !hasText(last.reason)))) return false
+    return (row.timing.kind === 'at' ? hasText(row.timing.at)
+      : row.timing.kind === 'cron' && hasText(row.timing.expression, row.timing.timeZone))
+      && (row.target.kind === 'reminder' ? hasText(row.target.text) : row.target.kind === 'goal' && hasText(row.target.taskId))
+  }) && value.reminders.every(row => isRecord(row) && hasText(row.id, row.title, row.text, row.intendedAt, row.deliveredAt))
+}
+
 function isInboxResponse(value: unknown): value is InboxResponse {
   if (!isRecord(value)) return false
   if (value.ok === false) return typeof value.code === 'string'
@@ -66,6 +83,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     return typeof snapshot.workerConfigured === 'boolean' && Array.isArray(snapshot.sessions)
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
       && (snapshot.usage === undefined || isUsage(snapshot.usage))
+      && (snapshot.schedules === undefined || isSchedules(snapshot.schedules))
   }
   return false
 }

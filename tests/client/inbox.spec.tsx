@@ -101,6 +101,36 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('saves a routine draft separately from arming and displays a committed reminder', async () => {
+    const requests: InboxRequest[] = []
+    let routines: NonNullable<InboxSnapshot['schedules']>['routines'] = []
+    const { node } = await mount(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot({
+        schedules: { routines, reminders: [{ id: 'reminder', title: 'Check the build', text: 'Read the results.',
+          intendedAt: verifiedAt, deliveredAt: verifiedAt }] },
+      }) }
+      requests.push(request)
+      if (request.type === 'save_routine' && request.draft.target.kind === 'reminder') {
+        const { title, target, timing, misfire } = request.draft
+        routines = [{ id: 'routine-id', revision: 1, state: 'draft', title, target, timing, misfire }]
+      }
+      return { ok: true, kind: 'updated' }
+    })
+    expect(node.querySelector('#dshpa-reminders')?.textContent).toBe('Reminders')
+    expect(node.textContent).toContain('Read the results.')
+    await click(button(node, 'New routine'))
+    await fill(field(node, 'Routine title'), 'Review after lunch')
+    await fill(field(node, 'Scheduled time (UTC)'), '2026-11-07T13:00')
+    await fill(field(node, 'Reminder message'), 'Inspect the exact build.')
+    await click(button(node, 'Save draft'))
+    expect(requests).toEqual([expect.objectContaining({ type: 'save_routine', draft: {
+      title: 'Review after lunch', timing: { kind: 'at', at: '2026-11-07T13:00:00.000Z' },
+      misfire: 'skip', target: { kind: 'reminder', text: 'Inspect the exact build.' },
+    } })])
+    await click(button(node, 'Arm schedule'))
+    expect(requests.at(-1)).toMatchObject({ type: 'arm_routine', routineId: 'routine-id', expectedRevision: 1 })
+  })
+
   it('shows metered, uncertain, and unpriced usage separately alongside routine progress', async () => {
     const work = task('progress', { progress: { summary: 'Latest scoped update.', at: verifiedAt } })
     const { node } = await mount(async () => ({ ok: true, kind: 'snapshot', snapshot: snapshot({

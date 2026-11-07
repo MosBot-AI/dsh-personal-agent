@@ -3,6 +3,7 @@ import type { InboxArtifact, InboxPort, InboxRequest, InboxResponse, InboxSnapsh
 import type { MessageKey, Translate } from './copy.js'
 import { ApprovalCard, requestId, TaskDetail, TaskStatus } from './task.js'
 import { Usage } from './usage.js'
+import { Reminders, Routines } from './routines.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
 type ArtifactContent = Extract<InboxResponse, { kind: 'artifact' }>['artifact']
@@ -429,6 +430,7 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           <h2 id="dshpa-results">{t('today.results')} <span>{results.length}</span></h2>
           {results.length ? taskRows(results) : <p className="dshpa-muted">{t('today.noResults')}</p>}
         </section>
+        {snapshot?.schedules && <Reminders items={snapshot.schedules.reminders} t={t} />}
         <section className="dshpa-section" aria-labelledby="dshpa-other">
           <h2 id="dshpa-other">{t('today.routine')} <span>{routine.length}</span></h2>
           {routine.length ? taskRows(routine) : <p className="dshpa-muted">{t('today.noTasks')}</p>}
@@ -451,6 +453,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           </li>)}</ul>
         </details>}
         {snapshot?.usage && <Usage usage={snapshot.usage} t={t} />}
+        {snapshot?.schedules && <Routines routines={snapshot.schedules.routines} tasks={snapshot.tasks} t={t}
+          writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('routines')}
+          submit={(request, acknowledged) => { void mutate('routines', request, acknowledged) }} />}
         {task ? <TaskDetail task={task} project={snapshot?.projects.find(project => project.id === task.projectId)}
           workerConfigured={snapshot?.workerConfigured === true && !snapshot.recoveryMode} t={t} writable={writable}
           canOpenSession={writable && snapshot?.sessions.some(session => session.id === task.sessionId) === true}

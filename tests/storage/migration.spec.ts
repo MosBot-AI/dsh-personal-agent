@@ -39,6 +39,7 @@ import { migration002 } from '../../packages/personal-agent/src/storage/migratio
 import { migration003 } from '../../packages/personal-agent/src/storage/migrations/003.js'
 import { migration004 } from '../../packages/personal-agent/src/storage/migrations/004.js'
 import { migration005 } from '../../packages/personal-agent/src/storage/migrations/005.js'
+import { migration006 } from '../../packages/personal-agent/src/storage/migrations/006.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -51,6 +52,7 @@ import {
   V3_BACKUP_SUFFIX,
   V4_BACKUP_SUFFIX,
   V5_BACKUP_SUFFIX,
+  V6_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -794,6 +796,57 @@ describe('SQLite v5 to v6 upgrade', () => {
       }
     } finally {
       v5.db.close()
+    }
+  })
+})
+
+describe('SQLite v6 to v7 upgrade', () => {
+  it('preserves committed budget, attention, and recovery state in the upgrade and the private v6 backup', () => {
+    const v6 = createVersionFixture(4, true)
+    const rows = (db: DatabaseSync) => ['budget_reservations', 'attention_policies', 'worker_inputs', 'runtime_recovery']
+      .map(table => db.prepare(`SELECT * FROM ${table}`).all())
+    const at = '2026-11-07T09:00:00.000Z'
+    try {
+      transaction(v6.db, () => {
+        v6.db.exec(migration005)
+        v6.db.exec(migration006)
+        v6.db.exec("PRAGMA user_version = 6; UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1")
+        v6.db.prepare(`
+          INSERT INTO budget_reservations
+            (id, owner_id, profile_id, provider, model, pricing_version, day, created_at, updated_at, pricing,
+             ceiling_micros, actual_micros, upper_input_tokens, upper_output_tokens, unattended, status, usage)
+          VALUES ('legacy-budget', 'owner-v1', 'profile-v1', 'local', 'free', 'pricing-v1', '2026-11-07', ?, ?, ?,
+                  0, 0, 0, 1, 0, 'settled', ?)
+        `).run(at, at, JSON.stringify({
+          kind: 'known', inputMicrosPerMillion: 0, outputMicrosPerMillion: 0,
+          cacheReadMicrosPerMillion: 0, cacheWriteMicrosPerMillion: 0, ceilingMicros: 0,
+        }), JSON.stringify({ inputTokens: 0, outputTokens: 0 }))
+        v6.db.prepare("INSERT INTO attention_policies VALUES ('owner-v1', 'profile-v1', 1, ?)")
+          .run(JSON.stringify({ version: 1, mode: 'observe', timeZone: 'UTC', quietHours: null, urgentRules: [] }))
+      })
+      const original = rows(v6.db)
+      const storage = openStorageDatabase(v6.directory)
+      try {
+        expect(storage.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+        expect(rows(storage.db)).toEqual(original)
+        for (const table of ['routines', 'routine_mappings', 'routine_occurrences']) {
+          expect(storage.db.prepare(`SELECT * FROM ${table}`).all()).toEqual([])
+        }
+        expect(storage.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      } finally {
+        storage.close()
+      }
+      const backupPath = v6.path + V6_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(backupPath).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(backupPath, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(6)
+        expect(rows(backup)).toEqual(original)
+      } finally {
+        backup.close()
+      }
+    } finally {
+      v6.db.close()
     }
   })
 })

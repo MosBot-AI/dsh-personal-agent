@@ -80,6 +80,35 @@ export interface InboxUsage {
   }
 }
 
+export type InboxRoutineTiming = { kind: 'at'; at: string } | { kind: 'cron'; expression: string; timeZone: string }
+export type InboxRoutineTarget = { kind: 'reminder'; text: string } | { kind: 'goal'; taskId: string }
+
+export interface InboxRoutine {
+  readonly id: string
+  readonly title: string
+  readonly revision: number
+  readonly state: 'draft' | 'armed' | 'paused' | 'ended'
+  readonly timing: InboxRoutineTiming
+  readonly target: InboxRoutineTarget
+  readonly misfire: 'skip' | 'latest'
+  readonly nextAt?: string
+  readonly issue?: boolean
+  readonly last?: { readonly status: 'reminded' | 'queued' | 'skipped'; readonly reason?: string; readonly at: string }
+}
+
+export interface InboxReminder {
+  readonly id: string
+  readonly title: string
+  readonly text: string
+  readonly intendedAt: string
+  readonly deliveredAt: string
+}
+
+type RoutineDraft = {
+  title: string; timing: InboxRoutineTiming; misfire: InboxRoutine['misfire'];
+  target: Extract<InboxRoutineTarget, { kind: 'reminder' }> | { kind: 'goal'; taskId: string; expectedVersion: number };
+}
+
 export interface InboxSnapshot {
   readonly workerConfigured: boolean
   readonly recoveryMode?: 'reconciling' | 'restore'
@@ -88,6 +117,7 @@ export interface InboxSnapshot {
   readonly tasks: readonly InboxTask[]
   readonly approvals: readonly InboxApproval[]
   readonly usage?: InboxUsage
+  readonly schedules?: { readonly routines: readonly InboxRoutine[]; readonly reminders: readonly InboxReminder[] }
 }
 
 type TaskControl = { taskId: string; expectedVersion: number }
@@ -109,6 +139,8 @@ export type InboxRequest =
     mode: 'context' | 'work'; enabled: boolean; expectedVersion?: number; expiresAt?: string;
   } }
   | { type: 'set_attention_policy'; expectedVersion: number; policy: unknown }
+  | { type: 'save_routine'; commandId: string; routineId?: string; expectedRevision?: number; draft: RoutineDraft }
+  | { type: 'arm_routine' | 'pause_routine' | 'run_routine_now'; commandId: string; routineId: string; expectedRevision: number }
 
 export type InboxResponse =
   | { ok: true; kind: 'snapshot'; snapshot: InboxSnapshot }

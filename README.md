@@ -122,6 +122,19 @@ For a route that incurs no model charges, use `unmetered: true` in its `worker` 
 
 Proactive notifications default to `off`. The authenticated inbox `set_attention_policy` operation takes `expectedVersion` and a `policy` with `mode`, `timeZone`, `quietHours` and `urgentRules`. The default quiet interval is 22:00–08:00 UTC. Use an IANA zone for local time. Unsolicited notifications reserve up to three slots per owner and local day across channels. Explicit reminders and required decisions have separate rules. Routine progress stays in the task view. Trusted carriers use `dshpaAttention` to record a candidate and hand off an eligible exact delivery through the existing Outbox.
 
+### Schedule local reminders and task wakes
+
+Set `routines: true` in the existing `inbox` block of the named local Web profile. Add this row to the same overlay so the native schedule service waits for the private Session resolver before checking due work.
+
+```yaml
+- id: schedule
+  inject: [dshpaScheduleResolverReady]
+```
+
+Open **Routines** in **Today**, save a draft, then select **Arm schedule**. One-time schedules take a UTC instant. Repeating schedules use a five-field Cron expression and an IANA zone. The native calendar skips a missing spring-forward time and selects the earlier instant during a fall-back overlap. Select whether to skip missed occurrences or run the latest missed occurrence. Editing saves a new draft that needs explicit arming.
+
+Local reminders appear in **Today** without a Worker or a model. A task wake checks the exact released wait and current authority and budget before returning the task to the queue. To bind a later task revision, edit the draft and arm it again. **Run now** creates a separate occurrence. It uses its own command identity, independent of the next timed wake. The native Automation page shows opaque wake entries. Manage the routine and its business outcome in **Today**.
+
 ## Restore a standalone work backup
 
 Use a private standalone SQLite backup and an absolute destination path that does not exist. From the repository root after building the workspace, set `BACKUP_FILE` and `RESTORE_DIR` to those paths and run the restore command.

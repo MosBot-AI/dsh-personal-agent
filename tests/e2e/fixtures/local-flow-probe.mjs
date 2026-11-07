@@ -204,6 +204,7 @@ async function initialize(ctx) {
     const token = routing?.bindSource(account)
     assert.ok(token)
     assert.equal(routing.bindSource({ ...account, accountId: 'unverified' }), undefined)
+    assert.equal(routing.bindSource({ sourceInstanceId: 'dshpa-internal-routine', accountId: 'fixture-forged-routine' }), undefined)
     routing.releaseSource(token)
     assert.equal(typeof ctx.get('dshpaCompute')?.gpu.enqueue, 'function')
     assert.equal(typeof ctx.get('dshpaAttention')?.consider, 'function')

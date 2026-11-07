@@ -36,6 +36,7 @@ import type { EventRouter } from '../runtime/router.js'
 import { StorageError } from '../storage/schema.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
 import type { InboxResponse, InboxSession, InboxTask, InboxUsage } from './protocol.js'
+import { routineRequestSchemas, type RoutineInbox } from './routines.js'
 
 const LOCAL_SOURCE = sourceInstanceIdSchema.parse('dshpa-local-inbox')
 const MAX_SESSIONS = 64
@@ -67,6 +68,7 @@ const requestSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('artifact'), taskId: taskIdSchema, artifactId: artifactIdSchema }),
   z.strictObject({ type: z.literal('set_subscription'), subscription: z.unknown() }),
   z.strictObject({ type: z.literal('set_attention_policy'), expectedVersion: versionSchema, policy: z.unknown() }),
+  ...routineRequestSchemas,
 ])
 
 const nativeSessionSchema = z.strictObject({ id: sessionIdSchema, label: nonEmptyTextSchema.max(1_024) })
@@ -87,6 +89,7 @@ export interface InboxServiceOptions {
   readonly configureAttention?: (owner: OwnerIdentity, policy: unknown, expectedVersion: number) =>
     { ok: true; policy: { version: number } } | { ok: false; code: string }
   readonly invalidateResources?: (ref: WorkRef) => void
+  readonly routines?: RoutineInbox
   readonly now?: () => UtcInstant
 }
 
@@ -188,6 +191,7 @@ export function createInboxService(options: InboxServiceOptions) {
     })) ?? []
     const recoveryMode = store.recoveryMode()
     const usage = options.inspectUsage?.(owner)
+    const schedules = options.routines?.snapshot(owner)
     const progress = new Map(usage?.progress.map(item => [item.taskId, item]))
     return { ok: true, kind: 'snapshot', snapshot: {
       workerConfigured: executor !== undefined && worker !== undefined,
@@ -201,6 +205,7 @@ export function createInboxService(options: InboxServiceOptions) {
       }),
       approvals,
       ...(usage === undefined ? {} : { usage: usage.usage }),
+      ...(schedules === undefined ? {} : { schedules }),
     } }
   }
 
@@ -258,6 +263,10 @@ export function createInboxService(options: InboxServiceOptions) {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
         case 'create_task': return await createTask(ownerToken, request)
+        case 'save_routine':
+        case 'arm_routine':
+        case 'pause_routine':
+        case 'run_routine_now': return options.routines?.handle(owner, request) ?? failure('resource_unavailable')
         case 'set_subscription': {
           const result = options.router?.setSubscription(ownerToken, request.subscription)
           if (!result) return failure('resource_unavailable')
