@@ -12,6 +12,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Add a native DSH agent and session adapter, with real-host contract checks and compatibility evidence for control, persistence, and scheduling.
 - Define durable work records, validate owner commands and worker reports, and add deterministic task transitions with version and attempt-generation checks.
 - Add a versioned SQLite work store with single-writer locking, atomic command and intent commits, and corruption quarantine.
+- Add trusted identity bindings, exact-action review and one-use dispatch claims, and a tool-free private worker runtime.
 - Map 43 implementation tasks into GitHub Project and English Issues with native dependencies, reporting protocol, live readiness and acceptance-gated Actions reconciliation.
 
 - Specify configurable model routing with difficulty-based model/effort selection, quota-aware fallbacks, an optional LiteLLM adapter and implementation/evaluation tasks.
