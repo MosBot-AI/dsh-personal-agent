@@ -107,6 +107,35 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('reuses a previous plan as a draft and opens weekly review through the read-only request', async () => {
+    const saved = { title: 'Current goal', purpose: 'Current outcome.', successCriteria: ['Check the latest result.'],
+      priority: 'normal' as const, milestones: [] }
+    const previous = { ...saved, title: 'Earlier goal' }
+    const requests: InboxRequest[] = []
+    const { node } = await mount(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot() }
+      requests.push(request)
+      if (request.type === 'project_plan') return { ok: true, kind: 'project_plan', plan: { projectId: project.id,
+        kind: 'goal', revision: 2, draft: saved, history: [
+          { revision: 2, draft: saved, rationale: 'Prioritize the exact outcome.' }, { revision: 1, draft: previous },
+        ] } }
+      if (request.type === 'save_plan') return { ok: true, kind: 'updated', projectId: project.id }
+      if (request.type === 'project_review') return { ok: true, kind: 'project_review', at: verifiedAt, needsPriority: false, projects: [] }
+      throw new Error(`Unexpected ${request.type}`)
+    })
+    await click(button(node, project.title))
+    expect(field(node, 'Plan title').value).toBe(saved.title)
+    expect(node.textContent).toContain('Prioritize the exact outcome.')
+    await click(button(node, 'Use as a new draft'))
+    expect(field(node, 'Plan title').value).toBe(previous.title)
+    await fill(field(node, 'Reason for this plan revision'), 'Reuse after checking the new scope.')
+    await click(button(node, 'Save plan'))
+    expect(requests).toContainEqual(expect.objectContaining({ type: 'save_plan', projectId: project.id,
+      expectedRevision: 2, draft: previous, rationale: 'Reuse after checking the new scope.' }))
+    await click(button(node, 'Weekly review'))
+    expect(requests.at(-1)).toEqual({ type: 'project_review' })
+  })
+
   it('reviews scoped memory and retries a pending forget with its exact command', async () => {
     const scope = { kind: 'project', projectId: project.id } as const
     const confirmed = memoryRecord(scope, 'memory-one', '<img src=x onerror=alert(1)>', { revision: 2 })
@@ -309,7 +338,7 @@ describe('native Inbox client', () => {
       }
     })
     const { node } = await mount(port)
-    expect([...node.querySelectorAll('.dshpa-section h2')].map(heading => heading.firstChild?.textContent))
+    expect([...node.querySelectorAll('.dshpa-today .dshpa-section h2')].map(heading => heading.firstChild?.textContent))
       .toEqual(['Needs your attention', 'Results', 'Other work'])
     expect(node.textContent).toContain(approval.recipient)
     expect(node.textContent).toContain(approval.preview)

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { nonEmptyTextSchema, waitReasonSchema, workerCursorSchema } from '../domain/model.js'
+import { workerPlanStepsSchema } from '../domain/projects.js'
 import { artifactIdsSchema } from '../domain/transitions.js'
 
 const MAX_REPORT_BYTES = 16 * 1024
@@ -13,6 +14,7 @@ const reportFields = {
 
 const workerReportSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('progress'), ...reportFields }),
+  z.strictObject({ kind: z.literal('plan'), ...reportFields, steps: workerPlanStepsSchema }),
   z.strictObject({
     kind: z.literal('waiting'),
     ...reportFields,
@@ -51,6 +53,7 @@ export function workerReportInstructions(cursor: string): string {
     'Return one JSON object without Markdown or surrounding prose.',
     `Include "cursor": ${JSON.stringify(workerCursorSchema.parse(cursor))}, a short "summary", and one "kind".`,
     'For "progress" or "failed", use the summary to describe the evidence or failure.',
+    'For "plan", propose up to eight local subtask outcomes in a "steps" array. The owner reviews these drafts. A proposal cannot create Tasks or grant authority.',
     'For "ready", include "artifactIds" as an array of unique artifact references. Report readiness for verification.',
     'For "waiting", include "wait" with "reason" (input, approval, event, environment, or resource), "referenceId", and "resumeCondition".',
     'For "blocked", include the same "wait" fields with "reason": "dependency" and the exact dependency reference.',

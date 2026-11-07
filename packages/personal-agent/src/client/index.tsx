@@ -88,6 +88,21 @@ function isMemoryRecord(value: unknown, origin: 'explicit' | 'inferred'): boolea
     && value.value.text.trim().length > 0 : value.value.kind === 'reference' && isMemoryId(value.value.ref)
 }
 
+function isTextList(value: unknown): boolean {
+  return Array.isArray(value) && value.length <= 64 && value.every(item => typeof item === 'string')
+}
+
+function isPriority(value: unknown): boolean { return value === 'high' || value === 'normal' || value === 'low' }
+
+function isPlanDraft(value: unknown): boolean {
+  return isRecord(value) && typeof value.title === 'string' && typeof value.purpose === 'string' && isPriority(value.priority)
+    && isTextList(value.successCriteria) && Array.isArray(value.milestones) && value.milestones.length <= 64
+    && value.milestones.every(item => isRecord(item) && typeof item.title === 'string'
+      && (item.deadline === undefined || (isRecord(item.deadline) && isMemoryInstant(item.deadline.at) && typeof item.deadline.timeZone === 'string')))
+    && (value.reviewCadence === undefined || (isRecord(value.reviewCadence) && isCount(value.reviewCadence.intervalDays)
+      && typeof value.reviewCadence.timeZone === 'string'))
+}
+
 function isInboxResponse(value: unknown): value is InboxResponse {
   if (!isRecord(value)) return false
   if (value.ok === false) return typeof value.code === 'string'
@@ -101,6 +116,20 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   }
   if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'context') return value.value === null || Array.isArray(value.value) || isRecord(value.value)
+  if (value.kind === 'project_plan' && isRecord(value.plan)) {
+    const plan = value.plan
+    return typeof plan.projectId === 'string' && (plan.kind === 'project' || plan.kind === 'goal') && isCount(plan.revision)
+      && isPlanDraft(plan.draft) && Array.isArray(plan.history) && plan.history.length <= 20
+      && plan.history.every(row => isRecord(row) && isCount(row.revision) && isPlanDraft(row.draft)
+        && (row.rationale === undefined || typeof row.rationale === 'string')
+        && (row.recordedAt === undefined || isMemoryInstant(row.recordedAt)))
+  }
+  if (value.kind === 'project_review') {
+    return isMemoryInstant(value.at) && typeof value.needsPriority === 'boolean' && Array.isArray(value.projects)
+      && value.projects.length <= 64 && value.projects.every(item => isRecord(item) && typeof item.projectId === 'string'
+        && typeof item.title === 'string' && isPriority(item.priority) && (item.due === undefined || isMemoryInstant(item.due))
+        && [item.milestones, item.ready, item.waiting, item.accepted].every(isTextList))
+  }
   if (value.kind === 'memory_records') {
     return Array.isArray(value.confirmed) && Array.isArray(value.inferred)
       && value.confirmed.length + value.inferred.length <= 25

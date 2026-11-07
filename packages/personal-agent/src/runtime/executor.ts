@@ -613,6 +613,15 @@ class WorkerExecutor {
         }
         return
       }
+      if (report.kind === 'plan') {
+        if (!this.options.store.putWorkerPlan(entry.ref, state.task.version, input.cursor, report.steps)) {
+          entry.issue = 'report_unavailable'
+          return
+        }
+        entry.report = report
+        this.observeSignal(entry, { kind: 'progress' })
+        return
+      }
       if (report.kind === 'handback') {
         const routed = entry.routed
         if (!routed || !authorized(routed.authorize) || !this.options.store.applyWorkerHandback(entry.ref, {

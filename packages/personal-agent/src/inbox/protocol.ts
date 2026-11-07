@@ -1,5 +1,6 @@
 import type { Delivery, TaskStatus } from '../domain/model.js'
 import type { MemoryActiveRecord, MemoryScope } from '@mosbot-ai/dshpa-plugin-api'
+import type { ProjectPlanInput } from '../domain/projects.js'
 
 export const INBOX_RPC_ENDPOINT = 'dshpa/inbox'
 
@@ -12,6 +13,26 @@ export interface InboxProject {
   readonly id: string
   readonly title: string
   readonly purpose: string
+  readonly kind?: 'project' | 'goal'
+}
+
+export interface InboxPlan {
+  readonly projectId: string
+  readonly kind: 'project' | 'goal'
+  readonly revision: number
+  readonly draft: ProjectPlanInput
+  readonly history: readonly { revision: number; draft: ProjectPlanInput; rationale?: string; recordedAt?: string }[]
+}
+
+export interface InboxReviewProject {
+  readonly projectId: string
+  readonly title: string
+  readonly priority: ProjectPlanInput['priority']
+  readonly due?: string
+  readonly milestones: readonly string[]
+  readonly ready: readonly string[]
+  readonly waiting: readonly string[]
+  readonly accepted: readonly string[]
 }
 
 export interface InboxArtifact {
@@ -35,6 +56,8 @@ export interface InboxTask {
   readonly canAccept?: boolean
   readonly canResumeCompute?: boolean
   readonly progress?: { readonly summary: string; readonly at: string }
+  readonly prerequisites?: readonly { id: string; completed: boolean }[]
+  readonly proposal?: { readonly cursor: string; readonly steps: readonly string[] }
 }
 
 export interface InboxApproval {
@@ -131,6 +154,11 @@ export type InboxRequest =
   | { type: 'snapshot' }
   | { type: 'create_project'; commandId: string; title: string; purpose: string }
   | { type: 'create_task'; commandId: string; projectId: string; sessionId: string; outcome: string }
+  | { type: 'save_plan'; commandId: string; projectId?: string; expectedRevision?: number; draft: ProjectPlanInput; rationale: string }
+  | { type: 'project_plan'; projectId: string }
+  | { type: 'project_review' }
+  | ({ type: 'set_prerequisites'; prerequisiteIds: string[] } & TaskControl)
+  | { type: 'accept_plan_step'; taskId: string; cursor: string; index: number }
   | ({ type: 'start'; cursor: string } & TaskControl)
   | ({ type: 'pause' | 'cancel'; commandId: string } & TaskControl)
   | ({ type: 'resume'; commandId: string } & TaskControl)
@@ -166,6 +194,8 @@ export type InboxResponse =
   | { ok: true; kind: 'attention_policy'; version: number }
   | { ok: true; kind: 'resident'; value: object }
   | { ok: true; kind: 'context'; value: object | null }
+  | { ok: true; kind: 'project_plan'; plan: InboxPlan }
+  | { ok: true; kind: 'project_review'; projects: readonly InboxReviewProject[]; needsPriority: boolean; at: string }
   | { ok: true; kind: 'memory_records'; confirmed: readonly MemoryActiveRecord[]; inferred: readonly MemoryActiveRecord[] }
   | { ok: true; kind: 'memory_change'; state: 'completed' | 'pending'; recordId: string; revision: number }
   | { ok: false; code: string }
