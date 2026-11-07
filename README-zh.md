@@ -4,7 +4,7 @@
 
 dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**已实现原生 Bundle、工作与安全基础、受限 Worker 和可验证产物交付（PA-001 至 PA-007）。**
+**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证产物交付和本地 Web 收件箱（PA-001 至 PA-008）。**
 
 [宿主兼容性记录](docs/evidence/host-compatibility-zh.md)说明已验证的原生控制能力，以及后续任务需要处理的边界。
 [工作领域证据](docs/evidence/PA-003-zh.md)覆盖记录校验、命令准入和任务状态转换。
@@ -12,6 +12,7 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 [授权证据](docs/evidence/PA-005-zh.md)覆盖可信身份、精确动作审批、一次性派发和私有 Worker 工具隔离。
 [Worker 证据](docs/evidence/PA-006-zh.md)覆盖原生启动与恢复、报告准入、前台控制和资源清理。
 [产物与交付证据](docs/evidence/PA-007-zh.md)覆盖不可变内容、可信验收和供应商回执处理。
+[本地 Web 收件箱证据](docs/evidence/PA-008-zh.md)覆盖原生会话集成、任务控制、审批和结果验收。
 
 [实施 Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent 协作流程](docs/11-github-project-workflow-zh.md)
 
@@ -47,6 +48,37 @@ pnpm exec dsh --profile dshpa
 ```
 
 `sdk` Profile 通过标准输入和输出提供 JSON-RPC 服务。连接 JSON-RPC 客户端后即可通过这两个流发送请求。前台运行时按 Ctrl+C 停止实例。
+
+## 打开本地 Web 收件箱
+
+构建工作区，并对命名 Web Profile 执行一次初始化。使用 DSH Web 已有的所有者登录流程，并将 Profile 绑定在回环地址。
+
+```sh
+export DSH_HOME="$PWD/.dshpa/harness"
+export DSH_PERMISSION_MODE=workspace-write
+pnpm build
+pnpm exec dsh --profile dshpa-web --from-default-profile web --dump-config
+pnpm exec dsh plugin --profile dshpa-web add "link:$PWD/packages/personal-agent"
+```
+
+将以下覆盖配置保存为 `.dshpa/inbox.patch.yml`。把 Worker 的两个路由值替换成 DSH 中已配置的供应商与模型。省略 `worker` 块可在不启动模型工作的情况下打开收件箱。
+
+```yaml
+- id: dshpa
+  config:
+    inbox:
+      storageDirectory: !!js dshHomePath('dshpa-inbox')
+      workRoot: !!js dshHomePath('dshpa-work')
+      worker:
+        provider: YOUR_CONFIGURED_PROVIDER
+        model: YOUR_CONFIGURED_MODEL
+```
+
+```sh
+pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 127.0.0.1
+```
+
+打开或新建一条原生对话，然后选择 DSH 侧栏中的 **待办**。创建项目并将任务关联到该对话。明确启动任务，在 Worker 释放后查看候选产物，并在收件箱接受结果。可通过对话链接回到原生记录和输入框。
 
 ## 校验计划
 

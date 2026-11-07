@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, and verifiable artifact delivery are implemented (PA-001 through PA-007).**
+**The native bundle, work and security foundations, bounded Workers, verifiable artifact delivery, and local Web inbox are implemented (PA-001 through PA-008).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -12,6 +12,7 @@ The [storage evidence](docs/evidence/PA-004.md) covers atomic commits, locking, 
 The [authorization evidence](docs/evidence/PA-005.md) covers trusted identity, exact-action review, one-use dispatch, and private worker tool isolation.
 The [Worker evidence](docs/evidence/PA-006.md) covers native launch and resume, report admission, foreground control, and teardown.
 The [artifact and delivery evidence](docs/evidence/PA-007.md) covers immutable content, trusted verification, and provider receipt handling.
+The [local Web inbox evidence](docs/evidence/PA-008.md) covers native conversation integration, task controls, approval, and result acceptance.
 
 [Implementation Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent workflow](docs/11-github-project-workflow.md)
 
@@ -47,6 +48,37 @@ pnpm exec dsh --profile dshpa
 ```
 
 The `sdk` profile serves JSON-RPC over standard input and output. Connect a JSON-RPC client to those streams for requests. Press Ctrl+C to stop a foreground instance.
+
+## Open the local Web inbox
+
+Build the workspace and initialize the named Web profile once. Use the existing DSH Web owner sign-in and keep the profile bound to loopback.
+
+```sh
+export DSH_HOME="$PWD/.dshpa/harness"
+export DSH_PERMISSION_MODE=workspace-write
+pnpm build
+pnpm exec dsh --profile dshpa-web --from-default-profile web --dump-config
+pnpm exec dsh plugin --profile dshpa-web add "link:$PWD/packages/personal-agent"
+```
+
+Save the following overlay as `.dshpa/inbox.patch.yml`. Replace the two Worker route values with a provider and model already configured in DSH. Omit the `worker` block to open the inbox without starting model work.
+
+```yaml
+- id: dshpa
+  config:
+    inbox:
+      storageDirectory: !!js dshHomePath('dshpa-inbox')
+      workRoot: !!js dshHomePath('dshpa-work')
+      worker:
+        provider: YOUR_CONFIGURED_PROVIDER
+        model: YOUR_CONFIGURED_MODEL
+```
+
+```sh
+pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 127.0.0.1
+```
+
+Open or create a native conversation, then select **Today** in the DSH sidebar. Create a project and attach tasks to the conversation. Start work explicitly, review the candidate artifact after the Worker releases, and accept the result in the inbox. Use the conversation link to return to the native transcript and composer.
 
 ## Validate the plan
 
