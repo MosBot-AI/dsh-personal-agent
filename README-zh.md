@@ -4,11 +4,12 @@
 
 dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**已实现原生 Bundle、宿主合约、工作领域逻辑和 SQLite 存储（PA-001 至 PA-004）。**
+**已实现原生 Bundle、宿主合约、工作领域逻辑、SQLite 存储和动作授权（PA-001 至 PA-005）。**
 
 [宿主兼容性记录](docs/evidence/host-compatibility-zh.md)说明已验证的原生控制能力，以及后续任务需要处理的边界。
 [工作领域证据](docs/evidence/PA-003-zh.md)覆盖记录校验、命令准入和任务状态转换。
 [存储证据](docs/evidence/PA-004-zh.md)覆盖原子提交、锁、迁移和故障恢复。
+[授权证据](docs/evidence/PA-005-zh.md)覆盖可信身份、精确动作审批、一次性派发和私有 Worker 工具隔离。
 
 [实施 Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent 协作流程](docs/11-github-project-workflow-zh.md)
 
