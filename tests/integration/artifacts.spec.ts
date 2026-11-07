@@ -16,6 +16,7 @@ import {
   ownerIdSchema,
   profileIdSchema,
   projectSchema,
+  sessionIdSchema,
   sourceEventSchema,
   taskIdSchema,
   utcInstantSchema,
@@ -23,6 +24,7 @@ import {
   type Delivery,
 } from '../../packages/personal-agent/src/domain/model.js'
 import type { WorkState } from '../../packages/personal-agent/src/domain/transitions.js'
+import { makeWorkerInput } from '../../packages/personal-agent/src/runtime/input-journal.js'
 import { DATABASE_FILENAME, QUARANTINE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { openWorkStore, type StoredWorkResult, type WorkRef } from '../../packages/personal-agent/src/storage/store.js'
 
@@ -97,14 +99,14 @@ function allocation(label: string) {
 }
 
 function start(store: Fixture['store'], ref: WorkRef, queued: WorkState, label: string, nativeWorker = false): WorkState {
+  if (!nativeWorker) return succeed(store.applyEvent(ref, { type: 'start', ...fence(queued), executor: 'fixture-executor' }))
   const cursor = `input-${label}`
-  return succeed(store.applyEvent(ref, {
-    type: 'start', ...fence(queued), executor: nativeWorker ? 'native-dsh' : 'fixture-executor',
-    ...(nativeWorker ? {
-      sessionId: `session-${label}`,
-      worker: { presetId: 'fixture', cwd: tmpdir(), provider: 'fixture', model: 'fixture', inputCursor: cursor, inputHistory: [cursor] },
-    } : {}),
-  }))
+  const sessionId = sessionIdSchema.parse(`session-${label}`)
+  const journal = makeWorkerInput(queued, sessionId, { cursor, text: 'Verify the fixture result.' }, 'followup')
+  return succeed(store.applyWorkerEvent(ref, {
+    type: 'start', ...fence(queued), executor: 'native-dsh', sessionId,
+    worker: { presetId: 'fixture', cwd: tmpdir(), provider: 'fixture', model: 'fixture', inputCursor: cursor, inputHistory: [cursor] },
+  }, journal))
 }
 
 function seed(f: Fixture, label: string, { requiresReceipt = false, deliveries = [], nativeWorker = false }: {

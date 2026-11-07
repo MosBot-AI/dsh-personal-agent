@@ -71,11 +71,16 @@ export type InboxRequest =
   | ({ type: 'accept_result' } & TaskControl)
   | { type: 'approval'; requestId: string; expectedVersion: number; digest: string; decision: 'approve' | 'deny' }
   | { type: 'artifact'; taskId: string; artifactId: string }
+  | { type: 'set_subscription'; subscription: {
+    sourceInstanceId: string; accountId: string; threadId: string; projectId: string; taskId: string;
+    mode: 'context' | 'work'; enabled: boolean; expectedVersion?: number; expiresAt?: string;
+  } }
 
 export type InboxResponse =
   | { ok: true; kind: 'snapshot'; snapshot: InboxSnapshot }
   | { ok: true; kind: 'updated'; taskId?: string; projectId?: string }
   | { ok: true; kind: 'artifact'; artifact: InboxArtifact & { text: string } }
+  | { ok: true; kind: 'subscription'; version: number }
   | { ok: false; code: string }
 
 export type InboxPort = (request: InboxRequest, signal?: AbortSignal) => Promise<InboxResponse>

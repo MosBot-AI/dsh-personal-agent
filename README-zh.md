@@ -81,6 +81,12 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 
 打开或新建一条原生对话，然后选择 DSH 侧栏中的 **待办**。创建项目并将任务关联到该对话。明确启动任务，在 Worker 释放后查看候选产物，并在收件箱接受结果。可通过对话链接回到原生记录和输入框。
 
+### 路由可信适配器的事件
+
+本地 Web 宿主为进程内适配器提供 `dshpaRouting` 服务。所有者可以在 `inbox.sourceAccounts` 中声明已经验证的账户，填写 `sourceInstanceId`、`accountId` 和 UTC 时间 `verifiedAt`。适配器须独立于消息内容验证账户，再绑定来源令牌，并提交原始发生时间、稳定的外部事件 ID 和修订。所有者通过已认证收件箱的 `set_subscription` 操作管理带版本的 `work` 或 `context` 订阅。工作事件按来源、账户、线程、项目和任务精确送达。`routed` 回执包含当前的原生输入日志状态。上下文订阅只记录关联，不向 Worker 投递输入或唤醒 Worker。
+
+语义评估为可选能力。在不产生模型费用的部署中，可添加 `inbox.routing` 配置块，填写 `provider`、`model`、允许的 `dataScope` 标签和 `unmetered: true`。评估器按有限批次返回供所有者审阅的提议。`inbox.worker.unmetered` 为 `true` 或可信策略允许输入时，精确工作订阅无需 `inbox.routing` 即可路由。通过事件唤醒 Worker 需要针对当前授权、预算和等待条件的可信唤醒策略。连接器登记和按量计费的后台派发由其他实施任务处理。
+
 ## 恢复独立工作备份
 
 使用私有的独立 SQLite 备份和一个尚不存在的绝对目标路径。构建工作区后，在仓库根目录将 `BACKUP_FILE` 和 `RESTORE_DIR` 设为这两个路径，再运行恢复命令。

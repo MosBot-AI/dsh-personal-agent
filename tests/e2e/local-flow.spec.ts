@@ -118,6 +118,14 @@ describe('published DSH Web local inbox', () => {
     const heldId = await createTask('held', 'PA008_HELD Keep running while the owner chats.')
     const resultId = await createTask('result', 'PA008_RESULT Draft an inspectable local result.')
     expect(heldId).not.toBe(resultId)
+    const subscription = {
+      sourceInstanceId: 'pa008-fixture-connector', accountId: 'pa008-fixture-account', threadId: 'fixture-subscription',
+      projectId: fixtureProjectId, taskId: heldId, mode: 'context', enabled: true,
+    } as const
+    expect(await inbox({ type: 'set_subscription', subscription })).toEqual({ ok: true, kind: 'subscription', version: 1 })
+    expect(await inbox({ type: 'set_subscription', subscription })).toEqual({ ok: false, code: 'version_conflict' })
+    expect(await inbox({ type: 'set_subscription', subscription: { ...subscription, enabled: false, expectedVersion: 1 } }))
+      .toEqual({ ok: true, kind: 'subscription', version: 2 })
     const held = await readTask(heldId)
     const result = await readTask(resultId)
     for (const task of [held, result]) {
@@ -219,9 +227,18 @@ describe('published DSH Web local inbox', () => {
         '    inbox:',
         "      storageDirectory: !!js dshHomePath('configured-inbox')",
         '      workRoot: !!js process.cwd()',
+        '      sourceAccounts:',
+        '        - sourceInstanceId: pa008-fixture-connector',
+        '          accountId: pa008-fixture-account',
+        '          verifiedAt: "2026-11-07T08:00:00.000Z"',
         '      worker:',
         '        provider: dshpa-web-fixture',
         '        model: fixture-worker',
+        '      routing:',
+        '        provider: dshpa-web-fixture',
+        '        model: fixture-routing',
+        '        dataScope: [fixture-public]',
+        '        unmetered: true',
       ],
     })
     const cookie = await host.exchange()

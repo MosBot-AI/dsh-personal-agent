@@ -23,6 +23,7 @@ import {
   effectSchema,
   grantSchema,
   projectSchema,
+  sourceEventSchema,
 } from '../../packages/personal-agent/src/domain/model.js'
 import { workStateSchema } from '../../packages/personal-agent/src/domain/transitions.js'
 import { verificationRecordSchema } from '../../packages/personal-agent/src/domain/verification.js'
@@ -36,6 +37,7 @@ import {
 import { migration001 } from '../../packages/personal-agent/src/storage/migrations/001.js'
 import { migration002 } from '../../packages/personal-agent/src/storage/migrations/002.js'
 import { migration003 } from '../../packages/personal-agent/src/storage/migrations/003.js'
+import { migration004 } from '../../packages/personal-agent/src/storage/migrations/004.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -46,6 +48,7 @@ import {
   V1_BACKUP_SUFFIX,
   V2_BACKUP_SUFFIX,
   V3_BACKUP_SUFFIX,
+  V4_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -60,14 +63,14 @@ function createPrivateFixture(path: string, content = ''): void {
   writeFileSync(path, content, { flag: 'wx', mode: 0o600 })
 }
 
-function createVersionFixture(version: 1 | 2 | 3, wal = false) {
+function createVersionFixture(version: 1 | 2 | 3 | 4, wal = false) {
   const directory = fixtureDirectory()
   const path = join(directory, DATABASE_FILENAME)
   createPrivateFixture(path)
   const at = '2026-11-07T09:00:00.000Z'
   const scope = { ownerId: 'owner-v1', profileId: 'profile-v1' }
   const destination = { sourceInstanceId: 'source-v1', externalDestinationId: 'thread-v1' }
-  const status = version === 3 ? 'completed' : version === 2 ? 'running' : 'queued'
+  const status = version >= 3 ? 'completed' : version === 2 ? 'running' : 'queued'
   const artifactId = 'artifact-v3'
   const effectReceipt = { providerReceiptId: 'effect-receipt-v3', recordedAt: at }
   const project = projectSchema.parse({
@@ -81,16 +84,20 @@ function createVersionFixture(version: 1 | 2 | 3, wal = false) {
     task: {
       id: 'task-v1', ...scope, projectId: project.id, conversationId: conversation.id,
       requestedOutcome: 'Preserve existing work.', constraints: [],
-      acceptance: { criteria: ['Retain work'], requiresArtifact: version === 3, requiresReceipt: version === 3 },
+      acceptance: { criteria: ['Retain work'], requiresArtifact: version >= 3, requiresReceipt: version >= 3 },
       provenance: { sourceEventIds: [] }, version, generation: 1, status,
       attemptId: 'attempt-v1', createdAt: at, updatedAt: at,
     },
     attempt: {
-      id: 'attempt-v1', taskId: 'task-v1', generation: 1, status, artifactIds: version === 3 ? [artifactId] : [],
+      id: 'attempt-v1', taskId: 'task-v1', generation: 1, status, artifactIds: version >= 3 ? [artifactId] : [],
       mandate: { id: 'mandate-v1', ...scope, policyVersion: 'policy-v1' },
       ...(version >= 2 ? { executor: 'native-dsh', startedAt: at } : {}),
-      ...(version === 3 ? { endedAt: at, outcome: {
+      ...(version >= 3 ? { endedAt: at, outcome: {
         status: 'completed', summary: 'Verified retained fixture.', receiptId: effectReceipt.providerReceiptId,
+      } } : {}),
+      ...(version === 4 ? { sessionId: 'session-v4', worker: {
+        presetId: 'fixture', cwd: '/fixture', provider: 'fixture', model: 'fixture',
+        inputCursor: 'cursor-v4', inputHistory: ['cursor-v4'], releasedAt: at,
       } } : {}),
     },
   })
@@ -106,14 +113,14 @@ function createVersionFixture(version: 1 | 2 | 3, wal = false) {
   if (!proposal) throw new Error('Invalid v2 action fixture')
   const effect = effectSchema.parse({
     operationId: 'effect-v1', ...attempt, intent: 'Retain existing intent.', payloadDigest: proposal.digest,
-    ...(version === 3 ? { status: 'confirmed', grantId: 'grant-v2', receipt: effectReceipt }
+    ...(version >= 3 ? { status: 'confirmed', grantId: 'grant-v2', receipt: effectReceipt }
       : version === 2 ? { status: 'dispatching', grantId: 'grant-v2' } : { status: 'prepared' }),
   })
   const delivery = deliverySchema.parse({
     id: 'delivery-v1', ...scope, destination,
-    payload: { text: 'Retain existing notice.', artifactIds: version === 3 ? [artifactId] : [] },
+    payload: { text: 'Retain existing notice.', artifactIds: version >= 3 ? [artifactId] : [] },
     dedupeKey: 'notice-v1', retries: 0,
-    ...(version === 3 ? { status: 'accepted', receipt: { providerReceiptId: 'delivery-receipt-v3', recordedAt: at } }
+    ...(version >= 3 ? { status: 'accepted', receipt: { providerReceiptId: 'delivery-receipt-v3', recordedAt: at } }
       : { status: 'pending' }),
   })
 
@@ -122,7 +129,8 @@ function createVersionFixture(version: 1 | 2 | 3, wal = false) {
     transaction(db, () => {
       db.exec(migration001)
       if (version >= 2) db.exec(migration002)
-      if (version === 3) db.exec(migration003)
+      if (version >= 3) db.exec(migration003)
+      if (version === 4) db.exec(migration004)
       db.exec(`PRAGMA application_id = ${APPLICATION_ID}; PRAGMA user_version = ${version}`)
     })
     if (wal) db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA wal_autocheckpoint = 0')
@@ -162,7 +170,7 @@ function createVersionFixture(version: 1 | 2 | 3, wal = false) {
         db.prepare('INSERT INTO action_dispatches (operation_id, grant_id, claimed_at) VALUES (?, ?, ?)')
           .run(effect.operationId, grant.id, at)
       }
-      if (version === 3) {
+      if (version >= 3) {
         const bytes = Buffer.from('Preserve these exact artifact bytes. 本地交付\n')
         const digest = createHash('sha256').update(bytes).digest('hex')
         const artifact = artifactSchema.parse({
@@ -189,6 +197,22 @@ function createVersionFixture(version: 1 | 2 | 3, wal = false) {
           .run(attempt.taskId, attempt.attemptId, attempt.generation, work.task.version, JSON.stringify(verification))
         db.prepare("INSERT INTO outbox_bindings (delivery_id, route_id, account_id) VALUES (?, 'route-v3', 'account-v2')")
           .run(delivery.id)
+      }
+      if (version === 4) {
+        const source = sourceEventSchema.parse({
+          id: 'source-event-v4', ...scope, sourceInstanceId: destination.sourceInstanceId,
+          externalEventId: 'existing-v4-input', externalRevision: '1', actor: { kind: 'person', externalActorId: 'fixture' },
+          body: { text: 'Retain legacy source intake.' }, occurredAt: at, receivedAt: at,
+          threadId: destination.externalDestinationId, provenance: {},
+        })
+        db.prepare('INSERT INTO source_events (id, record) VALUES (?, ?)').run(source.id, JSON.stringify(source))
+        const content = 'Retain the earlier Worker input journal.'
+        db.prepare(`
+          INSERT INTO worker_inputs
+            (task_id, attempt_id, generation, cursor, session_id, message_id, digest, content, kind, status, observed_at)
+          VALUES (?, ?, ?, 'cursor-v4', 'session-v4', ?, ?, ?, 'followup', 'admitted', ?)
+        `).run(attempt.taskId, attempt.attemptId, attempt.generation,
+          `dshpa-input-${'1'.repeat(64)}`, createHash('sha256').update(content).digest('hex'), content, at)
       }
     })
     return { directory, path, db }
@@ -472,7 +496,7 @@ describe('SQLite failure recovery', () => {
   })
 })
 
-describe('SQLite v1 to v4 upgrade', () => {
+describe('SQLite v1 to v5 upgrade', () => {
   it('preserves original work and backs up a consistent v1 view including committed WAL rows', () => {
     const v1 = createVersionFixture(1, true)
     try {
@@ -559,7 +583,7 @@ describe('SQLite v1 to v4 upgrade', () => {
   })
 })
 
-describe('SQLite v2 to v4 upgrade', () => {
+describe('SQLite v2 to v5 upgrade', () => {
   it('preserves committed WAL work and authorization claims in an owner-private v2 backup', () => {
     const v2 = createVersionFixture(2, true)
     try {
@@ -628,7 +652,7 @@ describe('SQLite v2 to v4 upgrade', () => {
   })
 })
 
-describe('SQLite v3 to v4 upgrade', () => {
+describe('SQLite v3 to v5 upgrade', () => {
   it('preserves committed WAL verification, artifact bytes and receipt bindings', () => {
     const v3 = createVersionFixture(3, true)
     try {
@@ -688,14 +712,42 @@ describe('SQLite v3 to v4 upgrade', () => {
   })
 })
 
-describe('standalone SQLite snapshot restore', () => {
-  it.each([3, 4])('publishes source v%s in restore mode while preserving its records and source file', version => {
-    const source = createVersionFixture(3)
+describe('SQLite v4 to v5 upgrade', () => {
+  it('retains legacy source dedupe rows, Worker input journals and the recovery fence in a v4 backup', () => {
+    const v4 = createVersionFixture(4, true)
+    const recoveryRows = (db: DatabaseSync) => ['source_events', 'worker_inputs', 'runtime_recovery']
+      .map(table => db.prepare(`SELECT * FROM ${table}`).all())
     try {
-      if (version === 4) migrateSchema(source.db)
+      v4.db.exec("UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1")
+      const originals = recoveryRows(v4.db)
+      const storage = openStorageDatabase(v4.directory)
+      try {
+        expect(storage.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+        expect(recoveryRows(storage.db)).toEqual(originals)
+        expect(storage.db.prepare('SELECT * FROM routing_receipts').all()).toEqual([])
+        expect(storage.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      } finally {
+        storage.close()
+      }
+      const backupPath = v4.path + V4_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(backupPath).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(backupPath, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(4)
+        expect(recoveryRows(backup)).toEqual(originals)
+      } finally {
+        backup.close()
+      }
     } finally {
-      source.db.close()
+      v4.db.close()
     }
+  })
+})
+
+describe('standalone SQLite snapshot restore', () => {
+  it.each([3, 4] as const)('publishes source v%s in restore mode while preserving its records and source file', version => {
+    const source = createVersionFixture(version)
+    source.db.close()
     const sourceBytes = readFileSync(source.path)
     const destination = join(fixtureDirectory(), 'restore')
     restoreWorkStoreBackup(source.path, destination)

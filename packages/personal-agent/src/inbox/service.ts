@@ -29,6 +29,7 @@ import type { WorkState } from '../domain/transitions.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
 import type { ExecutorResult, WorkerExecutor } from '../runtime/executor.js'
 import { workerInputSchema } from '../runtime/reports.js'
+import type { EventRouter } from '../runtime/router.js'
 import { StorageError } from '../storage/schema.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
 import type { InboxResponse, InboxSession, InboxTask } from './protocol.js'
@@ -61,6 +62,7 @@ const requestSchema = z.discriminatedUnion('type', [
     digest: sha256DigestSchema, decision: z.enum(['approve', 'deny']),
   }),
   z.strictObject({ type: z.literal('artifact'), taskId: taskIdSchema, artifactId: artifactIdSchema }),
+  z.strictObject({ type: z.literal('set_subscription'), subscription: z.unknown() }),
 ])
 
 const nativeSessionSchema = z.strictObject({ id: sessionIdSchema, label: nonEmptyTextSchema.max(1_024) })
@@ -73,6 +75,7 @@ export interface InboxServiceOptions {
   readonly listSessions?: () => readonly InboxSession[] | Promise<readonly InboxSession[]>
   readonly worker?: { readonly presetId: string; readonly cwd: string; readonly dataScope: readonly string[] }
   readonly actionGate?: ReturnType<WorkStore['createActionGate']>
+  readonly router?: EventRouter
   readonly now?: () => UtcInstant
 }
 
@@ -102,7 +105,7 @@ function terminal(state: WorkState): boolean {
   return state.task.status === 'completed' || state.task.status === 'cancelled' || state.task.status === 'failed'
 }
 
-/** Owner-scoped adapter for the native inbox. It never drives a primary agent or recovers cold workers. */
+/** Owner-scoped adapter for the native inbox and deterministic foreground controls. */
 export function createInboxService(options: InboxServiceOptions) {
   const { store, executor, identity, actionGate } = options
   const worker = options.worker && { ...options.worker, dataScope: [...options.worker.dataScope] }
@@ -225,6 +228,11 @@ export function createInboxService(options: InboxServiceOptions) {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
         case 'create_task': return await createTask(ownerToken, request)
+        case 'set_subscription': {
+          const result = options.router?.setSubscription(ownerToken, request.subscription)
+          if (!result) return failure('resource_unavailable')
+          return result.ok ? { ok: true, kind: 'subscription', version: result.subscription.version } : failure(result.code)
+        }
         case 'create_project': {
           const projectId = projectIdSchema.parse(`inbox-${stableId('project', owner.ownerId, owner.profileId, owner.clientId, request.commandId)}`)
           const existing = store.getProject(owner, projectId)

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { activateLocalInbox } from './node_modules/@mosbot-ai/dshpa/lib/inbox/host.js'
 import { canonicalizeAction } from './node_modules/@mosbot-ai/dshpa/lib/policy/grants.js'
@@ -15,6 +16,7 @@ export const inject = ['appReady', 'appExit', 'agents', 'connection', 'dshpa', '
 const provider = 'dshpa-web-fixture'
 const chatModel = 'fixture-chat'
 const workerModel = 'fixture-worker'
+const routingModel = 'fixture-routing'
 const sessionId = 'pa008-native-chat'
 const conversationId = 'pa008-fixture-conversation'
 const projectId = 'pa008-fixture-project'
@@ -60,12 +62,27 @@ function attachModel(ctx) {
       return [
         { provider, id: chatModel, name: 'PA-008 fixture chat' },
         { provider, id: workerModel, name: 'PA-008 fixture worker' },
+        { provider, id: routingModel, name: 'PA-010 fixture routing' },
       ]
     }
 
     async *stream(options) {
       if (options.model === chatModel) {
         yield* answer('The native conversation stayed usable during the task.')
+        return
+      }
+      if (options.model === routingModel) {
+        assert.equal(options.purpose, 'dshpa-routing')
+        assert.equal(options.sessionId, undefined)
+        assert.equal(options.maxTokens, 1536)
+        assert.deepEqual(options.tools ?? [], [])
+        assert.match(options.system, /Assess each item/u)
+        const batch = JSON.parse(options.messages[0].content[0].text)
+        assert.deepEqual(batch.map(item => item.text), ['Assess one new request.', 'Assess another new request.'])
+        assert.ok(batch.every(item => item.kind === 'candidate' && Object.keys(item).length === 3))
+        yield* answer(JSON.stringify(batch.map((item, index) => index === 0
+          ? { id: item.id, kind: 'propose_task', summary: 'Prepare the requested result.' }
+          : { id: item.id, kind: 'ignore' })))
         return
       }
       assert.equal(options.model, workerModel)
@@ -166,6 +183,11 @@ function seedWork(local) {
 async function initialize(ctx) {
   attachModel(ctx)
   if (process.env.DSHPA_WEB_FLOW_CONFIG_ONLY === '1') {
+    const routing = ctx.get('dshpaRouting')
+    const token = routing?.bindSource(account)
+    assert.ok(token)
+    assert.equal(routing.bindSource({ ...account, accountId: 'unverified' }), undefined)
+    routing.releaseSource(token)
     console.log('DSHPA_WEB_FLOW_READY')
     return
   }
@@ -176,6 +198,7 @@ async function initialize(ctx) {
     storageDirectory: join(process.env.DSH_HOME, 'fixture-inbox'),
     workRoot,
     worker: { provider, model: workerModel, dataScope: route.dataScope, concurrency: 2 },
+    routing: { provider, model: routingModel, dataScope: route.dataScope, unmetered: true },
   }, {
     verifiedAccounts: [{ ...account, verifiedAt: new Date().toISOString() }],
     actionRoutes: [{
@@ -189,6 +212,24 @@ async function initialize(ctx) {
   assert.equal(chat.sessionId, sessionId)
   await ctx.sessionController.selectModel({ sessionId, provider, model: chatModel })
   seedWork(local)
+  const source = local.routing.bindSource(account)
+  assert.ok(source)
+  const candidates = ['Assess one new request.', 'Assess another new request.'].map((text, index) => {
+    const submitted = mustSucceed(local.routing.receive(source, {
+      kind: 'candidate', projectId, threadId: `pa010-thread-${index}`, externalEventId: `pa010-event-${index}`,
+      externalRevision: 'fixture-revision', occurredAt: new Date().toISOString(), actorKind: 'person',
+      externalActorId: 'fixture-person', text, dataScope: route.dataScope,
+    }), 'admit the fixture candidate')
+    assert.deepEqual(submitted.disposition, { kind: 'queued' })
+    return submitted.eventId
+  })
+  const deadline = performance.now() + 4_000
+  while (local.routing.snapshot().queued + local.routing.snapshot().inFlight > 0 && performance.now() < deadline) await delay(15)
+  assert.deepEqual(candidates.map(id => local.routing.status(source, id)?.disposition), [
+    { kind: 'assessed', decision: { kind: 'propose_task', summary: 'Prepare the requested result.' } },
+    { kind: 'assessed', decision: { kind: 'ignore' } },
+  ])
+  local.routing.releaseSource(source)
   console.log('DSHPA_WEB_FLOW_READY')
 }
 

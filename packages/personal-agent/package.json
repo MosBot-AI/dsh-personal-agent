@@ -12,7 +12,7 @@
     "./package.json": "./package.json",
     "./client": "./lib/client.js"
   },
-  "files": ["lib", "locale", "cordis.patch.yml"],
+  "files": ["lib", "locale", "prompts", "cordis.patch.yml"],
   "engines": {
     "node": ">=24.9.0",
     "dsh": "0.2.2-rc.1"

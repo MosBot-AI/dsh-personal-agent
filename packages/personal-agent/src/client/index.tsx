@@ -33,6 +33,9 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     return (value.taskId === undefined || typeof value.taskId === 'string')
       && (value.projectId === undefined || typeof value.projectId === 'string')
   }
+  if (value.kind === 'subscription') {
+    return typeof value.version === 'number' && Number.isSafeInteger(value.version) && value.version > 0
+  }
   if (value.kind === 'artifact' && isRecord(value.artifact)) {
     return typeof value.artifact.id === 'string' && typeof value.artifact.mediaType === 'string'
       && Number.isSafeInteger(value.artifact.version) && typeof value.artifact.text === 'string'

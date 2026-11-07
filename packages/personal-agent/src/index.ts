@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { activateLocalInbox, localInboxConfigSchema } from './inbox/host.js'
+import { activateLocalInbox, localInboxConfigSchema, type LocalRoutingService } from './inbox/host.js'
 import { createHostAdapter, type HostAdapter } from './runtime/host-adapter.js'
 
 export interface PersonalAgentService {
@@ -10,6 +10,7 @@ export interface PersonalAgentService {
 declare module '@deepseek-ai/cordis' {
   interface Context {
     dshpa: PersonalAgentService
+    dshpaRouting: LocalRoutingService
   }
 }
 
@@ -22,9 +23,11 @@ export function apply(ctx: Context, config?: { inbox?: unknown }): void {
   ctx.provide('dshpa', Object.freeze({ ready: true, host }))
   if (config?.inbox === undefined || config.inbox === false) return
   const inbox = localInboxConfigSchema.parse(config.inbox)
-  ctx.inject(['connection', 'sessions', 'webServer'], web => {
+  const dependencies = ['connection', 'sessions', 'webServer', ...(inbox.routing ? ['llm'] : [])]
+  ctx.inject(dependencies, web => {
     web.effect(() => {
       const runtime = activateLocalInbox(web, host, inbox)
+      web.provide('dshpaRouting', runtime.routing)
       return () => runtime.dispose()
     }, 'dshpa: authenticated local inbox')
   })

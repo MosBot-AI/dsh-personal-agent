@@ -24,6 +24,8 @@ import {
   type DeliveryId,
   type OperationId,
   type ProjectId,
+  type SourceEvent,
+  type SourceEventId,
   type Task,
   type TaskId,
   type UtcInstant,
@@ -48,8 +50,13 @@ import {
 } from '../runtime/input-journal.js'
 import { createEffectRecovery, type EffectRecoveryOptions } from '../runtime/recovery-effects.js'
 import { createOutbox, type OutboxOptions } from '../runtime/outbox.js'
+import type { RoutingAuthority, RoutingEventRef, SubscriptionKey, SubscriptionScope, WorkerRouteIntent } from '../runtime/subscriptions.js'
 import { openStorageDatabase, type StorageDatabase } from './database.js'
 import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
+import {
+  applyWorkerHandback, cancelUnfinishedRouting, checkWorkerRoute, commitWorkerRoute, getRoutingEvent, getSubscription,
+  listRoutingEvents, listSubscriptions, putSubscription, recordRoutingEvent, setRoutingDisposition,
+} from './routing.js'
 import { sqliteCode, StorageError, transaction } from './schema.js'
 
 const MAX_BYTES = 1024 * 1024
@@ -214,6 +221,39 @@ class WorkStore {
     return this.access(dispatchPermitted)
   }
 
+  recordRoutingEvent(event: SourceEvent, digest: string, metadata: { projectId: ProjectId; authority: RoutingAuthority }) {
+    if (!hasBoundedJson(event)) return { ok: false, code: 'invalid_input' } as const
+    return this.access(db => transaction(db, () => recordRoutingEvent(db, event, digest, metadata)))
+  }
+
+  getRoutingEvent(ref: RoutingEventRef) {
+    return this.access(db => getRoutingEvent(db, ref))
+  }
+
+  listRoutingEvents(scope: Scope, limit?: number) {
+    return this.access(db => listRoutingEvents(db, scope, limit))
+  }
+
+  setRoutingDisposition(ref: RoutingEventRef, expectedVersion: number, disposition: unknown) {
+    return this.access(db => transaction(db, () => setRoutingDisposition(db, ref, expectedVersion, disposition)))
+  }
+
+  cancelUnfinishedRouting(scope?: Scope, limit?: number): number {
+    return this.access(db => transaction(db, () => cancelUnfinishedRouting(db, scope, limit)))
+  }
+
+  getSubscription(key: SubscriptionKey) {
+    return this.access(db => getSubscription(db, key))
+  }
+
+  listSubscriptions(scope: SubscriptionScope, projectId: ProjectId, at: UtcInstant) {
+    return this.access(db => listSubscriptions(db, scope, projectId, at))
+  }
+
+  putSubscription(input: unknown, expectedVersion?: number) {
+    return this.access(db => transaction(db, () => putSubscription(db, input, expectedVersion)))
+  }
+
   listColdWork(after: string): WorkState[] {
     return this.access(db => db.prepare(`
       SELECT t.record AS task, a.record AS attempt FROM tasks t
@@ -252,12 +292,22 @@ class WorkStore {
     return this.access(db => recordInputObservation(db, ref, input, observation, at))
   }
 
-  applyWorkerEvent(ref: WorkRef, input: unknown, journal: WorkerInputIntent): StoredWorkResult {
+  applyWorkerEvent(ref: WorkRef, input: unknown, journal: WorkerInputIntent, route?: WorkerRouteIntent): StoredWorkResult {
     const event = workEventSchema.safeParse(input)
-    if (!event.success || (event.data.type !== 'start' && event.data.type !== 'record_input')) {
+    if (!event.success || (event.data.type !== 'start' && event.data.type !== 'record_input' && event.data.type !== 'wake_worker')) {
       return { ok: false, code: 'invalid_input' }
     }
-    return this.applyRuntimeEvent(ref, event.data, {}, journal)
+    if (event.data.type === 'wake_worker' && route === undefined) return { ok: false, code: 'permission_denied' }
+    if (route !== undefined && journal.cursor !== route.eventId) return { ok: false, code: 'invalid_input' }
+    return this.applyRuntimeEvent(ref, event.data, {}, journal, route)
+  }
+
+  applyWorkerHandback(ref: WorkRef, input: unknown): boolean {
+    return this.access(db => transaction(db, () => {
+      if (recoveryMode(db) !== 'normal') return false
+      const state = this.loadWork(db, ref)
+      return state !== undefined && applyWorkerHandback(db, ref, state, input)
+    }))
   }
 
   acknowledgeWorkerInput(ref: WorkRef, input: WorkerInputIntent, at: UtcInstant): boolean {
@@ -489,6 +539,8 @@ class WorkStore {
     const intents = decodeIntents(intentInput)
     if (!event.success || !intents) return { ok: false, code: 'invalid_input' }
     if (!('generation' in event.data) || event.data.type === 'verify' || event.data.type === 'release_worker'
+      || event.data.type === 'wake_worker' || event.data.type === 'record_input'
+      || (event.data.type === 'start' && event.data.worker !== undefined)
       || (event.data.type === 'reconcile' && event.data.outcome.status === 'completed')
       || (intents.sourceEvent && !sameScope(ref, intents.sourceEvent))) {
       return { ok: false, code: 'permission_denied' }
@@ -502,7 +554,9 @@ class WorkStore {
     return this.applyRuntimeEvent(release.ref, release.event, {})
   }
 
-  private applyRuntimeEvent(ref: WorkRef, event: WorkEvent, intents: ValidatedIntents, journal?: WorkerInputIntent): StoredWorkResult {
+  private applyRuntimeEvent(
+    ref: WorkRef, event: WorkEvent, intents: ValidatedIntents, journal?: WorkerInputIntent, route?: WorkerRouteIntent,
+  ): StoredWorkResult {
     return this.commit(db => {
       if (journal && !dispatchPermitted(db)) return { ok: false, code: 'recovery_required' }
       if (event.type === 'recover_attempt' && recoveryMode(db) !== 'reconciling') {
@@ -510,6 +564,8 @@ class WorkStore {
       }
       const before = this.loadWork(db, ref)
       if (!before) return { ok: false, code: 'not_found' }
+      const routing = route === undefined ? undefined : checkWorkerRoute(db, before, event, route)
+      if (routing && !routing.ok) return routing
       const result = transitionWork(before, event)
       if (!result.ok) return result
       if (event.type === 'ready'
@@ -517,8 +573,11 @@ class WorkStore {
         return { ok: false, code: 'acceptance_unsatisfied' }
       }
       if (this.sourceAlreadyStored(db, intents.sourceEvent)) return { ok: false, code: 'source_duplicate' }
-      const receipt = this.persist(db, before, result, event.type, event.at, intents, recordEncoder())
-      if (journal) insertWorkerInput(db, result.state, journal)
+      const receipt = this.persist(db, before, result, event.type, event.at, intents, recordEncoder(), routing?.claim.ref.eventId)
+      if (journal) {
+        insertWorkerInput(db, result.state, journal)
+        if (routing) commitWorkerRoute(db, routing.claim, result.state, journal)
+      }
       return { ...receipt, replayed: false }
     })
   }
@@ -697,6 +756,7 @@ class WorkStore {
     at: UtcInstant,
     intents: ValidatedIntents,
     encode: ReturnType<typeof recordEncoder>,
+    linkedSourceEventId?: SourceEventId,
   ): Receipt {
     const { task, attempt } = result.state
     if (before?.task.version === task.version) {
@@ -727,7 +787,7 @@ class WorkStore {
         (owner_id, profile_id, task_id, attempt_id, generation, version, type, status, occurred_at, source_event_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(task.ownerId, task.profileId, task.id, attempt.id, task.generation, task.version, type, task.status, at,
-      intents.sourceEvent?.id ?? null)
+      intents.sourceEvent?.id ?? linkedSourceEventId ?? null)
     const sequence = Number(event.lastInsertRowid)
     if (!Number.isSafeInteger(sequence)) throw new StorageError('invalid_input', 'Work event sequence limit reached')
 

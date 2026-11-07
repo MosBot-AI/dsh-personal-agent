@@ -89,6 +89,14 @@ const admission = {
   budgetAvailable: z.boolean(),
   runtimeQuiescent: z.boolean(),
 }
+const workerStart = {
+  ...fenced,
+  executor: nonEmptyTextSchema,
+  agentId: nonEmptyTextSchema.optional(),
+  sessionId: sessionIdSchema.optional(),
+  scope: attemptScopeSchema.optional(),
+  worker: workerExecutionSchema.optional(),
+}
 export const artifactIdsSchema = z.array(artifactIdSchema).refine(ids => new Set(ids).size === ids.length, {
   message: 'Artifact identifiers must be unique',
 })
@@ -110,14 +118,12 @@ export const workEventSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('resume'), ...versioned, ...admission }),
   z.strictObject({ type: z.literal('retry'), ...replacement }),
   z.strictObject({ type: z.literal('reopen'), ...replacement }),
+  z.strictObject({ type: z.literal('start'), ...workerStart }),
   z.strictObject({
-    type: z.literal('start'),
-    ...fenced,
-    executor: nonEmptyTextSchema,
-    agentId: nonEmptyTextSchema.optional(),
-    sessionId: sessionIdSchema.optional(),
-    scope: attemptScopeSchema.optional(),
-    worker: workerExecutionSchema.optional(),
+    type: z.literal('wake_worker'),
+    ...workerStart,
+    ...admission,
+    referenceId: waitReasonSchema.shape.referenceId,
   }),
   z.strictObject({ type: z.literal('record_input'), ...fenced, cursor: workerCursorSchema }),
   z.strictObject({ type: z.literal('recover_attempt'), ...fenced }),
@@ -212,7 +218,7 @@ function advance(
 
 function admissionError(
   attempt: Attempt,
-  event: Extract<WorkEvent, { type: 'resume' | 'wake' }>,
+  event: Extract<WorkEvent, { type: 'resume' | 'wake' | 'wake_worker' }>,
 ): TransitionErrorCode | undefined {
   if (event.policyVersion !== attempt.mandate.policyVersion) return 'policy_changed'
   if (!event.grantsCurrent) return 'permission_denied'
@@ -220,6 +226,40 @@ function admissionError(
   if (!event.conditionSatisfied) return 'condition_unmet'
   if (!event.runtimeQuiescent) return 'runtime_not_quiescent'
   return undefined
+}
+
+function startWork(state: WorkState, event: Extract<WorkEvent, { type: 'start' | 'wake_worker' }>): WorkTransitionResult {
+  const { attempt } = state
+  const { worker } = event
+  if (worker) {
+    const history = attempt.worker?.inputHistory ?? []
+    if (event.sessionId === undefined || worker.releasedAt !== undefined || history.includes(worker.inputCursor)
+      || worker.inputHistory.length !== history.length + 1
+      || history.some((cursor, index) => worker.inputHistory[index] !== cursor)
+      || worker.inputHistory.at(-1) !== worker.inputCursor) return reject('invalid_input')
+  }
+  if (attempt.worker && (!worker || event.sessionId !== attempt.sessionId
+    || worker.presetId !== attempt.worker.presetId || worker.cwd !== attempt.worker.cwd
+    || worker.provider !== attempt.worker.provider || worker.model !== attempt.worker.model)) return reject('invalid_input')
+  const { agentId: _agentId, sessionId: _sessionId, scope: _scope, worker: _worker, ...queued } = attempt
+  return advance(state, 'running', {
+    ...queued,
+    status: 'running',
+    executor: event.executor,
+    startedAt: attempt.startedAt ?? event.at,
+    heartbeatAt: event.at,
+    ...(event.agentId === undefined ? {} : { agentId: event.agentId }),
+    ...(event.sessionId === undefined ? {} : { sessionId: event.sessionId }),
+    ...(worker === undefined ? {} : { worker: { ...worker, inputHistory: [...worker.inputHistory] } }),
+    ...(event.scope === undefined ? {} : { scope: {
+      capabilities: [...event.scope.capabilities],
+      dataScope: [...event.scope.dataScope],
+    } }),
+  }, event.at)
+}
+
+function sameLabels(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((label, index) => label === right[index])
 }
 
 type VerificationEvidence = z.infer<typeof verificationEvidenceSchema>
@@ -342,34 +382,19 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
       return task.status === 'completed' || task.status === 'cancelled'
         ? replaceAttempt(state, event)
         : reject('invalid_transition')
-    case 'start': {
-      if (task.status !== 'queued') return reject('invalid_transition')
-      const { worker } = event
-      if (worker) {
-        const history = attempt.worker?.inputHistory ?? []
-        if (event.sessionId === undefined || worker.releasedAt !== undefined || history.includes(worker.inputCursor)
-          || worker.inputHistory.length !== history.length + 1
-          || history.some((cursor, index) => worker.inputHistory[index] !== cursor)
-          || worker.inputHistory.at(-1) !== worker.inputCursor) return reject('invalid_input')
+    case 'start':
+      return task.status === 'queued' ? startWork(state, event) : reject('invalid_transition')
+    case 'wake_worker': {
+      if (task.status !== 'waiting_event' || task.wait?.reason !== 'event') return reject('invalid_transition')
+      if (task.wait.referenceId !== event.referenceId || (task.wait.deadline !== undefined && event.at >= task.wait.deadline)) {
+        return reject('condition_unmet')
       }
-      if (attempt.worker && (!worker || event.sessionId !== attempt.sessionId
-        || worker.presetId !== attempt.worker.presetId || worker.cwd !== attempt.worker.cwd
-        || worker.provider !== attempt.worker.provider || worker.model !== attempt.worker.model)) return reject('invalid_input')
-      const { agentId: _agentId, sessionId: _sessionId, scope: _scope, worker: _worker, ...queued } = attempt
-      return advance(state, 'running', {
-        ...queued,
-        status: 'running',
-        executor: event.executor,
-        startedAt: attempt.startedAt ?? event.at,
-        heartbeatAt: event.at,
-        ...(event.agentId === undefined ? {} : { agentId: event.agentId }),
-        ...(event.sessionId === undefined ? {} : { sessionId: event.sessionId }),
-        ...(worker === undefined ? {} : { worker: { ...worker, inputHistory: [...worker.inputHistory] } }),
-        ...(event.scope === undefined ? {} : { scope: {
-          capabilities: [...event.scope.capabilities],
-          dataScope: [...event.scope.dataScope],
-        } }),
-      }, event.at)
+      if (attempt.worker?.releasedAt === undefined) return reject('runtime_not_quiescent')
+      if (!event.worker || !event.scope || !attempt.scope || event.agentId !== attempt.agentId
+        || event.executor !== attempt.executor || !sameLabels(event.scope.capabilities, attempt.scope.capabilities)
+        || !sameLabels(event.scope.dataScope, attempt.scope.dataScope)) return reject('permission_denied')
+      const error = admissionError(attempt, event)
+      return error === undefined ? startWork(state, event) : reject(error)
     }
     case 'record_input':
       if (task.status !== 'running' || !attempt.worker || attempt.worker.inputHistory.includes(event.cursor)
