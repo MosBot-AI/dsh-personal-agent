@@ -396,10 +396,13 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
       if (task.status !== 'running') return reject('invalid_transition')
       return advance(state, 'verifying', { ...attempt, status: 'verifying', artifactIds: [...event.artifactIds] }, event.at)
     case 'release_worker':
-      if (task.status !== 'verifying' || !attempt.worker || attempt.worker.releasedAt !== undefined) {
+      if ((task.status !== 'verifying' && task.status !== 'paused' && attempt.status !== 'waiting')
+        || !attempt.worker || attempt.worker.releasedAt !== undefined) {
         return reject('invalid_transition')
       }
-      return advance(state, 'verifying', { ...attempt, worker: { ...attempt.worker, releasedAt: event.at } }, event.at)
+      return advance(state, task.status, { ...attempt, worker: { ...attempt.worker, releasedAt: event.at } }, event.at, {
+        wait: task.wait,
+      })
     case 'verify':
       return task.status === 'verifying'
         ? complete(state, event.evidence, event.at, false)

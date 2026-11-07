@@ -15,6 +15,7 @@ import {
   type Effect,
   type Grant,
   type GrantId,
+  type TaskId,
   type UtcInstant,
 } from '../domain/model.js'
 import { workStateSchema } from '../domain/transitions.js'
@@ -345,6 +346,42 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     }))
   }
 
+  /** Project only requests that the original verified owner can still answer. */
+  function pending(ownerToken: unknown, taskIds: readonly TaskId[]): Extract<ActionDecision, { decision: 'ask' }>[] {
+    const owner = identity.resolveOwner(ownerToken)
+    const ids = taskIds.slice(0, 64)
+    if (!owner || ids.length === 0) return []
+    return access(db => transaction(db, () => {
+      const rows = db.prepare(`
+        SELECT operation_id FROM action_approvals
+        WHERE owner_id = ? AND profile_id = ? AND status = 'pending'
+          AND client_id = ? AND session_id = ? AND device_id = ? AND device_verified_at = ?
+          AND task_id IN (${ids.map(() => '?').join(', ')})
+        ORDER BY rowid DESC LIMIT 64
+      `).all(owner.ownerId, owner.profileId, owner.clientId, owner.sessionId, owner.deviceId, owner.verifiedAt, ...ids)
+      const result: Extract<ActionDecision, { decision: 'ask' }>[] = []
+      const at = now()
+      for (const row of rows) {
+        const operation = operationIdSchema.safeParse(row.operation_id)
+        if (!operation.success) return corrupt()
+        const proposal = readProposal(db, operation.data)
+        const entry = readApproval(db, operation.data)
+        if (!proposal || !entry || !approvalMatches(entry, proposal)) return corrupt()
+        if (!isApprover(entry, owner)) continue
+        if (at >= entry.approval.expiresAt) {
+          expireApproval(db, entry)
+          continue
+        }
+        const { action } = proposal
+        if (currentPolicy(action)?.account.verifiedAt !== proposal.verifiedAt || !routeFor(action)) continue
+        const work = checkWork(db, proposal, reviewable)
+        if (!work.ok || work.effect.status !== 'prepared') continue
+        result.push({ decision: 'ask', action, approval: entry.approval, version: entry.version })
+      }
+      return result
+    }))
+  }
+
   function respond(input: unknown, ownerToken: unknown):
   | Failure | { ok: true; status: 'denied' } | { ok: true; status: 'approved'; grantId: GrantId } {
     const owner = identity.resolveOwner(ownerToken)
@@ -481,7 +518,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     }
   }
 
-  return Object.freeze({ review, respond, revoke, dispatch })
+  return Object.freeze({ review, pending, respond, revoke, dispatch })
 }
 
 function writeEffect(db: DatabaseSync, effect: Effect, status: 'authorized' | 'dispatching', grantId: GrantId): void {

@@ -15,6 +15,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Add trusted identity bindings, exact-action review and one-use dispatch claims, and a tool-free private worker runtime.
 - Add bounded native Workers with durable input cursors, scoped reports, foreground controls, and verified teardown.
 - Seal immutable artifact revisions, commit scoped verification and delivery intents together, and track provider delivery evidence.
+- Add a local DSH Web inbox for project work, Worker controls, exact approval, and reviewable results alongside native conversations.
 - Map 43 implementation tasks into GitHub Project and English Issues with native dependencies, reporting protocol, live readiness and acceptance-gated Actions reconciliation.
 
 - Specify configurable model routing with difficulty-based model/effort selection, quota-aware fallbacks, an optional LiteLLM adapter and implementation/evaluation tasks.

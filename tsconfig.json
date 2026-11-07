@@ -6,8 +6,11 @@
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "rewriteRelativeImportExtensions": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["packages/*/src/**/*.ts", "tests/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"]
 }

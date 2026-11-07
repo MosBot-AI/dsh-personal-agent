@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import {
-  nonEmptyTextSchema, sessionIdSchema, taskIdSchema, utcInstantSchema, versionSchema, WORKER_INPUT_LIMIT, type UtcInstant,
+  artifactIdSchema, nonEmptyTextSchema, sessionIdSchema, taskIdSchema, utcInstantSchema,
+  versionSchema, WORKER_INPUT_LIMIT, type UtcInstant,
 } from '../domain/model.js'
 import type { WorkEvent, WorkState } from '../domain/transitions.js'
 import type { StoredCommandContext, StoredWorkResult, WorkRef, WorkStore } from '../storage/store.js'
@@ -30,6 +31,7 @@ export interface WorkerExecutorOptions {
   readonly runtime: NativeWorkerRuntime
   readonly presets: readonly WorkerPreset[]
   readonly concurrency?: number
+  readonly captureResultSummary?: boolean
   readonly now?: () => UtcInstant
 }
 
@@ -239,9 +241,43 @@ class WorkerExecutor {
     const result = this.options.store.applyCommand(command, context)
     if (result.ok) {
       const { task, attempt } = result.state
-      const entry = this.entryFor({ ownerId: task.ownerId, profileId: task.profileId, taskId: task.id })
-      if (entry?.attemptId === attempt.id && task.status === 'cancelling') void this.retire(entry)
+      const ref = { ownerId: task.ownerId, profileId: task.profileId, taskId: task.id }
+      const entry = this.entryFor(ref)
+      if (task.status === 'cancelling') {
+        if (entry?.attemptId === attempt.id) void this.retire(entry)
+        else if (!entry && attempt.worker?.releasedAt !== undefined) {
+          // A clean pause or wait already proved release. Absence alone is
+          // insufficient after a crash or an interrupted opening.
+          const { store } = this.options
+          const current = store.getWork(ref)
+          if (current?.task.status === 'cancelling' && current.attempt.id === attempt.id
+            && current.attempt.worker?.releasedAt !== undefined) {
+            store.applyEvent(ref, { type: 'confirm_cancel', ...fence(current, this.now()),
+              runtimeQuiescent: true, uncertainEffects: store.hasUnsettledEffects(ref, attempt.id) })
+          }
+        }
+      }
     }
+    return result
+  }
+
+  /** Stop new work for this attempt, then retain its slot until native teardown settles. */
+  pause(command: unknown, context: StoredCommandContext): StoredWorkResult {
+    if (typeof command !== 'object' || command === null || !('type' in command) || command.type !== 'work.pause'
+      || !('taskId' in command)) return { ok: false, code: 'invalid_command' }
+    const actor = context.actor
+    if (actor?.role !== 'owner') return { ok: false, code: 'permission_denied' }
+    const taskId = taskIdSchema.safeParse(command.taskId)
+    if (!taskId.success) return { ok: false, code: 'invalid_command' }
+    const ref = { ownerId: actor.ownerId, profileId: actor.profileId, taskId: taskId.data }
+    const current = this.options.store.getWork(ref)
+    const entry = this.entryFor(ref)
+    if (current?.task.status === 'running' && !entry?.native) return { ok: false, code: 'runtime_not_quiescent' }
+    if (current?.task.status !== 'queued' && current?.task.status !== 'running' && current?.task.status !== 'paused') {
+      return { ok: false, code: current ? 'invalid_transition' : 'not_found' }
+    }
+    const result = this.options.store.applyCommand(command, context)
+    if (result.ok && !result.replayed && entry?.attemptId === result.state.attempt.id) void this.retire(entry)
     return result
   }
 
@@ -303,7 +339,21 @@ class WorkerExecutor {
         const base = fence(state, this.now())
         let result: StoredWorkResult
         if (report.kind === 'ready') {
-          result = this.options.store.applyEvent(entry.ref, { type: 'ready', ...base, artifactIds: report.artifactIds })
+          let artifactIds = report.artifactIds
+          if (artifactIds.length === 0 && this.options.captureResultSummary) {
+            const key = JSON.stringify([state.task.id, state.attempt.id, report.cursor])
+            const id = artifactIdSchema.parse(`summary-${createHash('sha256').update(key).digest('hex')}`)
+            this.options.store.artifacts.seal(entry.ref, {
+              id, attemptId: state.attempt.id, generation: state.attempt.generation,
+              expectedVersion: state.task.version,
+              mediaType: 'text/markdown',
+              sourceEventIds: state.task.provenance.sourceEventIds,
+              visibility: 'private',
+              bytes: new TextEncoder().encode(report.summary),
+            })
+            artifactIds = [id]
+          }
+          result = this.options.store.applyEvent(entry.ref, { type: 'ready', ...base, artifactIds })
         } else {
           const chain = report.kind === 'blocked' ? this.dependencyChain(entry.ref, report.wait.referenceId) : undefined
           if (report.kind === 'blocked' && !chain) {
@@ -368,7 +418,8 @@ class WorkerExecutor {
         ? { type: 'confirm_cancel', ...base, runtimeQuiescent: true, uncertainEffects: uncertainEffects() }
         : entry.failure !== undefined && state.task.status === 'running' && state.task.generation === entry.generation
           ? { type: 'fail', ...base, runtimeQuiescent: true, uncertainEffects: uncertainEffects(), reason: entry.failure }
-          : worker && state.task.status === 'verifying' && state.attempt.worker && state.attempt.worker.releasedAt === undefined
+          : worker && (state.task.status === 'verifying' || state.task.status === 'paused' || state.attempt.status === 'waiting')
+            && state.attempt.worker && state.attempt.worker.releasedAt === undefined
             ? { type: 'release_worker', ...base }
             : undefined
       if (event) {
