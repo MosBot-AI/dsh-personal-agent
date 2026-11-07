@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-token-meter'
 import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
 import { freezeMessage, isAgentLoopRequest, LlmError, MessageId } from '@deepseek-ai/dsh-llm'
 import { SessionId as nativeSessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
@@ -52,6 +53,8 @@ export interface NativeWorkerRuntime {
     readonly resume: boolean
     readonly signal: AbortSignal
     readonly isCurrent: () => boolean
+    readonly authorizeContext?: () => boolean
+    readonly contextWindow?: () => number | undefined
     readonly compute?: NativeWorkerCompute
     readonly onObservation?: (observation: WorkerObservation) => void
   }): Promise<NativeWorker>
@@ -310,10 +313,22 @@ function installComputeGate(
     if (request.sessionId !== agent.id) return next()
     if (!step || step.claimed || !available() || !matchesRoute(input, request)
       || !isAgentLoopRequest(request) || ctx.agents.get(agent.id) !== agent) return deny('compute_limit')
+    if (!authorized(input.authorizeContext)) return deny('permission_denied')
+    if (input.contextWindow) {
+      const window = input.contextWindow()
+      const meter = ctx.get('tokenMeter')
+      if (!window || !meter) return deny('context_budget_unavailable')
+      const estimate = request.messages.reduce((total, message) => total + meter.estimateMessage(message.id !== undefined ? message : {
+        role: 'user', content: message.content, id: MessageId('dshpa-context-measurement'),
+        source: { kind: 'dshpa-work-input', cursor: 'measurement' },
+      }), Buffer.byteLength(request.system ?? '') + 64)
+      if (!Number.isSafeInteger(estimate) || estimate + limits.maxOutputTokens > window) return deny('context_budget_exceeded')
+    }
     const scope = compute.scope(step.unattended)
     if (!scope) return deny('permission_denied')
     step.claimed = true
-    return meteredStream({ budget, request, limits, scope, next, onIssue, current: available })
+    return meteredStream({ budget, request, limits, scope, onIssue, current: available,
+      next: () => authorized(input.authorizeContext) ? next() : deny('permission_denied') })
   }, { prepend: true }), 'dshpa: metered native requests')
   agentCtx.on('session/event', (session, event) => {
     if (session === agent.session && event.type === 'turn/end' && event.data.turn === step?.turn) clear()
@@ -372,6 +387,7 @@ export function createNativeWorkerRuntime(
       const sent = new Set<string>()
       const digestKey = input.onObservation ? randomBytes(32) : undefined
       const active = () => stopping === undefined && !input.signal.aborted && input.isCurrent()
+      const contextCurrent = () => authorized(input.authorizeContext)
       const notify = (observation: WorkerObservation) => {
         try { if (active()) input.onObservation?.(observation) } catch { /* Diagnostics do not drive the Worker. */ }
       }
@@ -422,7 +438,7 @@ export function createNativeWorkerRuntime(
               inputs.push(message)
             }
           }
-          const mayDisclose = () => inputs.every(message => authorized(message.authorize))
+          const mayDisclose = () => contextCurrent() && inputs.every(message => authorized(message.authorize))
           if (!owned || (inputs.length === 0 && !admittedInput) || !active()
             || !matchesRoute(input, modelSelection) || !mayDisclose()) {
             return { kind: 'reject' }
@@ -460,7 +476,7 @@ export function createNativeWorkerRuntime(
         cursor, text, messageId, digest, acknowledge, authorize, unattended,
       }: NativeWorkerInput) {
         assertActive()
-        if (!authorized(authorize)) throw new Error('The private worker input authority changed')
+        if (!authorized(authorize) || !contextCurrent()) throw new Error('The private worker input authority changed')
         if (sends >= WORKER_INPUT_LIMIT) throw new Error('The private worker input limit was reached')
         if (sent.has(messageId) || workerMessageDigest(text) !== digest) {
           throw new Error('The private worker input identity or digest does not match')

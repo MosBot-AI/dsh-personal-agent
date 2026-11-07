@@ -18,6 +18,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Add a local DSH Web inbox for project work, Worker controls, exact approval, and reviewable results alongside native conversations.
 - Journal native inputs and recover exact claims after restart, with generation-fenced cancellation and reconciliation-only backup restore.
 - Route authenticated source events through versioned subscriptions and a bounded assessment queue while keeping owner controls responsive.
+- Add opt-in checkpoints before native compaction and pruning, scoped reference recall and search, durable context exclusions, and sectioned Worker input budgets.
 - Reserve and reconcile model costs before dispatch, enforce compute limits and a separate heavy GPU queue, and expose scoped usage and attention decisions in the local inbox.
 - Reconcile native schedule wakes with versioned routine intent and show deduplicated local reminders and scoped task wakes in the inbox.
 - Operate a single resident profile with local readiness, diagnostic watchdogs, warm schedule recovery, online backup retention, and metadata audit export.

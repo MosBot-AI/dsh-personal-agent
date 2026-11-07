@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { createArtifactStore, readScopedArtifact } from '../artifacts/store.js'
+import { contextPointerSchema, type CheckpointCaptureResult, type ContextEvidencePointer, type ContextExclusionResult } from '../context/checkpoint.js'
 import {
   applyWorkCommand,
   workCommandSchema,
@@ -16,14 +17,17 @@ import {
   deliverySchema,
   effectSchema,
   projectSchema,
+  sessionIdSchema,
   sourceEventSchema,
   taskSchema,
+  utcInstantSchema,
   type ArtifactId,
   type AttemptId,
   type ConversationId,
   type DeliveryId,
   type OperationId,
   type ProjectId,
+  type SessionId,
   type SourceEvent,
   type SourceEventId,
   type Task,
@@ -56,6 +60,10 @@ import { createOutbox, type OutboxOptions } from '../runtime/outbox.js'
 import type { RoutingAuthority, RoutingEventRef, SubscriptionKey, SubscriptionScope, WorkerRouteIntent } from '../runtime/subscriptions.js'
 import { exportWorkAudit, type WorkAuditOptions, type WorkAuditScope } from './audit.js'
 import { createWorkBackup, pruneWorkBackups, type BackupRetention, type WorkBackup } from './backup.js'
+import {
+  captureContextCheckpoint, excludeContextPointer, getContextArtifact, getContextSource, getLatestContextCheckpoint,
+  isContextExcluded, listContextPointers, workerContextSources, workerInputContextAvailable, type ContextPointerPage,
+} from './context.js'
 import { openStorageDatabase, type StorageDatabase } from './database.js'
 import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
 import {
@@ -72,6 +80,8 @@ import { sqliteCode, StorageError, transaction } from './schema.js'
 const MAX_BYTES = 1024 * 1024
 const MAX_INTENTS = 64
 const INBOX_LIMIT = 64
+const CONTEXT_BINDING_LIMIT = 16
+const privateWorkerSessionId = /^dshpa-[0-9a-f]{64}$/
 const intentsSchema = z.strictObject({
   sourceEvent: sourceEventSchema.optional(),
   effects: z.array(effectSchema).max(MAX_INTENTS).optional(),
@@ -405,6 +415,10 @@ class WorkStore {
     return this.access(db => readWorkerInputs(db, ref, attemptId))
   }
 
+  workerContextSources(ref: WorkRef, attemptId: AttemptId): SourceEventId[] | undefined {
+    return this.access(db => workerContextSources(db, ref, attemptId))
+  }
+
   observeWorkerInput(ref: WorkRef, input: JournaledWorkerInput, observation: InputObservation, at: UtcInstant): boolean {
     return this.access(db => recordInputObservation(db, ref, input, observation, at))
   }
@@ -541,6 +555,78 @@ class WorkStore {
     })
   }
 
+  captureContextCheckpoint(ref: WorkRef, input: unknown): CheckpointCaptureResult {
+    return this.access(db => transaction(db, () => {
+      const state = this.loadWork(db, ref)
+      return state ? captureContextCheckpoint(db, state, sessionId => this.contextSession(db, state, sessionId, true), input)
+        : { ok: false, code: 'not_found' }
+    }))
+  }
+
+  getLatestContextCheckpoint(ref: WorkRef, sessionId: SessionId, at = utcInstantSchema.parse(new Date().toISOString())) {
+    return this.access(db => {
+      const state = this.loadWork(db, ref)
+      return state && this.contextSession(db, state, sessionId) ? getLatestContextCheckpoint(db, state, sessionId, at) : undefined
+    })
+  }
+
+  listContextBindings(scope: Scope, sessionId: SessionId): WorkState[] {
+    if (!sessionIdSchema.safeParse(sessionId).success) throw new StorageError('invalid_input', 'Context Session ID is invalid')
+    return this.access(db => {
+      const rows = db.prepare(`
+        SELECT t.record AS task, a.record AS attempt FROM tasks t
+        JOIN attempts a ON a.id = t.attempt_id AND a.task_id = t.id AND a.generation = t.generation
+        WHERE t.owner_id = ? AND t.profile_id = ? AND (
+          ((a.record ->> '$.sessionId') = ? AND (a.record ->> '$.worker.releasedAt') IS NULL)
+          OR (? AND EXISTS (
+            SELECT 1 FROM conversations c JOIN json_each(c.record, '$.sessionIds') s
+            WHERE c.id = t.conversation_id AND c.owner_id = t.owner_id AND c.profile_id = t.profile_id AND s.value = ?
+          ))
+        ) ORDER BY t.id LIMIT ?
+      `).all(scope.ownerId, scope.profileId, sessionId, Number(!privateWorkerSessionId.test(sessionId)), sessionId, CONTEXT_BINDING_LIMIT + 1)
+      if (rows.length > CONTEXT_BINDING_LIMIT) throw new StorageError('invalid_input', 'Too many work items are bound to the Context Session')
+      return rows.map(row => this.decodeWork(row))
+    })
+  }
+
+  getContextSource(ref: WorkRef, eventId: SourceEventId, at = utcInstantSchema.parse(new Date().toISOString())) {
+    return this.access(db => {
+      const state = this.loadWork(db, ref)
+      return state && getContextSource(db, state.task, eventId, at)
+    })
+  }
+
+  getContextArtifact(ref: WorkRef, artifactId: ArtifactId, at = utcInstantSchema.parse(new Date().toISOString())) {
+    return this.access(db => {
+      const state = this.loadWork(db, ref)
+      return state && getContextArtifact(db, state.task, artifactId, at)
+    })
+  }
+
+  listContextPointers(ref: WorkRef, page: ContextPointerPage): { items: ContextEvidencePointer[]; nextAfter?: number } {
+    return this.access(db => {
+      const state = this.loadWork(db, ref)
+      return state ? listContextPointers(db, state.task, page, utcInstantSchema.parse(new Date().toISOString())) : { items: [] }
+    })
+  }
+
+  isContextExcluded(ref: WorkRef, input: unknown): boolean {
+    const pointer = contextPointerSchema.safeParse(input)
+    if (!pointer.success) return true
+    return this.access(db => {
+      const state = this.loadWork(db, ref)
+      if (!state) return true
+      return pointer.data.kind === 'task' ? pointer.data.taskId !== state.task.id : isContextExcluded(db, state.task, pointer.data)
+    })
+  }
+
+  excludeContextPointer(ref: WorkRef, pointer: unknown, exclusion: unknown): ContextExclusionResult {
+    return this.access(db => transaction(db, () => {
+      const state = this.loadWork(db, ref)
+      return state ? excludeContextPointer(db, state.task, pointer, exclusion) : { ok: false, code: 'not_found' }
+    }))
+  }
+
   getWork(ref: WorkRef): WorkState | undefined {
     return this.access(db => this.loadWork(db, ref))
   }
@@ -673,6 +759,9 @@ class WorkStore {
       if (routing && !routing.ok) return routing
       const result = transitionWork(before, event)
       if (!result.ok) return result
+      if (journal && !workerInputContextAvailable(db, before.task, journal.contextSources, event.at, routing?.claim.ref.eventId)) {
+        return { ok: false, code: 'permission_denied' }
+      }
       if (event.type === 'ready'
         && !collectArtifacts(before, event.artifactIds, id => readScopedArtifact(db, ref, id))) {
         return { ok: false, code: 'acceptance_unsatisfied' }
@@ -806,6 +895,15 @@ class WorkStore {
       WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ?
     `).get(ref.taskId, ref.ownerId, ref.profileId)
     return row === undefined ? undefined : this.decodeWork(row)
+  }
+
+  private contextSession(db: DatabaseSync, { task, attempt }: WorkState, sessionId: SessionId, writing = false): boolean {
+    if (attempt.sessionId === sessionId) return !writing || attempt.worker?.releasedAt === undefined
+    if (task.conversationId === undefined || privateWorkerSessionId.test(sessionId)) return false
+    return db.prepare(`
+      SELECT 1 FROM conversations c JOIN json_each(c.record, '$.sessionIds') s
+      WHERE c.id = ? AND c.owner_id = ? AND c.profile_id = ? AND s.value = ?
+    `).get(task.conversationId, task.ownerId, task.profileId, sessionId) !== undefined
   }
 
   private wakeRoutineGoal(db: DatabaseSync, request: RoutineWakeRequest): RoutineWakeResult {

@@ -4,7 +4,7 @@
 
 dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱、受控恢复、事件路由、计算与通知控制、持久调度、常驻宿主运维及能力插件契约（PA-001 至 PA-010、PA-013、PA-018、PA-021 和 PA-038）。**
+**已实现原生 Bundle、工作与安全基础、受限 Worker、可验证交付、本地 Web 收件箱、受控恢复、事件路由、上下文检查点与召回、计算与通知控制、持久调度、常驻宿主运维及能力插件契约（PA-001 至 PA-011、PA-013、PA-018、PA-021 和 PA-038）。**
 
 [宿主兼容性记录](docs/evidence/host-compatibility-zh.md)说明已验证的原生控制能力，以及后续任务需要处理的边界。
 [工作领域证据](docs/evidence/PA-003-zh.md)覆盖记录校验、命令准入和任务状态转换。
@@ -15,6 +15,7 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 [本地 Web 收件箱证据](docs/evidence/PA-008-zh.md)覆盖原生会话集成、任务控制、审批和结果验收。
 [恢复证据](docs/evidence/PA-009-zh.md)覆盖输入回执、取消代次和备份恢复。
 [路由证据](docs/evidence/PA-010-zh.md)覆盖来源准入、订阅、Worker 退回及控制响应。
+[上下文证据](docs/evidence/PA-011-zh.md)覆盖原生检查点保存、引用召回、排除规则及输入预算。
 [预算与通知证据](docs/evidence/PA-013-zh.md)覆盖模型领取、资源上限、通知策略及限定范围的用量。
 [调度证据](docs/evidence/PA-018-zh.md)覆盖例行任务意图、原生唤醒对账，以及去重后的提醒和任务唤醒。
 [常驻宿主证据](docs/evidence/PA-021-zh.md)覆盖生命周期、诊断、在线备份和恢复。
@@ -91,6 +92,64 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 本地 Web 宿主为进程内适配器提供 `dshpaRouting` 服务。所有者可以在 `inbox.sourceAccounts` 中声明已经验证的账户，填写 `sourceInstanceId`、`accountId` 和 UTC 时间 `verifiedAt`。适配器须独立于消息内容验证账户，再绑定来源令牌，并提交原始发生时间、稳定的外部事件 ID 和修订。所有者通过已认证收件箱的 `set_subscription` 操作管理带版本的 `work` 或 `context` 订阅。工作事件按来源、账户、线程、项目和任务精确送达。`routed` 回执包含当前的原生输入日志状态。上下文订阅只记录关联，不向 Worker 投递输入或唤醒 Worker。
 
 语义评估为可选能力。可添加 `inbox.routing` 配置块，填写 `provider`、`model` 和允许的 `dataScope` 标签。评估器按有限批次返回供所有者审阅的提议。评估与订阅触发的 Worker 输入均需要已知价格和限额，或明确声明为不计费的路由。通过事件唤醒 Worker 还需要针对当前授权和等待条件的可信策略。供应商账户登记由连接器任务处理。
+
+### 在压缩时保留任务上下文
+
+在现有 `dshpa` 条目的 `config.inbox` 下加入 `context: {}`。在同一个 Web 配置覆盖文件中加入以下条目。根级包装器用于私有 Worker。`dshpa-context` 预设在主对话自己的压缩组内安装这两个包装器和 `/compact` 命令。自定义该预设时，请一起保留四个隔离服务键。自动压缩默认启用。工具结果裁剪器使用随附的默认设置。
+
+```yaml
+- id: compaction-basic
+  disabled: true
+- id: tool-result-pruner
+  disabled: true
+- insert:
+    - id: dshpa-checkpoint-compaction
+      name: '@mosbot-ai/dshpa/checkpoint-compaction'
+    - id: dshpa-checkpoint-pruner
+      name: '@mosbot-ai/dshpa/checkpoint-pruner'
+    - id: preset-dshpa-context
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: dshpa-context
+        order: 90
+        plugins:
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+              dshpaCheckpointCompactionReady: true
+              dshpaCheckpointPrunerReady: true
+            config:
+              - id: dshpa-checkpoint-compaction
+                name: '@mosbot-ai/dshpa/checkpoint-compaction'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: dshpa-checkpoint-pruner
+                name: '@mosbot-ai/dshpa/checkpoint-pruner'
+```
+
+在 DSH Web 使用 `dshpa-context` 预设新建主对话，再通过收件箱关联任务。启用上下文后，收件箱只列出实际使用 dshpa 压缩和裁剪包装器的在线主 Session。
+
+在 DSH 压缩或裁剪已关联的 Session 前，dshpa 将限定范围的任务检查点保存到 SQLite。检查点记录目标、约束、验收条件、规范的等待状态和来源引用。它还会保存有限数量的明确所有者答复作为有来源依据的决策，并保留任务等待状态中的当前问题或继续条件。dshpa 在本地用检查点引用和简短指引生成替换摘要。未关联任务的 Session 使用原生摘要。
+
+对于 Worker 输入，dshpa 使用已配置模型的上下文窗口和 DSH 的 Token 估算器，预留 `inbox.computeLimits.maxOutputTokens`，并原样保留固定指令和当前输入。剩余预算默认按权威任务状态 30%、近期上下文 25%、召回 25% 和检查点 20% 分配。可在 `inbox.context.weights` 的 `authoritative`、`recent`、`retrieval` 和 `checkpoint` 下设置整数百分比，总和须为 100。`inbox.context.maxInputBytes` 默认为 32 KiB，以字节填写 1–64 KiB 范围内的值，并受 Worker 计算输入限额约束。如果必需输入超出预算，请求会失败。
+
+已认证所有者可通过本地 `dshpa/inbox` RPC 使用以下请求负载。
+
+| 请求 `type` | 负载字段 |
+| --- | --- |
+| `context_checkpoint` | `taskId`，用于读取限定范围内最新的检查点元数据。 |
+| `context_recall` | `taskId`、`ref` 和可选的 `cursor`、`maxBytes`，用于读取一页 UTF-8 文本。 |
+| `context_search` | `taskId`、`query` 和可选的 `limit`，用于查找匹配的摘要。 |
+| `context_exclude` | `taskId`、事件或产物的 `ref`、当前任务的 `expectedVersion`，以及设为 `forgotten` 或 `superseded` 的 `reason`。 |
+
+`ref` 可为 `{kind: 'task', taskId}`、`{kind: 'event', eventId}` 或 `{kind: 'artifact', artifactId}`。召回每一页时都会检查任务范围和当前授权。每页默认 1,024 字节，可设置为 4–4,096 字节。使用 `nextCursor` 和同一个引用读取下一页。游标绑定内容修订和当前宿主进程。重启后需发起新的查找。
+
+搜索检查任务及每种证据中最多 12 个近期符合条件的候选项，每个候选项最多搜索 8 KiB，最多返回 10 条摘要。支持规范化后的中英文文本。通过精确引用可以召回较早的证据或读取大型产物的后续内容。排除规则对该任务持久生效，也会过滤旧检查点中源自被排除证据的内容。
+
+在 Worker 实际发送模型请求前，dshpa 会按当前授权和排除规则检查其保留输入所记录的来源。如果来源授权被撤销或相关事件被排除，旧 Worker Session 将无法再向模型供应商发送请求。请使用仍获授权的证据创建新任务。SQLite 来源记录、DSH Session 日志和备份副本各自遵循保留规则。DSH 压缩当前上下文时，会在 Session 日志中保留原始事件。
 
 ### 设置计算与通知限额
 

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import {
   artifactIdSchema, computeWaitPrefix, generationSchema, indefiniteWait, nonEmptyTextSchema, sessionIdSchema, taskIdSchema,
-  utcInstantSchema, versionSchema, waitAllowsWake, WORKER_INPUT_LIMIT, type UtcInstant,
+  utcInstantSchema, versionSchema, waitAllowsWake, WORKER_INPUT_LIMIT, type SourceEventId, type UtcInstant,
 } from '../domain/model.js'
 import type { WorkEvent, WorkState } from '../domain/transitions.js'
 import type { StoredCommandContext, StoredWorkResult, WorkRef, WorkStore } from '../storage/store.js'
@@ -54,7 +54,8 @@ interface SubscribedWake {
   readonly budgetAvailable: boolean
   readonly conditionSatisfied: boolean
 }
-type ExecutorFailure = { ok: false; code: 'capacity' | 'already_active' | 'duplicate_input' | 'host_unavailable' | 'closed' }
+type ContextInputFailure = 'context_budget_exceeded' | 'invalid_context_budget' | 'context_budget_unavailable'
+type ExecutorFailure = { ok: false; code: 'capacity' | 'already_active' | 'duplicate_input' | 'host_unavailable' | 'closed' | ContextInputFailure }
 export type ExecutorResult = StoredWorkResult | ExecutorFailure
 
 export interface WorkerExecutorOptions {
@@ -67,6 +68,12 @@ export interface WorkerExecutorOptions {
   readonly onProgress?: (ref: WorkRef, state: WorkState, report: Extract<WorkerReport, { kind: 'progress' }>) => void
   readonly onObservation?: (ref: WorkRef, state: WorkState, observation: WorkerObservation) => void
   readonly compute?: WorkerComputeOptions
+  readonly prepareContextInput?: (ref: WorkRef, state: WorkState, cursor: string, text: string) =>
+    { ok: true; text: string; sources: readonly SourceEventId[] }
+    | { ok: false; code: ContextInputFailure | 'permission_denied' | 'version_conflict' }
+  readonly resolveContextRoute?: () => Promise<boolean>
+  readonly authorizeContextHistory?: (ref: WorkRef, state: WorkState) => boolean
+  readonly contextWindow?: () => number | undefined
   readonly now?: () => UtcInstant
 }
 
@@ -224,7 +231,7 @@ class WorkerExecutor {
     }
   }
 
-  async launch(ref: WorkRef, input: unknown): Promise<ExecutorResult> {
+  async launch(ref: WorkRef, input: unknown, contextSources?: readonly SourceEventId[]): Promise<ExecutorResult> {
     if (this.closed) return { ok: false, code: 'closed' }
     const decoded = launchSchema.safeParse(input)
     if (!decoded.success) return { ok: false, code: 'invalid_input' }
@@ -256,7 +263,7 @@ class WorkerExecutor {
         return { ok: false, code: 'permission_denied' }
       }
     }
-    return this.startNative(ref, state, preset, cwd, requested.dataScope, requested.input)
+    return this.startNative(ref, state, preset, cwd, requested.dataScope, requested.input, contextSources)
   }
 
   /** Resume only the exact parked Worker after trusted event admission. */
@@ -264,6 +271,8 @@ class WorkerExecutor {
     if (this.closed) return { ok: false, code: 'closed' }
     const decoded = subscribedWakeSchema.safeParse(input)
     if (!decoded.success) return { ok: false, code: 'invalid_input' }
+    if (this.options.resolveContextRoute && !await this.options.resolveContextRoute()) return { ok: false, code: 'context_budget_unavailable' }
+    if (this.closed) return { ok: false, code: 'closed' }
     const requested = decoded.data
     const { store } = this.options
     if (!store.canDispatch()) return { ok: false, code: 'recovery_required' }
@@ -291,7 +300,7 @@ class WorkerExecutor {
     if (!preset || sessionId !== nativeSessionId(state) || !scope || scope.capabilities.length > 0
       || preset.provider !== saved.provider || preset.model !== saved.model || !allowsWorkerData(preset, scope.dataScope)
       || resolveWorkerDirectory(preset.rootDirectory, saved.cwd) !== saved.cwd) return { ok: false, code: 'permission_denied' }
-    return this.startNative(ref, state, preset, saved.cwd, scope.dataScope, sourceObservation(requested.input), {
+    return this.startNative(ref, state, preset, saved.cwd, scope.dataScope, sourceObservation(requested.input), undefined, {
       routed: { route: requested.route, authorize },
       referenceId: requested.referenceId,
       grantsCurrent: requested.grantsCurrent,
@@ -302,12 +311,19 @@ class WorkerExecutor {
 
   private async startNative(
     ref: WorkRef, state: WorkState, preset: WorkerPreset, cwd: string, dataScope: readonly string[], input: WorkerInput,
-    wake?: SubscribedWake,
+    contextSources?: readonly SourceEventId[], wake?: SubscribedWake,
   ): Promise<ExecutorResult> {
     const { store, runtime } = this.options
+    if (!this.historyAuthorized(ref, state)) return { ok: false, code: 'permission_denied' }
+    if (wake && this.options.prepareContextInput) {
+      const prepared = this.options.prepareContextInput(ref, state, input.cursor, input.text)
+      if (!prepared.ok) return prepared
+      input = { ...input, text: prepared.text }
+      contextSources = [...new Set([...prepared.sources, wake.routed.route.eventId])]
+    }
     const sessionId = nativeSessionId(state)
     const saved = state.attempt.worker
-    const journal = makeWorkerInput(state, sessionId, input, 'followup')
+    const journal = makeWorkerInput(state, sessionId, input, 'followup', contextSources)
     const entry: Entry = {
       ref: { ...ref },
       attemptId: state.attempt.id,
@@ -356,6 +372,11 @@ class WorkerExecutor {
         sessionId, cwd, provider: preset.provider, model: preset.model,
         resume: saved !== undefined, signal: entry.abort.signal,
         isCurrent: () => this.current(entry) !== undefined && (!entry.routed || authorized(entry.routed.authorize)),
+        authorizeContext: this.options.authorizeContextHistory && (() => {
+          const current = this.current(entry)
+          return current !== undefined && this.historyAuthorized(ref, current)
+        }),
+        contextWindow: this.options.contextWindow,
         onObservation: this.options.onObservation && (observation => this.observeSignal(entry, observation)),
         ...(compute && limits ? { compute: {
           budget: compute.budget, limits, initiallyUnattended: wake !== undefined,
@@ -419,6 +440,7 @@ class WorkerExecutor {
     const state = this.current(entry)
     if (!state) return { ok: false, code: 'stale_attempt' }
     if (state.task.version !== expectedVersion) return { ok: false, code: 'version_conflict' }
+    if (!this.historyAuthorized(ref, state)) return { ok: false, code: 'permission_denied' }
     if (subscribed) {
       const denied = checkSubscribed(this.options.store, state, subscribed.requested, subscribed.authorize)
       if (denied) return denied
@@ -432,7 +454,14 @@ class WorkerExecutor {
 
     const sessionId = state.attempt.sessionId
     if (!sessionId) return { ok: false, code: 'stale_attempt' }
-    const journal = makeWorkerInput(state, sessionId, input, method)
+    let contextSources: readonly SourceEventId[] | undefined
+    if (this.options.prepareContextInput) {
+      const prepared = this.options.prepareContextInput(ref, state, cursor, input.text)
+      if (!prepared.ok) return prepared
+      input = { ...input, text: prepared.text }
+      contextSources = routed ? [...new Set([...prepared.sources, routed.route.eventId])] : prepared.sources
+    }
+    const journal = makeWorkerInput(state, sessionId, input, method, contextSources)
     const result = this.options.store.applyWorkerEvent(ref, {
       type: 'record_input', ...fence(state, this.now()), cursor,
     }, journal, routed?.route)
@@ -523,6 +552,11 @@ class WorkerExecutor {
     const state = this.options.store.getWork(entry.ref)
     return state?.task.status === 'running' && state.task.version === entry.version
       && state.task.generation === entry.generation && state.attempt.id === entry.attemptId ? state : undefined
+  }
+
+  private historyAuthorized(ref: WorkRef, state: WorkState): boolean {
+    const check = this.options.authorizeContextHistory
+    return !check || authorized(() => check(ref, state))
   }
 
   private nativeInput(ref: WorkRef, input: WorkerInputIntent, routed?: RoutedInput): NativeWorkerInput {

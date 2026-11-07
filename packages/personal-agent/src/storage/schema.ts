@@ -17,15 +17,17 @@ import { migration004 } from './migrations/004.js'
 import { migration005 } from './migrations/005.js'
 import { migration006 } from './migrations/006.js'
 import { migration007 } from './migrations/007.js'
+import { migration008 } from './migrations/008.js'
 
 export const APPLICATION_ID = 0x44534850 // DSHP
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 export const V1_BACKUP_SUFFIX = '.v1.bak'
 export const V2_BACKUP_SUFFIX = '.v2.bak'
 export const V3_BACKUP_SUFFIX = '.v3.bak'
 export const V4_BACKUP_SUFFIX = '.v4.bak'
 export const V5_BACKUP_SUFFIX = '.v5.bak'
 export const V6_BACKUP_SUFFIX = '.v6.bak'
+export const V7_BACKUP_SUFFIX = '.v7.bak'
 
 export type StorageErrorCode =
   | 'busy'
@@ -99,11 +101,17 @@ const schema6Tables = [
 const schema7Tables = [
   ...schema6Tables, 'routines', 'routine_mappings', 'routine_occurrences',
 ]
-const sourceTables = { 1: schema1Tables, 2: schema2Tables, 3: schema3Tables, 4: schema4Tables, 5: schema5Tables, 6: schema6Tables }
+const schema8Tables = [
+  ...schema7Tables, 'context_checkpoints', 'context_exclusions',
+]
+const sourceTables = {
+  1: schema1Tables, 2: schema2Tables, 3: schema3Tables, 4: schema4Tables, 5: schema5Tables, 6: schema6Tables, 7: schema7Tables,
+}
 const backupSuffixes = {
   1: V1_BACKUP_SUFFIX, 2: V2_BACKUP_SUFFIX, 3: V3_BACKUP_SUFFIX, 4: V4_BACKUP_SUFFIX, 5: V5_BACKUP_SUFFIX, 6: V6_BACKUP_SUFFIX,
+  7: V7_BACKUP_SUFFIX,
 }
-const migrations = [migration001, migration002, migration003, migration004, migration005, migration006, migration007]
+const migrations = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008]
 
 function requireTables(db: DatabaseSync, required: readonly string[]): void {
   const tables = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name))
@@ -165,13 +173,13 @@ export function migrateSchema(db: DatabaseSync): void {
     const applicationId = db.prepare('PRAGMA application_id').get()?.application_id
     const version = db.prepare('PRAGMA user_version').get()?.user_version
     if (applicationId === APPLICATION_ID && version === SCHEMA_VERSION) {
-      requireTables(db, schema7Tables)
+      requireTables(db, schema8Tables)
       requireRecoveryAdmission(db)
       return
     }
 
     const isUpgrade = applicationId === APPLICATION_ID
-      && (version === 1 || version === 2 || version === 3 || version === 4 || version === 5 || version === 6)
+      && (version === 1 || version === 2 || version === 3 || version === 4 || version === 5 || version === 6 || version === 7)
     const isEmpty = applicationId === 0 && version === 0
       && db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get() === undefined
     if (!isUpgrade && !isEmpty) {

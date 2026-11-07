@@ -1,18 +1,23 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import { contextCheckpointSchema } from '../../packages/personal-agent/src/context/checkpoint.js'
 import {
   INBOX_RPC_ENDPOINT,
   type InboxPort,
   type InboxResponse,
   type InboxTask,
 } from '../../packages/personal-agent/src/inbox/protocol.js'
+import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { openWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/local-flow-probe.mjs', import.meta.url))
+const contextProbe = fileURLToPath(new URL('./fixtures/context-flow-probe.mjs', import.meta.url))
 const nativeSessionId = 'pa008-native-chat'
 const fixtureProjectId = 'pa008-fixture-project'
 const questionReference = 'pa008-fixture-question'
@@ -40,6 +45,189 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('uses configured context recall, native compaction, Worker admission and exclusion through the Web owner carrier', async () => {
+    const host = await openWebHost(contextProbe, { configOnly: true, patch: [
+      '- id: compaction-basic',
+      '  disabled: true',
+      '- id: tool-result-pruner',
+      '  disabled: true',
+      '- insert:',
+      '    - id: dshpa-checkpoint-compaction',
+      '      name: "@mosbot-ai/dshpa/checkpoint-compaction"',
+      '      config: { auto: false }',
+      '    - id: dshpa-checkpoint-pruner',
+      '      name: "@mosbot-ai/dshpa/checkpoint-pruner"',
+      '    - id: preset-dshpa-context',
+      '      name: "@deepseek-ai/dsh-agent-preset"',
+      '      config:',
+      '        id: dshpa-context',
+      '        order: 90',
+      '        plugins:',
+      '          - id: compaction',
+      '            name: cordis:group',
+      '            group: true',
+      '            isolate:',
+      '              compaction: true',
+      '              toolResultPruner: true',
+      '              dshpaCheckpointCompactionReady: true',
+      '              dshpaCheckpointPrunerReady: true',
+      '            config:',
+      '              - id: dshpa-checkpoint-compaction',
+      '                name: "@mosbot-ai/dshpa/checkpoint-compaction"',
+      '                config: { auto: false }',
+      '              - id: command-compact',
+      '                name: "@deepseek-ai/dsh-command-compact"',
+      '              - id: dshpa-checkpoint-pruner',
+      '                name: "@mosbot-ai/dshpa/checkpoint-pruner"',
+      '- id: dshpa',
+      '  config:',
+      '    inbox:',
+      "      storageDirectory: !!js dshHomePath('context-inbox')",
+      '      workRoot: !!js process.cwd()',
+      '      context: {}',
+      '      worker:',
+      '        provider: pa011-context-fixture',
+      '        model: context-worker',
+    ] })
+    const cookie = await host.exchange()
+    async function rpc<T>(method: string, payload: unknown): Promise<T> {
+      const response = await host.rpc<T>(method, payload, cookie)
+      assert.ok(response.status === 200 && response.result?.ok, `${method}: ${JSON.stringify(response)}\n${host.diagnostics()}`)
+      return response.result.value
+    }
+    const inbox: InboxPort = request => rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request)
+    function contextValue(response: InboxResponse) {
+      assert.ok(response.ok && response.kind === 'context', JSON.stringify(response))
+      return response.value
+    }
+    async function readTask(taskId: string) {
+      const response = await inbox({ type: 'snapshot' })
+      assert.ok(response.ok && response.kind === 'snapshot', JSON.stringify(response))
+      const task = response.snapshot.tasks.find(item => item.id === taskId)
+      assert.ok(task)
+      return task
+    }
+    const project = updated(await inbox({ type: 'create_project', commandId: 'pa011-web-create-project',
+      title: 'Web context fixture', purpose: 'Keep context inside the requested task.' }))
+    assert.ok(project.projectId)
+    const primary = 'pa011-web-context-primary'
+    const foreign = 'pa011-web-context-foreign'
+    const stock = 'pa011-web-context-stock'
+    const listed = await inbox({ type: 'snapshot' })
+    assert.ok(listed.ok && listed.kind === 'snapshot', JSON.stringify(listed))
+    expect(listed.snapshot.sessions.map(session => session.id)).toEqual(expect.arrayContaining([primary, foreign]))
+    expect(listed.snapshot.sessions.some(session => session.id === stock)).toBe(false)
+    expect(await inbox({ type: 'create_task', commandId: 'pa011-web-create-stock', projectId: project.projectId,
+      sessionId: stock, outcome: 'Reject the unguarded native preset.' })).toEqual({ ok: false, code: 'not_found' })
+    const local = updated(await inbox({ type: 'create_task', commandId: 'pa011-web-create-primary',
+      projectId: project.projectId, sessionId: primary, outcome: '整理蓝海目标。 Prepare the scoped context result.' }))
+    const other = updated(await inbox({ type: 'create_task', commandId: 'pa011-web-create-other',
+      projectId: project.projectId, sessionId: foreign, outcome: 'Foreign Indigo Canary' }))
+    assert.ok(local.taskId && other.taskId)
+    const taskId = local.taskId
+    expect(await readTask(taskId)).toMatchObject({ sessionId: primary })
+    const taskRef = { kind: 'task', taskId } as const
+    const recallTask = { type: 'context_recall', taskId, ref: taskRef } as const
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, recallTask)).toMatchObject({ status: 401 })
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, recallTask, await host.exchange(true))).toMatchObject({ status: 403 })
+    expect(contextValue(await inbox(recallTask))).toMatchObject({ ref: taskRef, text: expect.stringContaining('蓝海目标') })
+    expect(await inbox({ ...recallTask, ref: { kind: 'task', taskId: other.taskId } }))
+      .toEqual({ ok: false, code: 'permission_denied' })
+    expect(contextValue(await inbox({ type: 'context_search', taskId, query: '蓝海目标' })))
+      .toContainEqual(expect.objectContaining({ ref: taskRef, summary: expect.stringContaining('蓝海目标') }))
+    expect(contextValue(await inbox({ type: 'context_search', taskId, query: 'Foreign Indigo Canary' }))).toEqual([])
+    expect(contextValue(await inbox({ type: 'context_checkpoint', taskId }))).toBeNull()
+
+    async function compactNative(label: string) {
+      expect(await rpc('session/prompt', { args: { request: {
+        requestId: `pa011-native-prompt-${label}`, sessionId: primary, mode: 'queue',
+        content: [{ type: 'text', text: `${label} ${'Long context fixture text. '.repeat(140)}` }],
+      } } })).toEqual({ accepted: true })
+      expect(await rpc('session/wait', { args: { request: { sessionId: primary, timeoutMs: 4_000 } } }))
+        .toMatchObject({ reason: 'idle' })
+      const compacted = await rpc<{ result: { kind: string; sourceEventSeq?: number } }>('commands/execute', {
+        args: { agentId: primary, line: '/compact', submittedAttachments: [] },
+      })
+      if (compacted.result.kind !== 'success') {
+        const checkpoint = await inbox({ type: 'context_checkpoint', taskId })
+        assert.fail(`${JSON.stringify(compacted)}\n${JSON.stringify(checkpoint)}\n${host.diagnostics()}`)
+      }
+      expect(compacted.result.sourceEventSeq).toEqual(expect.any(Number))
+    }
+    await compactNative('first')
+    expect(contextValue(await inbox({ type: 'context_checkpoint', taskId })))
+      .toMatchObject({ id: expect.any(String), revision: 1, current: true })
+    const queued = await readTask(taskId)
+    updated(await inbox({ type: 'start', taskId, expectedVersion: queued.version, cursor: 'pa011-web-worker-start' }))
+    const waiting = await waitForTask(() => readTask(taskId),
+      task => task.status === 'waiting_input' && task.runtime === 'inactive', 'scoped Worker question', host.diagnostics)
+    expect(waiting.wait).toMatchObject({ reason: 'input', referenceId: 'pa011-web-question' })
+    await compactNative('question')
+    expect(contextValue(await inbox({ type: 'context_checkpoint', taskId })))
+      .toMatchObject({ revision: 2, taskVersion: waiting.version, current: true })
+    const answer = { type: 'answer', taskId, expectedVersion: waiting.version, referenceId: 'pa011-web-question',
+      cursor: 'pa011-web-worker-answer', text: 'Owner confirmation. 周五复核。' } as const
+    expect(await inbox({ ...answer, referenceId: 'wrong-question' })).toEqual({ ok: false, code: 'condition_unmet' })
+    updated(await inbox(answer))
+    const answerHits = contextValue(await inbox({ type: 'context_search', taskId, query: '周五复核' }))
+    assert.ok(Array.isArray(answerHits))
+    const ownerDecision = answerHits.find(hit => hit.ref.kind === 'event')
+    expect(ownerDecision).toMatchObject({ ref: { kind: 'event', eventId: expect.any(String) }, summary: expect.stringContaining('周五复核') })
+    const requeued = await readTask(taskId)
+    updated(await inbox({ type: 'start', taskId, expectedVersion: requeued.version, cursor: answer.cursor }))
+    const verifying = await waitForTask(() => readTask(taskId),
+      task => task.status === 'verifying' && task.runtime === 'inactive' && task.artifacts.length === 1,
+      'Worker result after scoped context handoff', host.diagnostics)
+    const artifactId = verifying.artifacts[0]!.id
+    const artifactRef = { kind: 'artifact', artifactId } as const
+    const recallArtifact = { type: 'context_recall', taskId, ref: artifactRef } as const
+    expect(contextValue(await inbox(recallArtifact))).toMatchObject({ ref: artifactRef, text: expect.stringContaining('独特结果标记') })
+    expect(contextValue(await inbox({ type: 'context_search', taskId, query: '独特结果标记' })))
+      .toContainEqual(expect.objectContaining({ ref: artifactRef }))
+    await compactNative('result')
+    expect(contextValue(await inbox({ type: 'context_checkpoint', taskId })))
+      .toMatchObject({ revision: 3, taskVersion: verifying.version, current: true })
+    const db = new DatabaseSync(join(host.root, 'home', 'context-inbox', DATABASE_FILENAME), { readOnly: true })
+    try {
+      const checkpoints = db.prepare('SELECT record FROM context_checkpoints WHERE task_id = ? ORDER BY revision').all(taskId)
+        .map(row => contextCheckpointSchema.parse(JSON.parse(String(row.record))))
+      expect(checkpoints[1]).toMatchObject({ wait: { reason: 'input', referenceId: answer.referenceId }, taskVersion: waiting.version })
+      expect(checkpoints[2]).toMatchObject({ decisions: [{ text: answer.text, sources: [ownerDecision.ref] }], taskVersion: verifying.version })
+    } finally {
+      db.close()
+    }
+    const exclude = { type: 'context_exclude', taskId, ref: artifactRef, expectedVersion: verifying.version, reason: 'forgotten' } as const
+    expect(await inbox({ ...exclude, expectedVersion: queued.version })).toEqual({ ok: false, code: 'version_conflict' })
+    expect(await inbox(exclude)).toEqual({ ok: true, kind: 'updated', taskId })
+    expect(await inbox(recallArtifact)).toEqual({ ok: false, code: 'source_unavailable' })
+    expect(contextValue(await inbox({ type: 'context_search', taskId, query: '独特结果标记' }))).toEqual([])
+
+    const otherId = other.taskId
+    const originalOther = await readTask(otherId)
+    updated(await inbox({ type: 'start', taskId: otherId, expectedVersion: originalOther.version, cursor: 'pa011-web-revocation-1' }))
+    const firstOtherWait = await waitForTask(() => readTask(otherId),
+      task => task.status === 'waiting_input' && task.runtime === 'inactive', 'first revocation fixture wait', host.diagnostics)
+    updated(await inbox({ type: 'answer', taskId: otherId, expectedVersion: firstOtherWait.version,
+      referenceId: 'pa011-web-revocation-1-question', cursor: 'pa011-web-revocation-2', text: '择期复核证据。' }))
+    const firstOtherAnswer = await readTask(otherId)
+    updated(await inbox({ type: 'start', taskId: otherId, expectedVersion: firstOtherAnswer.version, cursor: 'pa011-web-revocation-2' }))
+    const secondOtherWait = await waitForTask(() => readTask(otherId),
+      task => task.status === 'waiting_input' && task.runtime === 'inactive', 'second revocation fixture wait', host.diagnostics)
+    const hits = contextValue(await inbox({ type: 'context_search', taskId: otherId, query: '择期复核证据' }))
+    assert.ok(Array.isArray(hits))
+    const used = hits.find(hit => hit.ref.kind === 'event')
+    assert.ok(used)
+    updated(await inbox({ type: 'context_exclude', taskId: otherId, ref: used.ref,
+      expectedVersion: secondOtherWait.version, reason: 'superseded' }))
+    const stillWaiting = await readTask(otherId)
+    updated(await inbox({ type: 'answer', taskId: otherId, expectedVersion: stillWaiting.version,
+      referenceId: 'pa011-web-revocation-2-question', cursor: 'pa011-web-revocation-3', text: 'Use current evidence only.' }))
+    const retiredHistory = await readTask(otherId)
+    expect(await inbox({ type: 'start', taskId: otherId, expectedVersion: retiredHistory.version, cursor: 'pa011-web-revocation-3' }))
+      .toEqual({ ok: false, code: 'permission_denied' })
+    expect(await readTask(otherId)).toMatchObject({ status: 'queued', version: retiredHistory.version })
+  }, 45_000)
+
   it('records one native timed reminder and one independently keyed manual reminder without a model', async () => {
     const host = await openWebHost(probe, { configOnly: true, patch: [
       '- id: schedule',
