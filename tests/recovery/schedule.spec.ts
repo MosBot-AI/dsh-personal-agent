@@ -98,4 +98,14 @@ describe('native routine recovery', () => {
       profile.dispose()
     }
   }, nativeProfileTimeoutMs + 1_000)
+
+  it('reconciles a wall-clock gap through a real native wake without replacing its intended occurrence', () => {
+    const profile = createScheduleProfile()
+    try {
+      expect(report(profile, 'warm-gap')).toMatchObject({ phase: 'warm-gap', nudged: 1,
+        occurrences: 1, sameNativeId: true, sameWakeAt: true, preparations: 0, streams: 0 })
+    } finally {
+      profile.dispose()
+    }
+  }, nativeProfileTimeoutMs + 1_000)
 })

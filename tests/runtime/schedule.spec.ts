@@ -39,6 +39,8 @@ function fixture(options: { start?: string; goalAdmission?: (taskId: string) => 
   let retirementEnabled = true
   let createMode: 'normal' | 'lost' | 'duplicate' | 'elapsed' = 'normal'
   let onCatalog: (() => void) | undefined
+  let beforeCreateReturn: (() => Promise<void>) | undefined
+  let beforeHistoryReturn: (() => Promise<void>) | undefined
   let nativeSequence = 0
   const entries = new Map<string, NativeScheduleEntry>()
   const receipts = new Map<string, readonly NativeScheduleReceipt[]>()
@@ -72,10 +74,15 @@ function fixture(options: { start?: string; goalAdmission?: (taskId: string) => 
           const duplicate = { ...entry, id: `native-${++nativeSequence}` }
           entries.set(duplicate.id, duplicate)
         }
+        if (beforeCreateReturn) await beforeCreateReturn()
         if (createMode !== 'normal') throw new Error('Fixture lost native acknowledgement')
         return entry
       },
-      async history(id) { return receipts.get(id) ?? [] },
+      async history(id) {
+        const records = receipts.get(id) ?? []
+        if (beforeHistoryReturn) await beforeHistoryReturn()
+        return records
+      },
       async cancel(entry) {
         if (entries.get(entry.id) !== entry || entry.status === 'ended' || entry.invalid) return false
         entries.delete(entry.id)
@@ -119,6 +126,8 @@ function fixture(options: { start?: string; goalAdmission?: (taskId: string) => 
     enroll(value: boolean) { enrolled = value },
     retire(value: boolean) { retirementEnabled = value },
     afterCatalog(action?: () => void) { onCatalog = action },
+    holdCreate(wait?: () => Promise<void>) { beforeCreateReturn = wait },
+    holdHistory(wait?: () => Promise<void>) { beforeHistoryReturn = wait },
     failCreate(mode: typeof createMode) { createMode = mode },
     end(id: string, changes: Partial<NativeScheduleReceipt> = {}) {
       const entry = entries.get(id)
@@ -153,6 +162,12 @@ function arm(f: ReturnType<typeof fixture>, value: ReturnType<typeof draft>) {
 function occurrences(store: WorkStore, ref: RoutineRef) {
   return store.listRoutineOccurrences({ ownerId: ref.ownerId, profileId: ref.profileId })
     .filter(row => row.routineId === ref.routineId)
+}
+
+function nativeBarrier() {
+  const entered = Promise.withResolvers<void>()
+  const released = Promise.withResolvers<void>()
+  return { entered: entered.promise, release: released.resolve, wait: () => { entered.resolve(); return released.promise } }
 }
 
 describe('durable routine orchestration', () => {
@@ -264,6 +279,47 @@ describe('durable routine orchestration', () => {
     expect((await f.adapter.reconcile()).completed).toBe(0)
     await vi.waitFor(() => expect(occurrences(f.store, work.ref)).toHaveLength(1))
     expect(occurrences(f.store, work.ref)[0]).toMatchObject({ status: 'reminded', kind: 'scheduled' })
+    expect(f.creates).toHaveLength(1)
+  })
+
+  it('leaves a native create and a receipt for ordinary reconciliation when their warm scans expire', async () => {
+    const f = fixture()
+    const work = draft(f, 'expired-warm-scan')
+    arm(f, work)
+
+    const create = nativeBarrier()
+    const creating = new AbortController()
+    f.holdCreate(create.wait)
+    const warmCreate = f.adapter.recoverAfterGap(creating.signal)
+    await create.entered
+    creating.abort()
+    create.release()
+    expect(await warmCreate).toMatchObject({ created: 0, adopted: 0, completed: 0 })
+    expect(f.store.listRoutineMappings()).toEqual([expect.objectContaining({ state: 'intent' })])
+    expect(f.entries.size).toBe(1)
+    f.holdCreate()
+    expect((await f.adapter.reconcile()).adopted).toBe(1)
+    const [mapping] = f.store.listRoutineMappings()
+    expect(mapping).toMatchObject({ state: 'bound', nativeId: 'native-1' })
+
+    f.at(initialWake)
+    const receipt = f.end(mapping!.nativeId!)
+    const history = nativeBarrier()
+    const reading = new AbortController()
+    f.holdHistory(history.wait)
+    const warmRead = f.adapter.recoverAfterGap(reading.signal)
+    await history.entered
+    reading.abort()
+    history.release()
+    expect(await warmRead).toMatchObject({ completed: 0, retired: 0 })
+    expect(occurrences(f.store, work.ref)).toEqual([])
+    expect(f.store.getRoutine(work.ref)?.status).toBe('armed')
+    expect(f.retirements).toEqual([])
+    f.holdHistory()
+
+    expect(await f.adapter.reconcile()).toMatchObject({ completed: 1, retired: 1 })
+    expect(occurrences(f.store, work.ref)).toEqual([expect.objectContaining({ status: 'reminded',
+      nativeReceipt: expect.objectContaining({ messageId: receipt.messageId }) })])
     expect(f.creates).toHaveLength(1)
   })
 

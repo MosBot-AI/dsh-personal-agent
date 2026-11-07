@@ -30,10 +30,11 @@ export interface ScheduleScanResult {
   readonly completed: number
   readonly skipped: number
   readonly retired: number
+  readonly nudged: number
   readonly problems: readonly { readonly mappingId: string; readonly code: ProblemCode }[]
 }
 
-type Scan = { created: number; adopted: number; completed: number; skipped: number; retired: number;
+type Scan = { created: number; adopted: number; completed: number; skipped: number; retired: number; nudged: number;
   problems: { mappingId: string; code: ProblemCode }[] }
 
 const MIN_WAKE_LEAD_MS = 1_000
@@ -41,10 +42,11 @@ const DELIVERY_GRACE_MS = 60_000
 const MAX_SCAN_PASSES = 2
 const MAX_CATALOG = 10_000
 const MAX_RETIRE_PER_PASS = 32
+const MAX_WARM_NUDGE_ATTEMPTS = 4
 
 const fail = <Code extends string>(code: Code) => ({ ok: false, code } as const)
 const instant = (value: string) => utcInstantSchema.parse(value)
-const blank = (): Scan => ({ created: 0, adopted: 0, completed: 0, skipped: 0, retired: 0, problems: [] })
+const blank = (): Scan => ({ created: 0, adopted: 0, completed: 0, skipped: 0, retired: 0, nudged: 0, problems: [] })
 
 function sameAuthority(left: RoutineAuthority | undefined, right: RoutineAuthority | undefined): boolean {
   return left !== undefined && right !== undefined && left.clientId === right.clientId && left.deviceId === right.deviceId
@@ -113,6 +115,7 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
   let retryElapsed = false
   let scheduled: NodeJS.Immediate | undefined
   let running: Promise<ScheduleScanResult> | undefined
+  let gapRecovery: Promise<ScheduleScanResult> | undefined
   let disposing: Promise<void> | undefined
 
   function authority(scope: Scope): RoutineAuthority | undefined {
@@ -171,8 +174,10 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
     finishObsolete(mapping, code)
   }
 
-  async function handleMapping(original: RoutineMapping, catalog: NativeScheduleEntry[], scan: Scan): Promise<void> {
-    if (!canWork() || original.state === 'terminal') return
+  async function handleMapping(
+    original: RoutineMapping, catalog: NativeScheduleEntry[], scan: Scan, available: () => boolean,
+  ): Promise<void> {
+    if (!available() || original.state === 'terminal') return
     let mapping = original
     const ref = refForMapping(mapping)
     const entries = catalog.filter(entry => entry.marker === mapping.marker)
@@ -209,10 +214,11 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
         if (!retimed.ok) return
         mapping = retimed.mapping
       }
-      if (!canWork() || !sameAuthority(routine.authority, authority(mapping))) return
+      if (!sameAuthority(routine.authority, authority(mapping)) || !available()) return
       try {
         entry = await native.create({ marker: mapping.marker, wakeAt: mapping.nativeWakeAt })
       } catch (error) {
+        if (!available()) return
         if (error instanceof NativeWakeElapsed) {
           // No native mutation ran. Rescan the complete catalog before
           // retiming or skipping the durable intent under its misfire policy.
@@ -223,7 +229,7 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
         // catalog to adopt the exact marker and never blindly creates again.
         return uncertain(scan, mapping, 'native_create_unknown')
       }
-      if (!canWork()) return
+      if (!available()) return
       if (!exactEntry(entry, mapping, native.targetSessionId)) return unavailable(scan, mapping, 'changed_native')
       catalog.push(entry)
       scan.created++
@@ -241,7 +247,7 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
       // Let a concurrent end go through receipt settlement on the next scan.
       if (!native.cancel) return
       try {
-        if (await native.cancel(entry)) finishObsolete(mapping, 'cancelled')
+        if (await native.cancel(entry) && available()) finishObsolete(mapping, 'cancelled')
       } catch { /* The next complete catalog can settle a lost cancellation acknowledgement. */ }
       return
     }
@@ -249,8 +255,13 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
     if (entry.status !== 'ended') return
 
     let history: readonly NativeScheduleReceipt[]
-    try { history = await native.history(entry.id) } catch { return problem(scan, mapping, 'native_receipt_unavailable') }
-    if (!canWork()) return
+    try {
+      history = await native.history(entry.id)
+    } catch {
+      if (available()) problem(scan, mapping, 'native_receipt_unavailable')
+      return
+    }
+    if (!available()) return
     if (history.length === 0) return problem(scan, mapping, 'native_receipt_unavailable')
     const receipt = history[0]!
     if (history.length !== 1 || !exactReceipt(receipt, mapping, entry.id)) return unavailable(scan, mapping, 'native_receipt_mismatch')
@@ -263,6 +274,8 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
     const misfire = superseded || (current?.misfire === 'skip' && Date.parse(at) - Date.parse(mapping.nativeWakeAt) > DELIVERY_GRACE_MS)
     const owner = authority(mapping)
     const admitted = current !== undefined && sameAuthority(current.authority, owner)
+    const admission = admitted && !misfire ? goalAdmission(current, at) : undefined
+    if (!available()) return
     const result = store.completeRoutineOccurrence(ref, {
       mappingId: mapping.id,
       receipt: { nativeId: receipt.nativeId, messageId: receipt.messageId, scheduledAt: receipt.wakeAt,
@@ -270,7 +283,7 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
       intendedAt: mapping.intendedAt, at, authority: owner,
       nextIntendedAt: superseded && current?.misfire === 'latest' ? occurrences?.latest : occurrences?.future,
       ...(misfire ? { skipReason: 'misfire' as const } : {}),
-      goalAdmission: admitted && !misfire ? goalAdmission(current, at) : undefined,
+      goalAdmission: admission,
     })
     if (result.ok && !result.duplicate) {
       if (result.occurrence.status === 'skipped') scan.skipped++
@@ -278,12 +291,12 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
     }
   }
 
-  async function retireCommitted(catalog: readonly NativeScheduleEntry[], scan: Scan): Promise<void> {
+  async function retireCommitted(catalog: readonly NativeScheduleEntry[], scan: Scan, available: () => boolean): Promise<void> {
     if (!native.retire) return
     let attempts = 0
     let retired = 0
     for (const entry of catalog) {
-      if (!canWork()) return
+      if (!available()) break
       if (entry.invalid || entry.status !== 'ended' || entry.targetSessionId !== native.targetSessionId) continue
       const proof = store.getRoutineRetirement(entry.id)
       if (!proof || proof.nativeId !== entry.id || proof.prompt !== entry.marker || proof.scheduledAt !== entry.wakeAt
@@ -301,21 +314,56 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
     scan.retired += retired
   }
 
-  async function scanOnce(scan: Scan): Promise<void> {
-    if (!canWork()) return
+  async function nudgeOverdue(catalog: readonly NativeScheduleEntry[], scan: Scan, signal?: AbortSignal): Promise<void> {
+    if (!native.nudge) return
+    let attempts = 0
+    for (const mapping of store.listRoutineMappings()) {
+      if (signal?.aborted || !canWork()) return
+      if (mapping.state !== 'bound' || mapping.nativeWakeAt > now()) continue
+      const entries = catalog.filter(entry => entry.marker === mapping.marker)
+      const entry = entries[0]
+      if (entries.length !== 1 || entry?.status !== 'active' || !exactEntry(entry, mapping, native.targetSessionId)) continue
+      const current = () => {
+        if (signal?.aborted || !canWork()) return false
+        const routine = store.getRoutine(refForMapping(mapping))
+        return routine?.status === 'armed' && routine.revision === mapping.routineRevision
+          && routine.nextIntendedAt === mapping.intendedAt && sameAuthority(routine.authority, authority(mapping))
+      }
+      if (!current()) continue
+      attempts++
+      try {
+        if (await native.nudge(entry, current)) {
+          scan.nudged++
+          // The native drive wakes all due rows in its next pass.
+          return
+        }
+      } catch { /* A later native change or heartbeat can reconcile the same durable row. */ }
+      if (attempts >= MAX_WARM_NUDGE_ATTEMPTS) return
+    }
+  }
+
+  async function scanOnce(scan: Scan, warm: boolean, signal?: AbortSignal): Promise<void> {
+    const live = () => signal?.aborted !== true && canWork()
+    if (!live()) return
     const original = store.listRoutineMappings()
     if (!native.retire && original.length === 0 && store.listArmedRoutines().length === 0) return
     const catalog = [...await native.catalog()]
+    if (!live()) return
     if (catalog.length > MAX_CATALOG || new Set(catalog.map(entry => entry.id)).size !== catalog.length) {
       throw new Error('The native schedule catalog is incomplete or ambiguous')
     }
-    for (const mapping of original) await handleMapping(mapping, catalog, scan)
-    await retireCommitted(catalog, scan)
-    if (!canWork()) return
+    for (const mapping of original) {
+      if (!live()) return
+      await handleMapping(mapping, catalog, scan, live)
+    }
+    if (warm) await nudgeOverdue(catalog, scan, signal)
+    if (!live()) return
+    await retireCommitted(catalog, scan, live)
+    if (!live()) return
     const active = new Set(store.listRoutineMappings().filter(mapping => mapping.state !== 'terminal')
       .map(mapping => JSON.stringify([mapping.ownerId, mapping.profileId, mapping.routineId, mapping.routineRevision])))
     for (const routine of store.listArmedRoutines()) {
-      if (!canWork()) return
+      if (!live()) return
       const ref = refFor(routine)
       if (active.has(JSON.stringify([ref.ownerId, ref.profileId, ref.routineId, routine.revision]))
         || !routine.nextIntendedAt || !sameAuthority(routine.authority, authority(ref))) continue
@@ -332,21 +380,21 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
       const reserved = store.reserveRoutineMapping(ref, {
         expectedRevision: routine.revision, intendedAt, nativeWakeAt: physicalWake(intendedAt, at), mailboxId: native.targetSessionId, at,
       })
-      if (reserved.ok) await handleMapping(reserved.mapping, catalog, scan)
+      if (reserved.ok) await handleMapping(reserved.mapping, catalog, scan, live)
     }
   }
 
-  function reconcile(): Promise<ScheduleScanResult> {
-    if (closed) return Promise.resolve(blank())
+  function scan(warm: boolean, signal?: AbortSignal): Promise<ScheduleScanResult> {
+    if (closed || signal?.aborted) return Promise.resolve(blank())
     if (running) { dirty = true; return running }
     clearImmediate(scheduled)
     scheduled = undefined
     running = Promise.resolve().then(async () => {
       const scan = blank()
-      for (let pass = 0; pass < MAX_SCAN_PASSES && !closed; pass++) {
+      for (let pass = 0; pass < MAX_SCAN_PASSES && !closed && !signal?.aborted; pass++) {
         dirty = false
         retryElapsed = false
-        await scanOnce(scan)
+        await scanOnce(scan, warm && pass === 0, signal)
         if (!dirty && !retryElapsed) break
       }
       return scan
@@ -355,6 +403,17 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
       if (dirty && !closed) schedule()
     })
     return running
+  }
+
+  function reconcile(): Promise<ScheduleScanResult> { return scan(false) }
+
+  function recoverAfterGap(signal?: AbortSignal): Promise<ScheduleScanResult> {
+    if (closed || signal?.aborted) return Promise.resolve(blank())
+    gapRecovery ??= (async () => {
+      while (running && !closed && !signal?.aborted) await running.catch(() => undefined)
+      return scan(true, signal)
+    })().finally(() => { gapRecovery = undefined })
+    return gapRecovery
   }
 
   const unsubscribe = native.subscribe(schedule)
@@ -398,12 +457,13 @@ export function createScheduleAdapter(options: ScheduleAdapterOptions) {
       return store.runRoutineNow(ref, { ...input, at, authority: owner, goalAdmission: goalAdmission(routine, at) })
     },
     reconcile,
+    recoverAfterGap,
     close(): Promise<void> {
       if (disposing) return disposing
       closed = true
       unsubscribe()
       clearImmediate(scheduled)
-      disposing = Promise.resolve(running).catch(() => undefined).then(() => native.dispose())
+      disposing = Promise.allSettled([running, gapRecovery]).then(() => native.dispose())
       return disposing
     },
   })

@@ -54,6 +54,8 @@ import {
 import { createEffectRecovery, type EffectRecoveryOptions } from '../runtime/recovery-effects.js'
 import { createOutbox, type OutboxOptions } from '../runtime/outbox.js'
 import type { RoutingAuthority, RoutingEventRef, SubscriptionKey, SubscriptionScope, WorkerRouteIntent } from '../runtime/subscriptions.js'
+import { exportWorkAudit, type WorkAuditOptions, type WorkAuditScope } from './audit.js'
+import { createWorkBackup, pruneWorkBackups, type BackupRetention, type WorkBackup } from './backup.js'
 import { openStorageDatabase, type StorageDatabase } from './database.js'
 import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
 import {
@@ -205,6 +207,7 @@ function commandFingerprint(
 /** The store holds the profile writer lock until close. All commit inputs are data. */
 class WorkStore {
   private closed = false
+  private backupActive = false
   private budget?: BudgetService
   private outbox?: ReturnType<typeof createOutbox>
   private effectRecovery?: ReturnType<typeof createEffectRecovery>
@@ -221,6 +224,26 @@ class WorkStore {
   private closeDatabase(): void {
     this.closed = true
     this.storage.close()
+  }
+
+  async createBackup(directory: string, options: { signal?: AbortSignal } = {}): Promise<WorkBackup> {
+    const source = this.access(db => db.location())
+    if (!source) throw new StorageError('invalid_input', 'An on-disk WorkStore is required for backup')
+    if (this.backupActive) throw new StorageError('busy', 'A work backup is already in progress')
+    this.backupActive = true
+    try {
+      return await createWorkBackup(source, directory, options.signal)
+    } finally {
+      this.backupActive = false
+    }
+  }
+
+  pruneBackups(directory: string, retention?: BackupRetention): { removed: number; remaining: number } {
+    return this.access(() => pruneWorkBackups(directory, retention))
+  }
+
+  exportAudit(scope: WorkAuditScope, options?: WorkAuditOptions) {
+    return this.access(db => exportWorkAudit(db, scope, options))
   }
 
   createActionGate(options: ActionGateOptions) {

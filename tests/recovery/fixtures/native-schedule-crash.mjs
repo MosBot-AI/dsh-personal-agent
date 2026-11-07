@@ -153,6 +153,7 @@ async function run(ctx, counters) {
   const port = ctx.dshpaScheduleSink.connect(ctx)
   const bridge = createScheduleAdapter({
     store: businessStore(store, counters), native: nativeCarrier(port, store, counters), currentAuthority: () => authority,
+    now: () => new Date(Date.now()).toISOString(),
   })
   try {
     if (phase === 'recover-tampered') {
@@ -170,7 +171,7 @@ async function run(ctx, counters) {
       report({ nativeId: entry.id, nativeRows: rows.length, occurrences: 0, mappingState: mapping.state })
       return
     }
-    const control = phase === 'manual-native' || phase === 'pause-native'
+    const control = phase === 'manual-native' || phase === 'pause-native' || phase === 'warm-gap'
     if (phase === 'create-crash' || phase === 'receipt-crash' || control) {
       const intendedAt = new Date(Date.now() + (control ? 120_000 : 1_250)).toISOString()
       const { routine } = verify(bridge.create(scope, { id: routineId, title: 'Native routine recovery',
@@ -180,6 +181,34 @@ async function run(ctx, counters) {
       assert.equal(routine.status, 'draft')
       assert.deepEqual(await port.catalog(), [], 'A draft must not arm a native schedule')
       const armed = verify(bridge.update(ref, { type: 'arm', expectedRevision: routine.revision }, authority)).routine
+      if (phase === 'warm-gap') {
+        await bridge.reconcile()
+        const [entry] = await port.catalog()
+        assert.equal(entry.status, 'active')
+        assert.equal(entry.wakeAt, intendedAt)
+        const originalNow = Date.now
+        Date.now = () => originalNow() + 125_000
+        try {
+          const stopped = new AbortController()
+          stopped.abort()
+          assert.equal((await bridge.recoverAfterGap(stopped.signal)).nudged, 0)
+          assert.deepEqual(store.listRoutineOccurrences(scope), [])
+          const result = await bridge.recoverAfterGap(new AbortController().signal)
+          assert.equal(result.nudged, 1)
+          const occurrence = await eventually(() => store.listRoutineOccurrences(scope)[0])
+          const receipt = occurrence.nativeReceipt
+          assert.equal(occurrence.intendedAt, intendedAt)
+          assert.equal(receipt.nativeId, entry.id)
+          assert.equal(receipt.scheduledAt, entry.wakeAt)
+          await verifyModelFreeDelivery(ctx, port.targetSessionId, receipt.messageId, entry.marker)
+          await bridge.reconcile()
+          assert.equal(store.listRoutineOccurrences(scope).length, 1)
+          report({ nudged: result.nudged, occurrences: 1, sameNativeId: true, sameWakeAt: true, ...counters() })
+          return
+        } finally {
+          Date.now = originalNow
+        }
+      }
       if (phase === 'pause-native') {
         await bridge.reconcile()
         assert.equal((await port.catalog()).length, 1)

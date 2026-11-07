@@ -1,0 +1,8 @@
+- id: web-runtime
+  config:
+    openBrowser: false
+    printUrl: false
+    publicUrl: null
+    surfaceContext: false
+- id: schedule
+  inject: [dshpaScheduleResolverReady]

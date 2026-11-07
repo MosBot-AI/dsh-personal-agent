@@ -14,6 +14,7 @@
     "test:contracts": "pnpm build && vitest run tests/contracts",
     "test:recovery": "vitest run tests/recovery",
     "test:local-flow": "vitest run tests/e2e/local-flow.spec.ts",
+    "test:resident": "vitest run tests/e2e/resident.spec.ts",
     "test:e2e": "node scripts/run-live-e2e.mjs",
     "check": "pnpm typecheck && pnpm build && pnpm test && python3 scripts/check_plan.py"
   },

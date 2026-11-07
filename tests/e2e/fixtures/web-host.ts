@@ -36,19 +36,11 @@ async function stop(child: ChildProcessWithoutNullStreams): Promise<void> {
   }
 }
 
-export async function openWebHost(probe: string, options: { patch?: readonly string[]; configOnly?: boolean } = {}) {
+export function prepareWebHost(probe?: string, patch: readonly string[] = []) {
   const root = mkdtempSync(join(tmpdir(), 'dshpa-web-flow-'))
   const dshHome = join(root, 'home')
   const profile = join(dshHome, 'profiles', profileName)
   const installed = join(profile, 'node_modules', bundleName)
-  let child: ChildProcessWithoutNullStreams | undefined
-  onTestFinished(async () => {
-    try {
-      if (child) await stop(child)
-    } finally {
-      rmSync(root, { recursive: true, force: true })
-    }
-  })
   mkdirSync(installed, { recursive: true })
   const manifest = JSON.parse(readFileSync(join(bundleSource, 'package.json'), 'utf8')) as { version: string }
   for (const file of ['package.json', 'cordis.patch.yml']) {
@@ -58,20 +50,29 @@ export async function openWebHost(probe: string, options: { patch?: readonly str
     cpSync(join(bundleSource, directory), join(installed, directory), { recursive: true })
   }
   symlinkSync(join(bundleSource, 'node_modules'), join(installed, 'node_modules'), 'junction')
-  copyFileSync(probe, join(profile, 'web-flow-probe.mjs'))
+  if (probe) copyFileSync(probe, join(profile, 'web-flow-probe.mjs'))
   writeFileSync(join(profile, 'package.json'), JSON.stringify({
     name: profileName,
     private: true,
     dependencies: { [bundleName]: manifest.version },
     dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', bundleName] } },
   }))
-  writeFileSync(join(profile, 'cordis.patch.yml'), [
-    ...(options.patch ?? []),
-    '- insert:',
-    '    - id: web-flow-probe',
-    '      name: ./web-flow-probe.mjs',
-    '',
-  ].join('\n'))
+  const rows = [...patch]
+  if (probe) rows.push('- insert:', '    - id: web-flow-probe', '      name: ./web-flow-probe.mjs')
+  writeFileSync(join(profile, 'cordis.patch.yml'), rows.length === 0 ? '[]\n' : [...rows, ''].join('\n'))
+  return { root, dshHome, profileName }
+}
+
+export async function openWebHost(probe: string, options: { patch?: readonly string[]; configOnly?: boolean } = {}) {
+  const { root, dshHome } = prepareWebHost(probe, options.patch)
+  let child: ChildProcessWithoutNullStreams | undefined
+  onTestFinished(async () => {
+    try {
+      if (child) await stop(child)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 
   const processHandle = spawn(process.execPath, [dsh, '--profile', profileName, '--no-open', '--port', '0'], {
     cwd: root,
