@@ -5,6 +5,7 @@ import { ApprovalCard, requestId, TaskDetail, TaskStatus } from './task.js'
 import { Usage } from './usage.js'
 import { Reminders, Routines } from './routines.js'
 import { PersonalMemory } from './memory.js'
+import { LocalKnowledge } from './knowledge.js'
 import { Projects, TaskPlanning } from './projects.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
@@ -459,6 +460,8 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
         {snapshot?.memoryConfigured && <PersonalMemory t={t} port={port} projects={snapshot.projects} tasks={snapshot.tasks}
           connectionKey={connectionKey} currentConnection={() => connection.getSnapshot()} readable={writable}
           writable={writable && !snapshot.recoveryMode} />}
+        {snapshot?.knowledgeConfigured && connected && <LocalKnowledge key={connectionKey} t={t} port={port}
+          readable={writable && !snapshot.recoveryMode} current={() => connection.getSnapshot() === connectionKey} />}
         {snapshot?.schedules && <Routines routines={snapshot.schedules.routines} tasks={snapshot.tasks} t={t}
           writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('routines')}
           submit={(request, acknowledged) => { void mutate('routines', request, acknowledged) }} />}

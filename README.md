@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-014, PA-018, PA-021, and PA-038).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-015, PA-018, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -18,6 +18,7 @@ The [routing evidence](docs/evidence/PA-010.md) covers source intake, subscripti
 The [context evidence](docs/evidence/PA-011.md) covers native checkpoint capture, reference recall, exclusions, and input budgets.
 The [personal memory evidence](docs/evidence/PA-012.md) covers owner controls, provider snapshots, and exclusions that survive stale provider data.
 The [goal planning evidence](docs/evidence/PA-014.md) covers revisions, Worker drafts, task prerequisites and on-demand review.
+The [local knowledge evidence](docs/evidence/PA-015.md) covers explicit roots, incremental indexing and source revocation.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
@@ -187,6 +188,30 @@ Open **Goals and plans** in **Today** to create a goal with success criteria, mi
 In a Task, **Task plan and dependencies** shows Worker drafts for that exact Task and lets you turn a reviewed step into an ordinary Task in the same project. Set prerequisites on queued or blocked Tasks. A prerequisite must belong to the same project, and cycles are rejected. A dependent becomes ready only after all its prerequisites are completed. Reopening a prerequisite blocks queued dependents again. Already-running attempts continue under their existing authorization.
 
 Select **Weekly review** to inspect ready and waiting Tasks, recently accepted results and upcoming milestones. Projects are ordered by the configured priority and due time. The review calls out a priority choice if equally ranked projects compete for the next available Worker slots. The review and cadence are planning metadata, and recurring schedules are armed separately.
+
+### Search local knowledge
+
+Add a `knowledge` block under `config.inbox` on the `dshpa` row. Use canonical absolute paths on macOS or Linux (arm64 or x64). The connector reads only the roots you list.
+
+```yaml
+knowledge:
+  roots:
+    - id: llmwiki
+      directory: /absolute/path/to/llmwiki
+      include: ['**/*.md']
+      exclude: ['private/**']
+    - id: notes
+      directory: /absolute/path/to/notes
+      types: ['.md', '.txt']
+      maxFileBytes: 131072
+      maxFiles: 256
+```
+
+In **Today**, open **Local knowledge** and select **Check sources** or enter keywords. A missing root appears as unavailable and the search continues with other configured roots. Search matches Chinese and English terms together and shows paths relative to each root. Open a result to see bounded text pages and its source reference. A reference pairs a stable ID with the SHA-256 revision of the document.
+
+The in-memory index reuses unchanged entries and checks current files before returning results. Files and directories must be reachable from their configured root without symlinks. Hidden entries, hard links, binary content and files over the configured limits are skipped. The built-in type allowlist is `.md`, `.markdown`, `.txt`, `.rst`, `.csv` and `.json`. The default types are Markdown and plain text. Each root has a 4 MiB derived text budget. Limited roots may show partial results.
+
+Source text is displayed as evidence. The connector keeps it out of automatic Worker input, personal memory and native compaction summaries. The source root stays read-only, and the index is rebuilt on demand after restart.
 
 ### Set compute and attention limits
 

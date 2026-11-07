@@ -44,6 +44,8 @@ export const inboxStyles = `
 .dshpa-card, .dshpa-empty { display: grid; min-width: 0; gap: 10px; padding: 14px; border: 1px solid var(--dshpa-line); border-radius: 11px; background: var(--dshpa-layer); overflow-wrap: anywhere; }
 .dshpa-attention { border-inline-start: 3px solid var(--dshpa-accent); }
 .dshpa-summary { font-weight: 550; }
+.dshpa-knowledge pre { white-space: pre-wrap; }
+.dshpa-knowledge pre, .dshpa-knowledge code { overflow-wrap: anywhere; }
 .dshpa-fields { display: grid; grid-template-columns: minmax(74px, 28%) minmax(0, 1fr); gap: 5px 10px; font-size: 12px; }
 .dshpa-fields dt { color: var(--dshpa-muted); }
 .dshpa-fields dd { margin: 0; }

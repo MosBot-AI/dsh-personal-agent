@@ -107,6 +107,35 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('shows missing roots and opens exact knowledge pages as plain text', async () => {
+    const roots = [{ id: 'llmwiki', status: 'unavailable' as const, files: 0 }, { id: 'local', status: 'available' as const, files: 1 }]
+    const source = { ref: { rootId: 'local', id: 'a'.repeat(64) }, path: '资料.md', revision: 'b'.repeat(64) }
+    const payload = '<img src=x onerror=alert(1)>'
+    const port = vi.fn<InboxPort>(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot({ knowledgeConfigured: true }) }
+      if (request.type === 'knowledge_status') return { ok: true, kind: 'knowledge_status', roots }
+      if (request.type === 'knowledge_search') return { ok: true, kind: 'knowledge_search', roots, hits: [{ ...source, snippet: payload }] }
+      if (request.type === 'knowledge_read' && request.offset === 0) {
+        return { ok: true, kind: 'knowledge_page', source, text: payload, totalBytes: 50, nextOffset: payload.length }
+      }
+      if (request.type === 'knowledge_read') return { ok: false, code: 'stale_source' }
+      throw new Error(`Unexpected ${request.type}`)
+    })
+    const { node } = await mount(port)
+    await click(button(node, 'Check sources'))
+    expect(node.textContent).toContain('llmwiki · Unavailable')
+    await fill(field(node, 'Knowledge keywords'), '资料 Review')
+    await click(button(node, 'Search documents'))
+    await click(button(node, 'local / 资料.md'))
+    expect(node.querySelector('pre')?.textContent).toBe(payload)
+    expect(node.querySelector('img')).toBeNull()
+    await click(button(node, 'Next page'))
+    expect(port.mock.calls.map(([request]) => request)).toContainEqual({ type: 'knowledge_read', ref: source.ref,
+      revision: source.revision, offset: payload.length })
+    expect(node.textContent).toContain('This source changed or is unavailable.')
+    expect(node.textContent).not.toContain(payload)
+  })
+
   it('reuses a previous plan as a draft and opens weekly review through the read-only request', async () => {
     const saved = { title: 'Current goal', purpose: 'Current outcome.', successCriteria: ['Check the latest result.'],
       priority: 'normal' as const, milestones: [] }

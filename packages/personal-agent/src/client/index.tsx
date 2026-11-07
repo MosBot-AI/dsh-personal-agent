@@ -94,6 +94,22 @@ function isTextList(value: unknown): boolean {
 
 function isPriority(value: unknown): boolean { return value === 'high' || value === 'normal' || value === 'low' }
 
+function isKnowledgeRootId(value: unknown): boolean {
+  return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/u.test(value)
+}
+
+function isKnowledgeRoots(value: unknown): boolean {
+  return Array.isArray(value) && value.length <= 8 && value.every(root => isRecord(root) && isKnowledgeRootId(root.id)
+    && ['available', 'limited', 'unavailable'].some(status => status === root.status) && isCount(root.files))
+}
+
+function isKnowledgeSource(value: unknown): boolean {
+  const digest = (id: unknown) => typeof id === 'string' && /^[a-f0-9]{64}$/u.test(id)
+  return isRecord(value) && isRecord(value.ref) && isKnowledgeRootId(value.ref.rootId) && digest(value.ref.id)
+    && digest(value.revision) && typeof value.path === 'string' && value.path.length <= 768
+    && value.path.split('/').every(part => part.length && !part.startsWith('.') && !/[\\\p{Cc}]/u.test(part))
+}
+
 function isPlanDraft(value: unknown): boolean {
   return isRecord(value) && typeof value.title === 'string' && typeof value.purpose === 'string' && isPriority(value.priority)
     && isTextList(value.successCriteria) && Array.isArray(value.milestones) && value.milestones.length <= 64
@@ -116,6 +132,16 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   }
   if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'context') return value.value === null || Array.isArray(value.value) || isRecord(value.value)
+  if (value.kind === 'knowledge_status') return isKnowledgeRoots(value.roots)
+  if (value.kind === 'knowledge_search') {
+    return isKnowledgeRoots(value.roots) && Array.isArray(value.hits) && value.hits.length <= 20
+      && value.hits.every(hit => isRecord(hit) && isKnowledgeSource(hit) && typeof hit.snippet === 'string' && hit.snippet.length <= 361)
+  }
+  if (value.kind === 'knowledge_page') {
+    return isKnowledgeSource(value.source) && typeof value.text === 'string' && value.text.length <= 4096
+      && typeof value.totalBytes === 'number' && isCount(value.totalBytes) && value.totalBytes <= 1024 * 1024
+      && (value.nextOffset === undefined || (typeof value.nextOffset === 'number' && isCount(value.nextOffset) && value.nextOffset < value.totalBytes))
+  }
   if (value.kind === 'project_plan' && isRecord(value.plan)) {
     const plan = value.plan
     return typeof plan.projectId === 'string' && (plan.kind === 'project' || plan.kind === 'goal') && isCount(plan.revision)
@@ -148,6 +174,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     return typeof snapshot.workerConfigured === 'boolean' && Array.isArray(snapshot.sessions)
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
       && (snapshot.memoryConfigured === undefined || typeof snapshot.memoryConfigured === 'boolean')
+      && (snapshot.knowledgeConfigured === undefined || typeof snapshot.knowledgeConfigured === 'boolean')
       && (snapshot.usage === undefined || isUsage(snapshot.usage))
       && (snapshot.schedules === undefined || isSchedules(snapshot.schedules))
   }

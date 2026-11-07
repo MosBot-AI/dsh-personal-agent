@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { copyFileSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -48,6 +48,44 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('searches explicit local documents through the owner carrier and rejects stale source revisions', async () => {
+    const host = await openWebHost(memoryProbe, { patch: [
+      '- id: dshpa', '  config:', '    inbox:',
+      "      storageDirectory: !!js dshHomePath('knowledge-inbox')", '      workRoot: !!js process.cwd()',
+      '      knowledge:', '        roots:', '          - id: llmwiki',
+      "            directory: !!js process.cwd() + '/missing-wiki'", '          - id: workbench',
+      "            directory: !!js process.cwd() + '/configured-knowledge'", '            include: ["**/*.md"]',
+    ] })
+    const directory = join(host.root, 'configured-knowledge')
+    mkdirSync(directory)
+    const file = join(directory, '源资料.md')
+    const original = '设计 Review 证据。<img src=x onerror=alert(1)>'
+    writeFileSync(file, original)
+    const query = { type: 'knowledge_search', query: '设计 review' } as const
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const result = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(result.status === 200 && result.result?.ok, host.diagnostics())
+      return result.result.value
+    }
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, query)).toMatchObject({ status: 401 })
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, query, await host.exchange(true))).toMatchObject({ status: 403 })
+    expect(await inbox({ type: 'snapshot' })).toMatchObject({ snapshot: { knowledgeConfigured: true } })
+    const search = await inbox(query)
+    assert.ok(search.ok && search.kind === 'knowledge_search' && search.hits.length === 1, JSON.stringify(search))
+    expect(search.roots).toEqual([{ id: 'llmwiki', status: 'unavailable', files: 0 }, { id: 'workbench', status: 'available', files: 1 }])
+    const source = search.hits[0]!
+    expect(source.path).toBe('源资料.md')
+    expect(JSON.stringify(search)).not.toContain(host.root)
+    const read = { type: 'knowledge_read', ref: source.ref, revision: source.revision } as const
+    expect(await inbox(read)).toMatchObject({ kind: 'knowledge_page', text: original })
+    writeFileSync(file, '新版设计 Review')
+    expect(await inbox(read)).toEqual({ ok: false, code: 'stale_source' })
+    expect(await inbox(query)).toMatchObject({ hits: [{ ref: source.ref, snippet: '新版设计 Review' }] })
+    rmSync(file)
+    expect(await inbox(query)).toMatchObject({ hits: [] })
+  }, 20_000)
+
   it('reviews and executes a goal plan with sourced Worker drafts and verified prerequisites', async () => {
     const host = await openWebHost(projectProbe, { patch: [
       '- id: dshpa', '  config:', '    inbox:',

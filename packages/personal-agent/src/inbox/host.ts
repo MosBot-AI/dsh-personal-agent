@@ -7,6 +7,7 @@ import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import { SessionId as nativeSessionId, type SessionHeader } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { z } from 'zod'
+import { createLocalKnowledge, localKnowledgeConfigSchema } from '../connectors/local-knowledge.js'
 import { createLocalContext, localContextConfigSchema } from '../context/local-context.js'
 import { createLocalMemory, localMemoryConfigSchema } from '../context/memory.js'
 import {
@@ -59,6 +60,7 @@ export const localInboxConfigSchema = z.strictObject({
   computeLimits: computeLimitsSchema.optional(),
   context: localContextConfigSchema.optional(),
   memory: localMemoryConfigSchema.optional(),
+  knowledge: localKnowledgeConfigSchema.optional(),
   gpu: gpuConfigSchema.optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
@@ -314,6 +316,7 @@ export function activateLocalInbox(
     const registry = config.memory && capabilityRegistryFor(ctx)
     if (config.memory && !registry) throw new Error('Enabled memory requires the capability registry')
     const memory = config.memory && registry ? createLocalMemory({ store, identity, registry, config: config.memory }) : undefined
+    const knowledge = config.knowledge ? createLocalKnowledge(config.knowledge) : undefined
     if (worker) mkdirSync(config.workRoot, { recursive: true, mode: 0o700 })
     executor = worker ? host.createWorkerExecutor({
       store,
@@ -388,7 +391,7 @@ export function activateLocalInbox(
       store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
-      resident, context, memory,
+      resident, context, memory, knowledge,
       configureAttention: (_owner, policy, expectedVersion) => attention.configure(scope, policy, expectedVersion),
       invalidateResources: gpu.cancelStale,
       inspectUsage() {
@@ -468,6 +471,7 @@ export function activateLocalInbox(
       async dispose() {
         const operations = resident?.close()
         identity.release(token)
+        knowledge?.close()
         const detached = remove()
         try {
           eventRouter.close()

@@ -35,6 +35,18 @@ export interface InboxReviewProject {
   readonly accepted: readonly string[]
 }
 
+export interface KnowledgeRootStatus {
+  readonly id: string
+  readonly status: 'available' | 'limited' | 'unavailable'
+  readonly files: number
+}
+
+export interface KnowledgeSource {
+  readonly ref: { readonly rootId: string; readonly id: string }
+  readonly path: string
+  readonly revision: string
+}
+
 export interface InboxArtifact {
   readonly id: string
   readonly mediaType: string
@@ -136,6 +148,7 @@ type RoutineDraft = {
 export interface InboxSnapshot {
   readonly workerConfigured: boolean
   readonly memoryConfigured?: boolean
+  readonly knowledgeConfigured?: boolean
   readonly recoveryMode?: 'reconciling' | 'restore'
   readonly sessions: readonly InboxSession[]
   readonly projects: readonly InboxProject[]
@@ -152,6 +165,9 @@ type MemoryRevision = { recordId: string; expectedRevision: number }
 
 export type InboxRequest =
   | { type: 'snapshot' }
+  | { type: 'knowledge_status' }
+  | { type: 'knowledge_search'; rootId?: string; query: string; limit?: number }
+  | { type: 'knowledge_read'; ref: KnowledgeSource['ref']; revision: string; offset?: number; maxBytes?: number }
   | { type: 'create_project'; commandId: string; title: string; purpose: string }
   | { type: 'create_task'; commandId: string; projectId: string; sessionId: string; outcome: string }
   | { type: 'save_plan'; commandId: string; projectId?: string; expectedRevision?: number; draft: ProjectPlanInput; rationale: string }
@@ -194,6 +210,9 @@ export type InboxResponse =
   | { ok: true; kind: 'attention_policy'; version: number }
   | { ok: true; kind: 'resident'; value: object }
   | { ok: true; kind: 'context'; value: object | null }
+  | { ok: true; kind: 'knowledge_status'; roots: readonly KnowledgeRootStatus[] }
+  | { ok: true; kind: 'knowledge_search'; roots: readonly KnowledgeRootStatus[]; hits: readonly (KnowledgeSource & { snippet: string })[] }
+  | { ok: true; kind: 'knowledge_page'; source: KnowledgeSource; text: string; totalBytes: number; nextOffset?: number }
   | { ok: true; kind: 'project_plan'; plan: InboxPlan }
   | { ok: true; kind: 'project_review'; projects: readonly InboxReviewProject[]; needsPriority: boolean; at: string }
   | { ok: true; kind: 'memory_records'; confirmed: readonly MemoryActiveRecord[]; inferred: readonly MemoryActiveRecord[] }
