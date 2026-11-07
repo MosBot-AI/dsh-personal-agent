@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-**已实现原生 Bundle、宿主合约和工作领域逻辑（PA-001 至 PA-003）。** 修订 `2026-11-07-r7`，Asia/Shanghai。DSH Personal Agent 简称 **dshpa**。本轮基于现有方案、两个固定版本的本地 DSH 仓库、Grok Bot/Muse/dots 官方资料和作者分析完善计划，并纳入本机常驻、电脑操作、图片/视频、密码库、安全输入和 VNC 要求。
+**已实现原生 Bundle、宿主合约、工作领域逻辑和 SQLite 存储（PA-001 至 PA-004）。** 修订 `2026-11-07-r7`，Asia/Shanghai。DSH Personal Agent 简称 **dshpa**。本轮基于现有方案、两个固定版本的本地 DSH 仓库、Grok Bot/Muse/dots 官方资料和作者分析完善计划，并纳入本机常驻、电脑操作、图片/视频、密码库、安全输入和 VNC 要求。
 
 产品定位是：**运行在用户自己电脑上的持续个人工作系统，以一个主 agent 管理目标和任务，按需委派执行，交付可检查成果，同时尽量少消耗人的注意力。** 云服务可选；DSH 本身承担原生运行时和编排，不增加第二个外部主控制器。
 
@@ -23,6 +23,7 @@
 | [11 Project 执行协议](11-github-project-workflow-zh.md) | GitHub 看板、认领、进度、验收与 Actions 自动化 |
 | [宿主兼容性证据](evidence/host-compatibility-zh.md) | 已安装 DSH 的代理、会话、调度和远程访问边界 |
 | [工作领域证据](evidence/PA-003-zh.md) | 记录校验、限定范围的命令准入和任务状态转换 |
+| [SQLite 存储证据](evidence/PA-004-zh.md) | 原子工作提交、单写入进程和故障恢复 |
 
 每份文档有对应英文版本。任务定义在 [implementation-tasks.json](implementation-tasks.json)，含依赖、目标文件、源码参考、步骤、测试路径、验收场景和证据路径。任务状态字段是初始 `planned` 快照，实时进度以 GitHub Project 为准；默认实施目标是 **桌面 alpha（PA-035 及其依赖）**，第一项是 PA-001。
 
