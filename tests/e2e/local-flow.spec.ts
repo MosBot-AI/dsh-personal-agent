@@ -20,6 +20,7 @@ import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 const probe = fileURLToPath(new URL('./fixtures/local-flow-probe.mjs', import.meta.url))
 const contextProbe = fileURLToPath(new URL('./fixtures/context-flow-probe.mjs', import.meta.url))
 const memoryProbe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
+const projectProbe = fileURLToPath(new URL('./fixtures/project-flow-probe.mjs', import.meta.url))
 const nativeSessionId = 'pa008-native-chat'
 const fixtureProjectId = 'pa008-fixture-project'
 const questionReference = 'pa008-fixture-question'
@@ -47,6 +48,80 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('reviews and executes a goal plan with sourced Worker drafts and verified prerequisites', async () => {
+    const host = await openWebHost(projectProbe, { patch: [
+      '- id: dshpa', '  config:', '    inbox:',
+      "      storageDirectory: !!js dshHomePath('project-inbox')",
+      '      workRoot: !!js process.cwd()', '      worker:', '        provider: pa014-project-fixture',
+      '        model: project-worker', '        concurrency: 1', '        unmetered: true',
+    ] })
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const response = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(response.status === 200 && response.result?.ok, host.diagnostics())
+      return response.result.value
+    }
+    async function readTask(taskId: string) {
+      const result = await inbox({ type: 'snapshot' })
+      assert.ok(result.ok && result.kind === 'snapshot')
+      const task = result.snapshot.tasks.find(candidate => candidate.id === taskId)
+      assert.ok(task)
+      return task
+    }
+    const draft = { title: 'Evidence goal', purpose: 'Finish the brief and a separate review.', successCriteria: ['Accept two sourced artifacts.'],
+      priority: 'normal' as const, milestones: [{ title: 'Review published brief' }], reviewCadence: { intervalDays: 7, timeZone: 'UTC' } }
+    const create = { type: 'save_plan', commandId: 'pa014-goal', draft, rationale: 'Track the outcomes in one goal.' } as const
+    const projectId = updated(await inbox(create)).projectId
+    const other = updated(await inbox({ type: 'create_project', commandId: 'pa014-other', title: 'Other project', purpose: 'Competing work.' })).projectId
+    assert.ok(projectId && other)
+    const parent = updated(await inbox({ type: 'create_task', projectId, commandId: 'pa014-parent-task',
+      sessionId: 'pa014-primary', outcome: 'Draft a sourced brief.' })).taskId
+    const otherTask = updated(await inbox({ type: 'create_task', projectId: other, commandId: 'pa014-other-task',
+      sessionId: 'pa014-primary', outcome: 'Independent work.' })).taskId
+    assert.ok(parent && otherTask)
+    expect(await inbox({ type: 'project_review' })).toMatchObject({ kind: 'project_review', needsPriority: true })
+    const edit = { ...create, projectId, expectedRevision: 1, commandId: 'pa014-priority',
+      draft: { ...create.draft, priority: 'high' }, rationale: 'Finish this goal first.' } as const
+    updated(await inbox(edit))
+    expect(await inbox({ type: 'project_plan', projectId })).toMatchObject({ plan: { kind: 'goal', revision: 2,
+      history: [{ revision: 2, rationale: edit.rationale }, { revision: 1, rationale: create.rationale }] } })
+    expect(await inbox({ type: 'project_review' })).toMatchObject({ kind: 'project_review', needsPriority: false,
+      projects: [{ projectId, priority: 'high', ready: [parent] }, { projectId: other, ready: [otherTask] }] })
+    const start = await readTask(parent)
+    updated(await inbox({ type: 'start', taskId: parent, expectedVersion: start.version, cursor: 'pa014-draft' }))
+    const proposed = await waitForTask(() => readTask(parent), task => Boolean(task.proposal), 'Worker draft', host.diagnostics)
+    expect(proposed.status).toBe('running')
+    expect(proposed.artifacts).toEqual([])
+    const accept = { type: 'accept_plan_step', taskId: parent, cursor: 'pa014-draft', index: 0 } as const
+    const child = updated(await inbox(accept)).taskId
+    assert.ok(child)
+    expect(updated(await inbox(accept)).taskId).toBe(child)
+    const queued = await readTask(child)
+    const deps = { type: 'set_prerequisites', taskId: child, expectedVersion: queued.version } as const
+    expect(await inbox({ ...deps, prerequisiteIds: [otherTask] })).toEqual({ ok: false, code: 'not_found' })
+    updated(await inbox({ ...deps, prerequisiteIds: [parent] }))
+    expect(await readTask(child)).toMatchObject({ status: 'blocked', wait: { referenceId: parent } })
+    updated(await inbox({ type: 'redirect', taskId: parent, expectedVersion: proposed.version, cursor: 'pa014-parent', text: 'Prepare the brief.' }))
+    const parentResult = await waitForTask(() => readTask(parent), task => task.status === 'verifying' && task.runtime === 'inactive',
+      'parent verification', host.diagnostics)
+    expect(await readTask(child)).toMatchObject({ status: 'blocked' })
+    expect(await inbox(accept)).toEqual({ ok: false, code: 'not_found' })
+    updated(await inbox({ type: 'accept_result', taskId: parent, expectedVersion: parentResult.version }))
+    const ready = await readTask(child)
+    expect(ready.status).toBe('queued')
+    updated(await inbox({ type: 'start', taskId: child, expectedVersion: ready.version, cursor: 'pa014-child' }))
+    const childResult = await waitForTask(() => readTask(child), task => task.status === 'verifying' && task.runtime === 'inactive',
+      'child verification', host.diagnostics)
+    expect(parentResult.artifacts[0]?.id).not.toBe(childResult.artifacts[0]?.id)
+    updated(await inbox({ type: 'accept_result', taskId: child, expectedVersion: childResult.version }))
+    expect(await inbox({ type: 'project_review' })).toMatchObject({ projects: [
+      { projectId, accepted: expect.arrayContaining([parent, child]) }, { projectId: other, accepted: [] },
+    ] })
+    const db = new DatabaseSync(join(host.root, 'home', 'project-inbox', DATABASE_FILENAME), { readOnly: true })
+    try { expect(db.prepare('SELECT count(*) AS total FROM routines').get()?.total).toBe(0) }
+    finally { db.close() }
+  }, 30_000)
+
   it('keeps owner corrections and forgetting across native restart and a stale memory provider', async () => {
     const bundle = fileURLToPath(new URL('../../packages/memory-sqlite/', import.meta.url))
     const prepared = prepareWebHost(memoryProbe, [

@@ -29,10 +29,12 @@ import {
   waitAllowsWake,
   workerCursorSchema,
   type SessionId,
+  type Project,
   type TaskId,
   type UtcInstant,
 } from '../domain/model.js'
 import type { WorkState } from '../domain/transitions.js'
+import { comparePlanPriority, projectPlanDraftSchema, taskPrerequisitesSchema, type ProjectPlanInput } from '../domain/projects.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
 import type { ExecutorResult, WorkerExecutor } from '../runtime/executor.js'
 import { workerInputSchema } from '../runtime/reports.js'
@@ -40,7 +42,7 @@ import type { ResidentOperations } from '../runtime/resident-operations.js'
 import type { EventRouter } from '../runtime/router.js'
 import { StorageError } from '../storage/schema.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
-import type { InboxResponse, InboxSession, InboxTask, InboxUsage } from './protocol.js'
+import type { InboxResponse, InboxReviewProject, InboxSession, InboxTask, InboxUsage } from './protocol.js'
 import { routineRequestSchemas, type RoutineInbox } from './routines.js'
 
 const LOCAL_SOURCE = sourceInstanceIdSchema.parse('dshpa-local-inbox')
@@ -62,6 +64,12 @@ const requestSchema = z.discriminatedUnion('type', [
     sessionId: sessionIdSchema, outcome: nonEmptyTextSchema.max(4_096),
   }),
   z.strictObject({ type: z.literal('start'), ...control, cursor: workerCursorSchema }),
+  z.strictObject({ type: z.literal('save_plan'), commandId: command, projectId: projectIdSchema.optional(),
+    expectedRevision: versionSchema.optional(), draft: projectPlanDraftSchema, rationale: nonEmptyTextSchema.max(4096) }),
+  z.strictObject({ type: z.literal('project_plan'), projectId: projectIdSchema }),
+  z.strictObject({ type: z.literal('project_review') }),
+  z.strictObject({ type: z.literal('set_prerequisites'), ...control, prerequisiteIds: taskPrerequisitesSchema }),
+  z.strictObject({ type: z.literal('accept_plan_step'), taskId: taskIdSchema, cursor: workerCursorSchema, index: z.int().min(0).max(7) }),
   z.strictObject({ type: z.enum(['pause', 'resume', 'cancel']), ...control, commandId: command }),
   z.strictObject({ type: z.literal('redirect'), ...control, ...workerInputSchema.shape }),
   z.strictObject({ type: z.literal('answer'), ...control, ...answerFields }),
@@ -110,6 +118,7 @@ export interface InboxServiceOptions {
 }
 
 type CreateTask = Extract<z.infer<typeof requestSchema>, { type: 'create_task' }>
+type AcceptStep = Extract<z.infer<typeof requestSchema>, { type: 'accept_plan_step' }>
 
 function stableId(...parts: string[]): string {
   return createHash('sha256').update(JSON.stringify(parts)).digest('hex')
@@ -121,6 +130,11 @@ function refFor(owner: OwnerIdentity, taskId: TaskId): WorkRef {
 
 function failure(code: string): InboxResponse {
   return { ok: false, code }
+}
+
+function planDraft(project: Project): ProjectPlanInput {
+  return { title: project.title, purpose: project.purpose, successCriteria: project.successCriteria,
+    milestones: project.milestones, reviewCadence: project.reviewCadence, priority: project.priority ?? 'normal' }
 }
 
 function updated(result: ExecutorResult): InboxResponse {
@@ -161,6 +175,8 @@ export function createInboxService(options: InboxServiceOptions) {
     const ref = refFor(owner, task.id)
     const conversation = task.conversationId === undefined ? undefined : store.getConversation(owner, task.conversationId)
     const verification = task.status === 'completed' ? store.getVerification(ref, task.version) : undefined
+    const prerequisites = store.getTaskPrerequisites(ref)
+    const proposal = store.getWorkerPlan(ref)
     const candidates = task.status === 'verifying' ? state.attempt.artifactIds : []
     const metadata = store.listInboxArtifacts(ref, verification?.attemptId ?? state.attempt.id,
       verification?.generation ?? state.attempt.generation, verification?.artifacts.map(proof => proof.id) ?? candidates)
@@ -186,6 +202,8 @@ export function createInboxService(options: InboxServiceOptions) {
       deliveries: store.listInboxDeliveries(ref).map(delivery => ({ id: delivery.id, status: delivery.status })),
       ...(progress === undefined ? {} : { progress }),
       ...(verification === undefined ? {} : { verifiedAt: verification.verifiedAt }),
+      ...(prerequisites.length ? { prerequisites } : {}),
+      ...(proposal && (!options.context || options.context.historyUsable(ref, state)) ? { proposal } : {}),
     }
   }
 
@@ -214,7 +232,7 @@ export function createInboxService(options: InboxServiceOptions) {
       ...(options.memory ? { memoryConfigured: true } : {}),
       ...(recoveryMode === 'normal' ? {} : { recoveryMode }),
       sessions,
-      projects: store.listInboxProjects(owner).map(({ id, title, purpose }) => ({ id, title, purpose })),
+      projects: store.listInboxProjects(owner).map(({ id, title, purpose, kind }) => ({ id, title, purpose, kind })),
       tasks: work.map(state => {
         const latest = progress.get(state.task.id)
         return projectTask(owner, state, latest?.attemptId === state.attempt.id && latest.generation === state.task.generation
@@ -226,11 +244,19 @@ export function createInboxService(options: InboxServiceOptions) {
     } }
   }
 
-  async function createTask(ownerToken: unknown, request: CreateTask): Promise<InboxResponse> {
+  async function createTask(ownerToken: unknown, request: CreateTask, step?: AcceptStep): Promise<InboxResponse> {
     if (!await options.resolveSession(request.sessionId)) return failure('not_found')
     const owner = identity.resolveOwner(ownerToken)
     if (!owner) return failure('permission_denied')
     if (!store.getProject(owner, request.projectId)) return failure('not_found')
+    if (step) {
+      const ref = refFor(owner, step.taskId)
+      const parent = store.getWork(ref)
+      const draft = store.getWorkerPlan(ref)
+      if (parent?.task.projectId !== request.projectId || parent.attempt.mandate.policyVersion !== owner.policyVersion
+        || draft?.cursor !== step.cursor || draft.steps[step.index] !== request.outcome) return failure('version_conflict')
+      if (options.context && !options.context.historyUsable(ref, parent)) return failure('source_unavailable')
+    }
     const { ownerId, profileId, clientId, deviceId } = owner
     const conversationId = conversationIdSchema.parse(`inbox-${stableId(ownerId, profileId, request.sessionId)}`)
     const existing = store.getConversation(owner, conversationId)
@@ -263,8 +289,35 @@ export function createInboxService(options: InboxServiceOptions) {
       id: `inbox-${eventKey}`, ownerId, profileId, sourceInstanceId: LOCAL_SOURCE,
       externalEventId: eventKey, externalRevision: '1', occurredAt: at, receivedAt: at, threadId: request.sessionId,
       actor: { kind: 'person', externalActorId: ownerId, deviceId },
-      body: { kind: 'inbox-task', outcome: request.outcome }, provenance: { description: 'Native inbox task request' },
+      body: { kind: 'inbox-task', outcome: request.outcome,
+        ...(step ? { parentTaskId: step.taskId, proposalCursor: step.cursor, proposalIndex: step.index } : {}) },
+      provenance: { description: step ? 'Owner approved a Worker task draft' : 'Native inbox task request' },
     }) }))
+  }
+
+  function review(owner: OwnerIdentity): InboxResponse {
+    const at = now()
+    const start = new Date(Date.parse(at) - 7 * 86_400_000).toISOString()
+    const end = new Date(Date.parse(at) + 7 * 86_400_000).toISOString()
+    const projects: InboxReviewProject[] = store.listInboxProjects(owner).filter(project => project.status === 'active').map(project => {
+      const tasks = store.listProjectTasks(owner, project.id)
+      const milestones = project.milestones.filter(item => !item.deadline || item.deadline.at <= end)
+      const ready = tasks.filter(({ task, prerequisites }) => task.status === 'queued' && prerequisites.every(row => row.completed))
+      const due = [...milestones.flatMap(item => item.deadline ? [item.deadline.at] : []),
+        ...ready.flatMap(({ task }) => task.deadline ? [task.deadline.at] : [])].sort()[0]
+      return { projectId: project.id, title: project.title, priority: project.priority ?? 'normal', due,
+        milestones: milestones.map(item => item.title), ready: ready.map(({ task }) => task.id),
+        waiting: tasks.filter(({ task, prerequisites }) => !['completed', 'failed', 'cancelled'].includes(task.status)
+          && (task.wait || prerequisites.some(row => !row.completed))).map(({ task }) => task.id),
+        accepted: tasks.filter(({ task }) => task.status === 'completed' && task.updatedAt >= start
+          && store.getVerification({ ...owner, taskId: task.id }, task.version)).map(({ task }) => task.id) }
+    }).sort((a, b) => comparePlanPriority(a, b) || a.projectId.localeCompare(b.projectId))
+    const capacity = executor?.snapshot()
+    const slots = capacity ? Math.max(0, capacity.limit - capacity.active) : 0
+    const eligible = projects.filter(project => project.ready.length > 0)
+    const first = eligible[slots - 1]
+    const next = eligible[slots]
+    return { ok: true, kind: 'project_review', projects, at, needsPriority: Boolean(first && next && comparePlanPriority(first, next) === 0) }
   }
 
   async function handle(ownerToken: unknown, input: unknown, signal?: AbortSignal): Promise<InboxResponse> {
@@ -275,12 +328,47 @@ export function createInboxService(options: InboxServiceOptions) {
     const request = decoded.data
     if (store.recoveryMode() === 'restore' && request.type !== 'snapshot' && request.type !== 'artifact'
       && request.type !== 'context_recall' && request.type !== 'context_search' && request.type !== 'context_checkpoint'
+      && request.type !== 'project_plan' && request.type !== 'project_review'
       && request.type !== 'cancel' && request.type !== 'resident_status' && request.type !== 'resident_audit') return failure('recovery_required')
 
     try {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
         case 'create_task': return await createTask(ownerToken, request)
+        case 'save_plan': {
+          if ((request.projectId === undefined) !== (request.expectedRevision === undefined)) return failure('invalid_input')
+          const { type: _type, ...change } = request
+          const id = request.projectId ?? projectIdSchema.parse(
+            `inbox-${stableId('goal', owner.ownerId, owner.profileId, owner.clientId, request.commandId)}`)
+          const result = store.saveProjectPlan(owner, { ...change, projectId: id, at: now() })
+          return result.ok ? { ok: true, kind: 'updated', projectId: result.project.id } : failure(result.code)
+        }
+        case 'project_plan': {
+          const data = store.getProjectPlan(owner, request.projectId)
+          if (!data) return failure('not_found')
+          const { project, revisions } = data
+          return { ok: true, kind: 'project_plan', plan: {
+            projectId: project.id, revision: project.planRevision, kind: project.kind,
+            draft: planDraft(project),
+            history: revisions.map(entry => ({ revision: entry.project.planRevision, draft: planDraft(entry.project),
+              ...('rationale' in entry ? { rationale: entry.rationale, recordedAt: entry.recordedAt } : {}) })),
+          } }
+        }
+        case 'project_review': return review(owner)
+        case 'set_prerequisites': return updated(store.setTaskPrerequisites(
+          refFor(owner, request.taskId), request.expectedVersion, now(), request.prerequisiteIds))
+        case 'accept_plan_step': {
+          const ref = refFor(owner, request.taskId)
+          const parent = store.getWork(ref)
+          const draft = store.getWorkerPlan(ref)
+          const outcome = draft?.cursor === request.cursor ? draft.steps[request.index] : undefined
+          const session = parent?.task.conversationId && store.getConversation(owner, parent.task.conversationId)?.sessionIds[0]
+          if (!parent || !outcome || !session) return failure('not_found')
+          return await createTask(ownerToken, {
+            type: 'create_task', projectId: parent.task.projectId, sessionId: session, outcome,
+            commandId: command.parse(`step-${stableId(request.taskId, request.cursor, String(request.index))}`),
+          }, request)
+        }
         case 'memory_search':
         case 'memory_inspect':
         case 'memory_remember':
@@ -340,7 +428,7 @@ export function createInboxService(options: InboxServiceOptions) {
         }
         case 'create_project': {
           const projectId = projectIdSchema.parse(`inbox-${stableId('project', owner.ownerId, owner.profileId, owner.clientId, request.commandId)}`)
-          const existing = store.getProject(owner, projectId)
+          const existing = store.getInitialProject(owner, projectId)
           if (existing && (existing.title !== request.title || existing.purpose !== request.purpose)) return failure('command_conflict')
           if (!existing) store.insertProject(projectSchema.parse({
             id: projectId, ownerId: owner.ownerId, profileId: owner.profileId, kind: 'project',

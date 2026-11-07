@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-013, PA-018, PA-021, and PA-038).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-014, PA-018, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -17,6 +17,7 @@ The [recovery evidence](docs/evidence/PA-009.md) covers input acknowledgments, c
 The [routing evidence](docs/evidence/PA-010.md) covers source intake, subscriptions, Worker handbacks, and responsive controls.
 The [context evidence](docs/evidence/PA-011.md) covers native checkpoint capture, reference recall, exclusions, and input budgets.
 The [personal memory evidence](docs/evidence/PA-012.md) covers owner controls, provider snapshots, and exclusions that survive stale provider data.
+The [goal planning evidence](docs/evidence/PA-014.md) covers revisions, Worker drafts, task prerequisites and on-demand review.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
@@ -178,6 +179,14 @@ Open **Personal memory** in **Today**. Select a profile, project or task scope, 
 Automatic extraction is off. The explicit controls record owner-confirmed facts, while the provider contract preserves inferred records separately. Memory content carries no action authority. The external `llmwiki` knowledge base remains read-only.
 
 The memory provider stores fact values in its own database. The core work database stores scope, revisions, digests, source receipts and exclusions. Keep both when backing up a profile. A stale provider copy cannot override core exclusions. Existing provider snapshots or backup files can still contain earlier values and follow their own retention rules. [SQLite memory provider](packages/memory-sqlite/README.md)
+
+### Track goals and review plans
+
+Open **Goals and plans** in **Today** to create a goal with success criteria, milestones, an optional review cadence and priority. Save each revision with its rationale. You can reuse a previous revision as an editable draft and save it as a new revision. Tasks linked to the goal follow the usual Worker and artifact acceptance flow.
+
+In a Task, **Task plan and dependencies** shows Worker drafts for that exact Task and lets you turn a reviewed step into an ordinary Task in the same project. Set prerequisites on queued or blocked Tasks. A prerequisite must belong to the same project, and cycles are rejected. A dependent becomes ready only after all its prerequisites are completed. Reopening a prerequisite blocks queued dependents again. Already-running attempts continue under their existing authorization.
+
+Select **Weekly review** to inspect ready and waiting Tasks, recently accepted results and upcoming milestones. Projects are ordered by the configured priority and due time. The review calls out a priority choice if equally ranked projects compete for the next available Worker slots. The review and cadence are planning metadata, and recurring schedules are armed separately.
 
 ### Set compute and attention limits
 

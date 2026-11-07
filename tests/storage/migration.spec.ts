@@ -43,6 +43,7 @@ import { migration005 } from '../../packages/personal-agent/src/storage/migratio
 import { migration006 } from '../../packages/personal-agent/src/storage/migrations/006.js'
 import { migration007 } from '../../packages/personal-agent/src/storage/migrations/007.js'
 import { migration008 } from '../../packages/personal-agent/src/storage/migrations/008.js'
+import { migration009 } from '../../packages/personal-agent/src/storage/migrations/009.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -58,6 +59,7 @@ import {
   V6_BACKUP_SUFFIX,
   V7_BACKUP_SUFFIX,
   V8_BACKUP_SUFFIX,
+  V9_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -942,6 +944,33 @@ describe('SQLite v8 to v9 upgrade', () => {
         expect(backup.prepare('SELECT * FROM tasks').all()).toEqual(work)
       } finally { backup.close() }
     } finally { v8.db.close() }
+  })
+})
+
+describe('SQLite v9 to v10 upgrade', () => {
+  it('keeps projects and recovery state while taking a private pre-upgrade backup', () => {
+    const source = createVersionFixture(4, true)
+    try {
+      transaction(source.db, () => {
+        for (const migration of [migration005, migration006, migration007, migration008, migration009]) source.db.exec(migration)
+        source.db.exec("PRAGMA user_version = 9; UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1")
+      })
+      const projects = source.db.prepare('SELECT * FROM projects').all()
+      const tasks = source.db.prepare('SELECT * FROM tasks').all()
+      migrateSchema(source.db)
+      expect(source.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+      expect(source.db.prepare('SELECT * FROM projects').all()).toEqual(projects)
+      expect(source.db.prepare('SELECT * FROM tasks').all()).toEqual(tasks)
+      expect(source.db.prepare('SELECT mode FROM runtime_recovery WHERE id = 1').get()?.mode).toBe('restore')
+      expect(source.db.prepare('SELECT count(*) AS total FROM task_prerequisites').get()?.total).toBe(0)
+      const path = source.path + V9_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(path).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(path, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(9)
+        expect(backup.prepare('SELECT * FROM tasks').all()).toEqual(tasks)
+      } finally { backup.close() }
+    } finally { source.db.close() }
   })
 })
 

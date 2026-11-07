@@ -20,6 +20,7 @@ import {
   projectSchema,
   sessionIdSchema,
   sourceEventSchema,
+  taskIdSchema,
   taskSchema,
   utcInstantSchema,
   type ArtifactId,
@@ -71,6 +72,10 @@ import {
   type MemoryLedgerActor, type MemoryLedgerPage,
 } from './memory.js'
 import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
+import {
+  dependentIds, hasIncompletePrerequisite, initialProject, prerequisites, projectHistory, projectTasks,
+  recordWorkerPlan, replacePrerequisites, saveProjectPlan, workerPlan,
+} from './projects.js'
 import {
   applyWorkerHandback, cancelUnfinishedRouting, checkWorkerRoute, commitWorkerRoute, getRoutingEvent, getSubscription,
   listRoutingEvents, listSubscriptions, putSubscription, recordRoutingEvent, setRoutingDisposition,
@@ -527,6 +532,60 @@ class WorkStore {
     })
   }
 
+  getInitialProject(scope: Scope, id: ProjectId) {
+    return this.access(db => initialProject(db, scope, id))
+  }
+
+  saveProjectPlan(scope: Scope, input: unknown) {
+    return this.access(db => transaction(db, () => saveProjectPlan(db, scope, input)))
+  }
+
+  getProjectPlan(scope: Scope, id: ProjectId) {
+    return this.access(db => projectHistory(db, scope, id))
+  }
+
+  listProjectTasks(scope: Scope, id: ProjectId) {
+    return this.access(db => projectTasks(db, scope, id).map(task => ({ task, prerequisites: prerequisites(db, task) })))
+  }
+
+  getTaskPrerequisites(ref: WorkRef) {
+    return this.access(db => {
+      const state = this.loadWork(db, ref)
+      return state ? prerequisites(db, state.task) : []
+    })
+  }
+
+  setTaskPrerequisites(ref: WorkRef, expectedVersion: number, at: UtcInstant, ids: unknown): StoredWorkResult {
+    return this.commit(db => {
+      if (!dispatchPermitted(db)) return { ok: false, code: 'recovery_required' }
+      const state = this.loadWork(db, ref)
+      if (!state) return { ok: false, code: 'not_found' }
+      if (state.task.version !== expectedVersion) return { ok: false, code: 'version_conflict' }
+      const event = this.dependencyEvent(state, at)
+      const editable = transitionWork(state, event)
+      if (!editable.ok) return editable
+      const updated = replacePrerequisites(db, state.task, ids)
+      if (!updated.ok) return updated
+      const result = transitionWork(state, { ...event, referenceId: prerequisites(db, state.task).find(row => !row.completed)?.id })
+      if (!result.ok) throw new StorageError('invalid_input', 'Could not apply the validated dependency change')
+      return { ...this.persist(db, state, result, event.type, event.at, {}, recordEncoder()), replayed: false }
+    })
+  }
+
+  putWorkerPlan(ref: WorkRef, expectedVersion: number, cursor: string, steps: unknown): boolean {
+    return this.access(db => transaction(db, () => {
+      const state = this.loadWork(db, ref)
+      return state?.task.version === expectedVersion && recordWorkerPlan(db, state, cursor, steps)
+    }))
+  }
+
+  getWorkerPlan(ref: WorkRef) {
+    return this.access(db => {
+      const state = this.loadWork(db, ref)
+      return state && workerPlan(db, state)
+    })
+  }
+
   getConversation(scope: Scope, id: ConversationId) {
     return this.access(db => {
       const row = db.prepare('SELECT record FROM conversations WHERE id = ? AND owner_id = ? AND profile_id = ?')
@@ -763,6 +822,7 @@ class WorkStore {
     const intents = decodeIntents(intentInput)
     if (!event.success || !intents) return { ok: false, code: 'invalid_input' }
     if (!('generation' in event.data) || event.data.type === 'verify' || event.data.type === 'release_worker'
+      || event.data.type === 'plan_dependencies'
       || event.data.type === 'wake_worker' || event.data.type === 'record_input'
       || (event.data.type === 'start' && event.data.worker !== undefined)
       || (event.data.type === 'reconcile' && event.data.outcome.status === 'completed')
@@ -792,6 +852,8 @@ class WorkStore {
       if (routing && !routing.ok) return routing
       const result = transitionWork(before, event)
       if (!result.ok) return result
+      if ((event.type === 'start' || event.type === 'wake_worker' || event.type === 'wake')
+        && hasIncompletePrerequisite(db, before.task)) return { ok: false, code: 'condition_unmet' }
       if (journal && !workerInputContextAvailable(db, before.task, journal.contextSources, event.at, routing?.claim.ref.eventId)) {
         return { ok: false, code: 'permission_denied' }
       }
@@ -800,6 +862,18 @@ class WorkStore {
         return { ok: false, code: 'acceptance_unsatisfied' }
       }
       if (this.sourceAlreadyStored(db, intents.sourceEvent)) return { ok: false, code: 'source_duplicate' }
+      if (event.type === 'wait' && event.wait.reason === 'dependency') {
+        const id = taskIdSchema.safeParse(event.wait.referenceId)
+        if (!id.success) return { ok: false, code: 'invalid_input' }
+        const predecessor = this.loadWork(db, { ...ref, taskId: id.data })
+        if (!predecessor || predecessor.task.projectId !== before.task.projectId || predecessor.task.status === 'completed') {
+          return { ok: false, code: 'condition_unmet' }
+        }
+        const ids = new Set(prerequisites(db, before.task).map(row => row.id))
+        ids.add(id.data)
+        const linked = replacePrerequisites(db, before.task, [...ids])
+        if (!linked.ok) return linked
+      }
       const receipt = this.persist(db, before, result, event.type, event.at, intents, recordEncoder(), routing?.claim.ref.eventId)
       if (journal) {
         insertWorkerInput(db, result.state, journal)
@@ -961,6 +1035,7 @@ class WorkStore {
     const native = attempt.worker !== undefined || attempt.sessionId !== undefined || attempt.agentId !== undefined
     if (native && attempt.worker?.releasedAt === undefined) return { status: 'skipped', reason: 'runtime_not_quiescent' }
     if (unsettledEffects(db, ref, attempt.id)) return { status: 'skipped', reason: 'effects_unsettled' }
+    if (hasIncompletePrerequisite(db, task)) return { status: 'skipped', reason: 'wait_unavailable' }
     const at = occurrence.observedAt
     const result = transitionWork(before, {
       type: 'wake', at, expectedVersion: goal.expectedVersion, attemptId: goal.attemptId,
@@ -1011,6 +1086,9 @@ class WorkStore {
       return { result: { ok: false, code: 'not_found' } }
     }
     const before = creating ? undefined : this.loadWork(db, { ...actor, taskId: command.taskId })
+    if (command.type === 'work.resume' && before && hasIncompletePrerequisite(db, before.task)) {
+      return { before, result: { ok: false, code: 'condition_unmet' } }
+    }
     const result = applyWorkCommand(command, {
       ...context,
       state: before,
@@ -1085,7 +1163,41 @@ class WorkStore {
       db.prepare('INSERT INTO outbox (id, task_id, attempt_id, generation, record) VALUES (?, ?, ?, ?, ?)')
         .run(delivery.id, task.id, attempt.id, attempt.generation, encode(delivery))
     }
+    if (type !== 'plan_dependencies') {
+      if ((before?.task.status === 'completed') !== (task.status === 'completed')) {
+        for (const id of dependentIds(db, task)) this.syncDependencies(db, { ...task, taskId: id }, at)
+      }
+      if (task.status === 'queued' || type === 'release_worker') {
+        const synchronized = this.syncDependencies(db, { ...task, taskId: task.id }, at)
+        if (synchronized) return synchronized
+      }
+    }
     return { ...result, sequence }
+  }
+
+  private dependencyEvent(state: WorkState, at: UtcInstant): Extract<WorkEvent, { type: 'plan_dependencies' }> {
+    const { task, attempt } = state
+    const timestamp = [at, task.updatedAt, attempt.heartbeatAt ?? at].sort().at(-1)!
+    return { type: 'plan_dependencies', at: timestamp, expectedVersion: task.version, attemptId: attempt.id, generation: attempt.generation }
+  }
+
+  private syncDependencies(db: DatabaseSync, ref: WorkRef, at: UtcInstant): Receipt | undefined {
+    const state = this.loadWork(db, ref)
+    if (!state || (state.task.status !== 'queued' && state.task.status !== 'blocked')
+      || (state.attempt.worker && !state.attempt.worker.releasedAt)) return undefined
+    let linked = prerequisites(db, state.task)
+    if (!linked.length && state.task.status === 'blocked' && state.task.wait?.reason === 'dependency'
+      && !hasIncompletePrerequisite(db, state.task)) {
+      const legacy = replacePrerequisites(db, state.task, [state.task.wait.referenceId])
+      if (legacy.ok) linked = prerequisites(db, state.task)
+    }
+    if (!linked.length) return undefined
+    const referenceId = linked.find(row => !row.completed)?.id
+    if (referenceId === state.task.wait?.referenceId) return undefined
+    const event = { ...this.dependencyEvent(state, at), referenceId }
+    const result = transitionWork(state, event)
+    if (!result.ok) throw new StorageError('invalid_input', 'Could not synchronize task prerequisites')
+    return this.persist(db, state, result, event.type, event.at, {}, recordEncoder())
   }
 }
 

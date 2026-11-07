@@ -127,6 +127,7 @@ export const workEventSchema = z.discriminatedUnion('type', [
     referenceId: waitReasonSchema.shape.referenceId,
   }),
   z.strictObject({ type: z.literal('record_input'), ...fenced, cursor: workerCursorSchema }),
+  z.strictObject({ type: z.literal('plan_dependencies'), ...fenced, referenceId: taskIdSchema.optional() }),
   z.strictObject({ type: z.literal('recover_attempt'), ...fenced }),
   z.strictObject({
     type: z.literal('wait'),
@@ -408,6 +409,15 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
         ...attempt,
         worker: { ...attempt.worker, inputCursor: event.cursor, inputHistory: [...attempt.worker.inputHistory, event.cursor] },
       }, event.at)
+    case 'plan_dependencies': {
+      if ((task.status !== 'queued' && task.status !== 'blocked') || (attempt.worker && !attempt.worker.releasedAt)) {
+        return reject('invalid_transition')
+      }
+      if (event.referenceId === undefined) return advance(state, 'queued', { ...attempt, status: 'queued' }, event.at)
+      return advance(state, 'blocked', { ...attempt, status: 'waiting' }, event.at, { wait: {
+        reason: 'dependency', referenceId: event.referenceId, resumeCondition: 'Verify every prerequisite task before starting.',
+      } })
+    }
     case 'recover_attempt': {
       if (!attempt.worker || task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled'
         || task.status === 'reconciliation_required'

@@ -133,6 +133,7 @@ export const projectSchema = z.strictObject({
   status: z.enum(['active', 'paused', 'completed', 'cancelled']),
   successCriteria: textListSchema.min(1),
   planRevision: versionSchema,
+  priority: z.enum(['high', 'normal', 'low']).optional(),
   milestones: z.array(z.strictObject({
     title: nonEmptyTextSchema,
     deadline: taskDeadlineSchema.optional(),

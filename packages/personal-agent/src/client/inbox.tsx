@@ -5,6 +5,7 @@ import { ApprovalCard, requestId, TaskDetail, TaskStatus } from './task.js'
 import { Usage } from './usage.js'
 import { Reminders, Routines } from './routines.js'
 import { PersonalMemory } from './memory.js'
+import { Projects, TaskPlanning } from './projects.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
 type ArtifactContent = Extract<InboxResponse, { kind: 'artifact' }>['artifact']
@@ -450,12 +451,10 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
         </div>
         <CreateForm memory={memory} snapshot={snapshot} t={t} writable={writable} changed={changed}
           busy={mutations.current.has(`${memory.form}:create`)} createProject={createProject} createTask={createTask} />
-        {snapshot && snapshot.projects.length > 0 && <details className="dshpa-projects dshpa-card">
-          <summary>{t('detail.projects')}</summary>
-          <ul>{snapshot.projects.map(project => <li key={project.id}>
-            <strong>{project.title}</strong><p className="dshpa-muted">{project.purpose}</p>
-          </li>)}</ul>
-        </details>}
+        {snapshot && connected && <Projects key={connectionKey} projects={writable ? snapshot.projects : []}
+          tasks={writable ? snapshot.tasks : []} port={port} mutate={(key, request, acknowledge) => { void mutate(key, request, acknowledge) }}
+          chooseTask={chooseTask} current={() => connection.getSnapshot() === connectionKey}
+          writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('goal-plan')} t={t} />}
         {snapshot?.usage && <Usage usage={snapshot.usage} t={t} />}
         {snapshot?.memoryConfigured && <PersonalMemory t={t} port={port} projects={snapshot.projects} tasks={snapshot.tasks}
           connectionKey={connectionKey} currentConnection={() => connection.getSnapshot()} readable={writable}
@@ -463,6 +462,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
         {snapshot?.schedules && <Routines routines={snapshot.schedules.routines} tasks={snapshot.tasks} t={t}
           writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('routines')}
           submit={(request, acknowledged) => { void mutate('routines', request, acknowledged) }} />}
+        {task && writable && <TaskPlanning key={`${connectionKey}:${task.id}:${task.version}`} task={task} tasks={snapshot?.tasks ?? []}
+          writable={!snapshot?.recoveryMode} busy={mutations.current.has('task-plan')}
+          mutate={(key, request, acknowledge) => { void mutate(key, request, acknowledge) }} t={t} />}
         {task ? <TaskDetail task={task} project={snapshot?.projects.find(project => project.id === task.projectId)}
           workerConfigured={snapshot?.workerConfigured === true && !snapshot.recoveryMode} t={t} writable={writable}
           canOpenSession={writable && snapshot?.sessions.some(session => session.id === task.sessionId) === true}
