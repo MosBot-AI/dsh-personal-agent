@@ -31,6 +31,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Local Web inbox evidence](evidence/PA-008.md) | Native conversation, scoped work controls, and owner acceptance |
 | [Recovery evidence](evidence/PA-009.md) | Input journaling, exact readback, cancellation, and guarded restore |
 | [Routing evidence](evidence/PA-010.md) | Authenticated intake, subscriptions, bounded assessment, and foreground control |
+| [Context checkpoint evidence](evidence/PA-011.md) | Native compaction, scoped recall, persistent exclusions, and Worker context budgets |
 | [Budget and attention evidence](evidence/PA-013.md) | Model claims, resource limits, notification policy, and usage |
 | [Schedule evidence](evidence/PA-018.md) | Versioned routine intent, native wake reconciliation, and logical occurrences |
 | [Resident host evidence](evidence/PA-021.md) | Startup and shutdown, health, provider waits, backup and restore |
