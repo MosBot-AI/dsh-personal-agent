@@ -33,7 +33,6 @@ export const nativeSessionPersistenceRows = [
 interface NativeProfileOptions {
   probe: string
   patchRows: string[]
-  trailingRows?: string[]
   requiredDshVersion?: string
 }
 
@@ -64,7 +63,6 @@ export function createNativeProfile(options: NativeProfileOptions) {
       ...options.patchRows,
       '    - id: contract-probe',
       '      name: ./contract-probe.mjs',
-      ...(options.trailingRows ?? []),
       '',
     ].join('\n'))
   } catch (error) {
