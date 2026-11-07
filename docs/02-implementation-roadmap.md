@@ -2,7 +2,7 @@
 
 [Documentation index](README.md) · [简体中文](02-implementation-roadmap-zh.md)
 
-Revision: 2026-11-07-r6. Everything remains planned. Stable PA-001–PA-039 cards replace the older M0.1-style outline. The [machine-readable manifest](implementation-tasks.json) owns detailed dependencies, paths, steps and commands. [06](06-agent-execution-guide.md) defines execution; [07](07-evaluation-and-release-gates.md) defines E00–E21.
+Revision: 2026-11-07-r7. Everything remains planned. Stable PA-001–PA-043 cards replace the older M0.1-style outline. The [machine-readable manifest](implementation-tasks.json) owns detailed dependencies, paths, steps and commands. [06](06-agent-execution-guide.md) defines execution; [07](07-evaluation-and-release-gates.md) defines E00–E24.
 
 ## 1. Releases and scope
 
@@ -13,14 +13,14 @@ Revision: 2026-11-07-r6. Everything remains planned. Stable PA-001–PA-039 card
 | M2 Continuous assistant | Responsive multi-tasking, goals/projects, recall, explicit memory, cost and attention controls | PA-010–014 | E02–E04, E09; no whole-history prompt workaround |
 | M3 Real value | Local knowledge, one GitHub connector, reminders, bounded preparation, reviewed skills, continuous hosting | PA-015–021 | E05–E12 and a real write/readback path |
 | M5-alpha | Installable, diagnosable and recoverable text alpha | PA-027–028 | E00–E12 and seven days of real use |
-| M3-local | Desktop operation, VNC, secure input/vault and media creation | PA-031–034, PA-036–037, PA-039 | E14, E16–E21 |
+| M3-local | Desktop operation, VNC, secure input/vault and media creation | PA-031–034, PA-036–037, PA-039–043 | E14, E16–E24 |
 | M5-desktop-alpha | First complete resident desktop product | PA-035 | Foundation plus local capabilities and seven-day trial |
 | M4-beta | Mobile Web access to the same agent and personal communication workflows | PA-022–023 | E13 and live account workflows |
 | M5-beta | Remote personal-assistant beta | PA-029 | Desktop-alpha regression, remote access tests, seven-day trial |
 | M4-v1 | Additional isolated/hosted environments, personal devices and voice | PA-024–026 | E14–E15, offline recovery, takeover and speech ambiguity |
 | M5-v1 | Complete persistent product | PA-030 | All scenarios and fourteen-day cross-device trial |
 
-M5 validates each release tier. Foundation alpha validates the core; desktop alpha is the default first complete product, including VNC, secure input and media, without requiring voice or distributed devices. Stage numbers classify work; the dependency DAG controls actual ordering. Completing this plan does not mean implementing its thirty-nine tasks now.
+M5 validates each release tier. Foundation alpha validates the core; desktop alpha is the default first complete product, including VNC, secure input and media, without requiring voice or distributed devices. Stage numbers classify work; the dependency DAG controls actual ordering. Completing this plan does not mean implementing its forty-three tasks now.
 
 ```mermaid
 flowchart LR
@@ -55,7 +55,7 @@ These are revisable **engineering defaults**, not account connections or spendin
 | First write | Draft PR in a test repository: prepare, review, execute, read back | Concrete live account and scope are supplied |
 | UI | Main conversation, Today decisions, project/task detail and artifacts, reusing DSH | A native mobile requirement is demonstrated |
 | Memory | Replaceable MemoryProvider and default SQLite plugin; explicit memory, extraction off, keyword search | Offline evaluation justifies vectors or extraction |
-| Models | Explicit Router/Worker choices, initially the same configured model; no automatic cross-provider fallback | Quality/latency/cost evidence supports change |
+| Models | Fixed/automatic modes, configured pools, effort maps and ordered fallbacks within grants/budgets | PA-040–043; calibrate on real tasks |
 | Initiative | Off by default; enable a named rule in observe, then prepare | Proven value and operation grants justify act |
 | Notifications | Results/questions/blockers visible; coalesce progress; at most three unsolicited suggestions per day initially | Adoption and interruption evidence suggests adjustment |
 | Spending | No unattended paid execution without configured limits; no automatic top-up | Owner configures a budget |

@@ -9,7 +9,7 @@ The engineering baseline is specific enough to begin implementation. **This deli
 For a future explicit implementation request:
 
 ```text
-Implement dshpa in this repository. Read docs/README.md, 01, 03, 04, 06, 08 and 09,
+Implement dshpa in this repository. Read docs/README.md, 01, 03, 04, 06, 08, 09 and 10,
 then docs/implementation-tasks.json. Target desktop-alpha.
 Inspect the working tree and upstream AGENTS.md; preserve existing changes.
 Choose the first dependency-ready task, starting with PA-001.
@@ -78,11 +78,15 @@ Each card contains stable ID, stage/release, status, dependencies, paths, source
 | PA-032 | M3 / desktop-alpha | Integrate a local credential broker and vault | PA-005, PA-031, PA-037 |
 | PA-033 | M3 / desktop-alpha | Run durable image and video provider jobs | PA-007, PA-013, PA-021, PA-038 |
 | PA-034 | M3 / desktop-alpha | Deliver editable image and video creation workflows | PA-031, PA-033 |
-| PA-035 | M5 / desktop-alpha | Validate a resident personal-computer release | PA-028, PA-031, PA-032, PA-033, PA-034, PA-036, PA-039 |
+| PA-035 | M5 / desktop-alpha | Validate a resident personal-computer release | PA-028, PA-031, PA-032, PA-033, PA-034, PA-036, PA-039, PA-043 |
 | PA-036 | M3 / desktop-alpha | Provide authenticated VNC viewing and takeover | PA-008, PA-031, PA-032 |
 | PA-037 | M3 / desktop-alpha | Accept secrets through a dedicated secure user channel | PA-005, PA-008, PA-031 |
 | PA-038 | M1 / alpha | Define public capability plugin contracts and examples | PA-002, PA-003, PA-005 |
 | PA-039 | M3 / desktop-alpha | Let users configure and safely replace providers | PA-008, PA-012, PA-033, PA-034, PA-038, PA-037 |
+| PA-040 | M3 / desktop-alpha | Define routing contracts and verify DSH selection boundaries | PA-002, PA-013, PA-038 |
+| PA-041 | M3 / desktop-alpha | Route difficulty to model and reasoning effort | PA-040 |
+| PA-042 | M3 / desktop-alpha | Manage quota buckets and bounded fallback chains | PA-040, PA-041, PA-009 |
+| PA-043 | M3 / desktop-alpha | Configure model pools and integrate an optional gateway | PA-042, PA-039 |
 
 ## 4. Toolchain and commands
 

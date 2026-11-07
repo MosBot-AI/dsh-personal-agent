@@ -9,7 +9,7 @@
 在未来明确要求 agent 开始开发时，可以使用：
 
 ```text
-在本仓库实施 dshpa。先读 docs/README-zh.md、01、03、04、06、08、09，
+在本仓库实施 dshpa。先读 docs/README-zh.md、01、03、04、06、08、09、10，
 再读取 docs/implementation-tasks.json。目标发布级别为 desktop-alpha。
 检查工作区和上游 AGENTS.md；保护已有变更。按依赖选择首个 ready 的任务，
 从 PA-001 开始，不跳到 UI、VNC 或 ComfyUI 集成。
@@ -77,11 +77,15 @@
 | PA-032 | M3 / desktop-alpha | 实现本地凭据代理与密码库 | PA-005, PA-031, PA-037 |
 | PA-033 | M3 / desktop-alpha | 实现图片视频异步生成后端 | PA-007, PA-013, PA-021, PA-038 |
 | PA-034 | M3 / desktop-alpha | 交付可编辑图片和视频工作流 | PA-031, PA-033 |
-| PA-035 | M5 / desktop-alpha | 验证个人电脑常驻版本 | PA-028, PA-031, PA-032, PA-033, PA-034, PA-036, PA-039 |
+| PA-035 | M5 / desktop-alpha | 验证个人电脑常驻版本 | PA-028, PA-031, PA-032, PA-033, PA-034, PA-036, PA-039, PA-043 |
 | PA-036 | M3 / desktop-alpha | 实现 VNC 实时查看与接管 | PA-008, PA-031, PA-032 |
 | PA-037 | M3 / desktop-alpha | 安全密码与密钥输入通道 | PA-005, PA-008, PA-031 |
 | PA-038 | M1 / alpha | 定义公开插件接口、契约测试和示例 | PA-002, PA-003, PA-005 |
 | PA-039 | M3 / desktop-alpha | 实现用户插件配置、记忆迁移和安全切换 | PA-008, PA-012, PA-033, PA-034, PA-038, PA-037 |
+| PA-040 | M3 / desktop-alpha | 定义模型路由接口并验证 DSH 请求边界 | PA-002, PA-013, PA-038 |
+| PA-041 | M3 / desktop-alpha | 按难度自动选择模型与推理强度 | PA-040 |
+| PA-042 | M3 / desktop-alpha | 实现额度桶、耗尽兜底和持久等待 | PA-040, PA-041, PA-009 |
+| PA-043 | M3 / desktop-alpha | 配置模型池并接入可选网关 | PA-042, PA-039 |
 
 ## 4. 工具链与验证命令
 

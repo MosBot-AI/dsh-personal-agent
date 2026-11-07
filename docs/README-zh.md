@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-**状态：方案已细化，产品尚未实现。** 修订 `2026-11-07-r6`，Asia/Shanghai。DSH Personal Agent 简称 **dshpa**。本轮基于现有方案、两个固定版本的本地 DSH 仓库、Grok Bot/Muse/dots 官方资料和作者分析完善计划，并纳入本机常驻、电脑操作、图片/视频、密码库、安全输入和 VNC 要求。
+**状态：方案已细化，产品尚未实现。** 修订 `2026-11-07-r7`，Asia/Shanghai。DSH Personal Agent 简称 **dshpa**。本轮基于现有方案、两个固定版本的本地 DSH 仓库、Grok Bot/Muse/dots 官方资料和作者分析完善计划，并纳入本机常驻、电脑操作、图片/视频、密码库、安全输入和 VNC 要求。
 
 产品定位是：**运行在用户自己电脑上的持续个人工作系统，以一个主 agent 管理目标和任务，按需委派执行，交付可检查成果，同时尽量少消耗人的注意力。** 云服务可选；DSH 本身承担原生运行时和编排，不增加第二个外部主控制器。
 
@@ -13,12 +13,13 @@
 | [01 产品与架构](01-product-and-architecture-zh.md) | 为什么做、用户得到什么、系统如何分工、哪些不做 |
 | [08 本机、媒体、密码库与 VNC](08-local-computer-media-and-vault-zh.md) | 常驻电脑如何运行，如何看桌面、接管、安全输入和使用凭据，以及创作图片/视频 |
 | [02 路线图](02-implementation-roadmap-zh.md) | 基础 alpha → 桌面 alpha → beta → v1 的范围与默认选择 |
-| [06 Agent 实施入口](06-agent-execution-guide-zh.md) | 交接提示词、执行顺序、39 个任务的索引与证据规则 |
+| [06 Agent 实施入口](06-agent-execution-guide-zh.md) | 交接提示词、执行顺序、43 个任务的索引与证据规则 |
 | [03 数据与执行契约](03-contracts-security-and-tests-zh.md) | 状态机、事务、授权、恢复、资源、凭据和媒体记录 |
-| [07 验收与发布](07-evaluation-and-release-gates-zh.md) | E00–E21 场景、质量目标、真实验证及发布条件 |
+| [07 验收与发布](07-evaluation-and-release-gates-zh.md) | E00–E24 场景、质量目标、真实验证及发布条件 |
 | [04 决策与源码审计](04-decisions-and-source-audit-zh.md) | 已有能力、适配/新增范围、默认决策和未决部署输入 |
 | [05 调研与架构判断](05-research-and-product-lessons-zh.md) | 三款产品、专家/设计者分析、Superagent 理念与证据局限 |
 | [09 插件规范](09-plugin-architecture-zh.md) | 用户如何更换媒体/记忆实现，插件如何开发、配置、迁移和回滚 |
+| [10 模型调度与网关](10-model-routing-and-gateway-zh.md) | 难度/effort 自动选择、模型池、额度和兜底配置及实现比较 |
 
 每份文档有对应英文版本。任务定义在 [implementation-tasks.json](implementation-tasks.json)，含依赖、目标文件、源码参考、步骤、测试路径、验收场景和证据路径。任务全部为 `planned`；默认实施目标是 **桌面 alpha（PA-035 及其依赖）**，第一项是 PA-001。
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "plan_revision": "2026-11-07-r6",
+  "plan_revision": "2026-11-07-r7",
   "timezone": "Asia/Shanghai",
   "status": "design_only",
   "baseline": {
@@ -1246,7 +1246,10 @@
         "E13",
         "E19",
         "E20",
-        "E21"
+        "E21",
+        "E22",
+        "E23",
+        "E24"
       ],
       "test_files": [
         "tests/e2e/beta-live.spec.ts"
@@ -1278,7 +1281,7 @@
       ],
       "source_refs": [],
       "implementation_steps": [
-        "Run E00-E21, including device disconnect during dispatch, takeover/automation races, revoked leases and speech ambiguity.",
+        "Run E00-E24, including device disconnect during dispatch, takeover/automation races, revoked leases and speech ambiguity.",
         "Run a fourteen-day opt-in trial spanning cloud-only work and intermittently connected devices; verify accepted outcomes and intervention burden.",
         "Require zero unresolved critical security/recovery defects; retain incomplete tracks as experimental rather than calling the product feature-complete."
       ],
@@ -1304,7 +1307,10 @@
         "E18",
         "E19",
         "E20",
-        "E21"
+        "E21",
+        "E22",
+        "E23",
+        "E24"
       ],
       "test_files": [
         "tests/e2e/v1-live.spec.ts"
@@ -1510,7 +1516,8 @@
         "PA-033",
         "PA-034",
         "PA-036",
-        "PA-039"
+        "PA-039",
+        "PA-043"
       ],
       "target_paths": [
         "docs/evidence/release-desktop-alpha.md",
@@ -1518,7 +1525,7 @@
       ],
       "source_refs": [],
       "implementation_steps": [
-        "Run E00-E12 plus E14 and E16-E21 on the named user-owned desktop platform. Verify startup, logout/lock/sleep differences, offline operation, takeover and simultaneous media/background work. Include E19 live desktop viewing and takeover.",
+        "Run E00-E12 plus E14 and E16-E24 on the named user-owned desktop platform. Verify startup, logout/lock/sleep differences, offline operation, takeover and simultaneous media/background work. Include E19 live desktop viewing and takeover.",
         "Demonstrate a local image artifact, a playable video with declared generative or composited mode, a test-vault login, and recovery after host restart. Record hardware, versions, resource peaks and limitations; unsupported generative video cannot be advertised.",
         "Complete a seven-day opt-in resident trial with real requested tasks and no uncontrolled secrets or duplicate external actions. Produce local packaging and instructions; installation on a real user machine is a later explicit implementation action."
       ],
@@ -1542,7 +1549,10 @@
         "E18",
         "E19",
         "E20",
-        "E21"
+        "E21",
+        "E22",
+        "E23",
+        "E24"
       ],
       "test_files": [
         "tests/e2e/desktop-live.spec.ts"
@@ -1737,6 +1747,167 @@
         "python3 scripts/check_plan.py"
       ],
       "evidence_path": "docs/evidence/PA-039.md"
+    },
+    {
+      "id": "PA-040",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Define routing contracts and verify DSH selection boundaries",
+      "title_zh": "定义模型路由接口并验证 DSH 请求边界",
+      "depends_on": [
+        "PA-002",
+        "PA-013",
+        "PA-038"
+      ],
+      "target_paths": [
+        "packages/plugin-api/src/model-routing.ts",
+        "packages/model-routing/src/host.ts"
+      ],
+      "source_refs": [
+        "H:packages/llm/llm/src/call-config.ts",
+        "H:packages/llm/llm/src/index.ts",
+        "H:docs/architecture.md"
+      ],
+      "implementation_steps": [
+        "Probe model/effort selection before host snapshot; verify retries retain selection and safe reroute creates a fresh request series. Record minimal missing seams instead of mutating deprecated hooks.",
+        "Define deployment/account/quota identities, supported capabilities and effort mappings, policy revisions, routing decisions and inference attempts. Keep core budget authority."
+      ],
+      "acceptance_ids": [
+        "E22"
+      ],
+      "test_files": [
+        "tests/contracts/model-routing-host.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/contracts/model-routing-host.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-040.md"
+    },
+    {
+      "id": "PA-041",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Route difficulty to model and reasoning effort",
+      "title_zh": "按难度自动选择模型与推理强度",
+      "depends_on": [
+        "PA-040"
+      ],
+      "target_paths": [
+        "packages/model-routing/src/policy.ts",
+        "packages/model-routing/src/difficulty.ts"
+      ],
+      "source_refs": [
+        "H:packages/llm/llm/src/call-config.ts",
+        "H:packages/llm/llm/src/index.ts",
+        "H:docs/architecture.md"
+      ],
+      "implementation_steps": [
+        "Implement capability/privacy/budget filtering before deterministic task/phase scoring, then user-configured pool/effort mapping. Support fixed/per-task override and conservative low-confidence policy.",
+        "Bound quality-driven escalation and optional semantic classification costs; missing data or authority does not trigger expensive retries. Keep verification criteria stable."
+      ],
+      "acceptance_ids": [
+        "E22"
+      ],
+      "test_files": [
+        "tests/routing/difficulty.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/routing/difficulty.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-041.md"
+    },
+    {
+      "id": "PA-042",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Manage quota buckets and bounded fallback chains",
+      "title_zh": "实现额度桶、耗尽兜底和持久等待",
+      "depends_on": [
+        "PA-040",
+        "PA-041",
+        "PA-009"
+      ],
+      "target_paths": [
+        "packages/model-routing/src/quota.ts",
+        "packages/model-routing/src/fallback.ts"
+      ],
+      "source_refs": [
+        "H:packages/llm/llm/src/call-config.ts",
+        "H:packages/llm/llm/src/index.ts",
+        "H:docs/architecture.md"
+      ],
+      "implementation_steps": [
+        "Separate rate limits, provider quota, core hard budgets, context limits and authorization failures. Share quota across deployments using the same account; preserve unknown/stale quota telemetry.",
+        "Implement ordered backup/terminal chains, cooldown, bounded attempts, atomic spend reservation and persistent resource waits. Cross-provider destinations require matching grants.",
+        "Reconcile partial streams, uncertain fees and completed tool effects across reroute/restart; no whole-task replay, fallback cycles or compounded gateway retries."
+      ],
+      "acceptance_ids": [
+        "E23"
+      ],
+      "test_files": [
+        "tests/routing/fallback.spec.ts",
+        "tests/recovery/inference.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/routing/fallback.spec.ts tests/recovery/inference.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-042.md"
+    },
+    {
+      "id": "PA-043",
+      "phase": "M3",
+      "release": "desktop-alpha",
+      "status": "planned",
+      "title": "Configure model pools and integrate an optional gateway",
+      "title_zh": "配置模型池并接入可选网关",
+      "depends_on": [
+        "PA-042",
+        "PA-039"
+      ],
+      "target_paths": [
+        "packages/model-gateway-litellm/src/index.ts",
+        "packages/personal-agent/src/client/model-routing.tsx",
+        "evals/cases/model-routing/"
+      ],
+      "source_refs": [
+        "H:packages/llm/llm/src/call-config.ts",
+        "H:packages/llm/llm/src/index.ts",
+        "H:docs/architecture.md"
+      ],
+      "implementation_steps": [
+        "Ship direct DSH execution and an optional pinned LiteLLM adapter with explicit actual-deployment reporting and one retry owner. Verify license/dependencies and reject hidden incompatible fallbacks.",
+        "Provide model/effort/pool/account/quota settings, scoped credentials, dry-run explanations, costs and health; existing approved fallback rules need no repeated confirmation.",
+        "Evaluate at least 60 bilingual tasks against fixed strong/economical models. Require at most five-point quality loss versus strong baseline and lower measured cost; otherwise keep manual mode. Verify two real models and one authorized fallback, marking unavailable quota signals honestly."
+      ],
+      "acceptance_ids": [
+        "E22",
+        "E23",
+        "E24"
+      ],
+      "test_files": [
+        "tests/routing/gateway.spec.ts",
+        "tests/client/model-routing.spec.tsx",
+        "tests/e2e/model-routing-live.spec.ts"
+      ],
+      "validation_commands": [
+        "pnpm typecheck",
+        "pnpm exec vitest run tests/routing/gateway.spec.ts tests/client/model-routing.spec.tsx tests/e2e/model-routing-live.spec.ts",
+        "pnpm build",
+        "python3 scripts/check_plan.py"
+      ],
+      "evidence_path": "docs/evidence/PA-043.md"
     }
   ],
   "product_name": "DSH Personal Agent",

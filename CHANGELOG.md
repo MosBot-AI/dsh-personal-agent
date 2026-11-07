@@ -8,9 +8,11 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Added
 
+- Specify configurable model routing with difficulty-based model/effort selection, quota-aware fallbacks, an optional LiteLLM adapter and implementation/evaluation tasks.
+
 - Product research and source audits informing the dshpa architecture, with separate English and Chinese documentation.
 - Implementation specifications for resident desktop operation, VNC viewing/takeover, media creation, secure credential intake and replaceable capability plugins. These capabilities remain planned.
-- A machine-readable backlog of 39 implementation tasks, 22 acceptance scenarios and a plan validator for dependencies, references and document links.
+- A machine-readable backlog of 43 implementation tasks, 25 acceptance scenarios and a plan validator for dependencies, references and document links.
 - Bilingual repository README entry points and English-only agent instructions covering documentation, commits, changelogs and project collaboration.
 - Cross-platform ignore rules for operating-system files, editors, Node/package-manager and Vite output, tests, Python caches and local secrets/runtime data.
 

@@ -14,7 +14,7 @@ dshpa is a planned personal agent built on DeepSeek Harness. It is designed to r
 - Secure password/key intake and purpose-limited credential use.
 - Optional remote/mobile access, connected devices and voice.
 
-Read the [documentation index](docs/README.md), [architecture](docs/01-product-and-architecture.md) and [plugin specification](docs/09-plugin-architecture.md). Implementation agents should start with the [execution guide](docs/06-agent-execution-guide.md) and [39-task manifest](docs/implementation-tasks.json).
+Read the [documentation index](docs/README.md), [architecture](docs/01-product-and-architecture.md) and [plugin specification](docs/09-plugin-architecture.md). Implementation agents should start with the [execution guide](docs/06-agent-execution-guide.md) and [43-task manifest](docs/implementation-tasks.json).
 
 ## Validate the plan
 

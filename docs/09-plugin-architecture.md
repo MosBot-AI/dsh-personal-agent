@@ -68,3 +68,5 @@ External model/retrieval providers declare data destinations. Switching to remot
 PA-038 creates API, registry, testkit and examples. PA-012 implements the independent memory provider; PA-033/034 implement independent media/workflow providers. PA-039 implements settings, switching, memory migration and rollback.
 
 E21 proves external plugins load without core edits; incompatible versions fail; media jobs retain provider ownership; memory round trips preserve sources/tombstones; failed migration retains service; rollback after corrections/forgetting cannot revive facts; unload leaves no execution. Mock media examples cannot establish real generation capability.
+
+Model routing and API gateways are independent plugins too. [10](10-model-routing-and-gateway.md) specifies difficulty/effort selection, user pools, quota fallbacks and DSH request boundaries.

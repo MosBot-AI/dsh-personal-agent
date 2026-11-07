@@ -29,6 +29,7 @@ Audit date: 2026-11-07, Asia/Shanghai. Source inspection is not runtime verifica
 | D20 | Explicit user direction | Live VNC desktop viewing and takeover. |
 | D21 | Explicit user direction | Dedicated secure password/key intake directly to protected storage and authorized use. |
 | D22 | Explicit user direction | Independently replaceable media/workflow and memory plugins, user configuration, public interfaces and migration guarantees. |
+| D23 | Explicit user direction | Independent model-routing/gateway plugins with configured primary/fallback models, difficulty/effort and exhaustion policy. |
 
 This register reconciles the current direction with older proposals. The earlier “external personal-assistant controller calling DSH through an SDK” architecture is superseded. An API gateway or speech service may be external infrastructure, but it must not become a second owner of orchestration.
 
@@ -38,7 +39,7 @@ The request for an implementable plan now resolves these engineering defaults. T
 
 | Option | Default | Delivery / reconsideration |
 | --- | --- | --- |
-| O1 | Explicit Router/Worker model configuration, initially one model; no silent provider fallback | M2; automatic routing needs evaluation |
+| O1 | Configurable pools, automatic difficulty/effort selection and quota/failure fallbacks; fixed mode retained | PA-040–043; required in desktop alpha, superseding deferral |
 | O2 | Explicitly replaceable: public versioned MemoryProvider, default plugin, examples, migration and rollback | PA-038, PA-012, PA-039; required in first complete release |
 | O3 | Required pre-compaction checkpoint; automatic extraction off, optional reviewed candidates | M2/M3 after quality/deletion tests |
 | O4 | Explicit remember/inspect/correct/forget | Required in foundation alpha |

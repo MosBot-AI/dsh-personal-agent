@@ -140,3 +140,5 @@ Begin with one authoritative host, then add optional execution devices. Authorit
 The first release excludes multi-tenant SaaS, a public marketplace, custom vault cryptography, a general workflow language, automatic payments, unconstrained self-modification and unlimited model routing. It does not promise perfect GUI reliability, arbitrary MCP safety or execution during sleep.
 
 Reconsider distribution only after measured single-host limits; vectors after recall failures; visible specialists after repeated role-specific needs; native mobile after a concrete Web limitation. Beta/v1 cards preserve future scope without bypassing initial validation.
+
+Model routing and API gateways are independent plugins too. [10](10-model-routing-and-gateway.md) specifies difficulty/effort selection, user pools, quota fallbacks and DSH request boundaries.

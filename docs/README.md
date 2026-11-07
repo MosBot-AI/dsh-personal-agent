@@ -2,7 +2,7 @@
 
 [简体中文](README-zh.md)
 
-**Status: detailed plan; product not implemented.** Revision `2026-11-07-r6`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
+**Status: detailed plan; product not implemented.** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
 
 Build a **persistent personal work system on the owner's computer**: one primary agent coordinates goals and tasks, delegates execution and returns inspectable outcomes while conserving human attention. Cloud services are optional. DSH remains the native runtime and orchestration host.
 
@@ -13,12 +13,13 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [01 Product and architecture](01-product-and-architecture.md) | Value, user outcomes, responsibilities and non-goals |
 | [08 Local computer, media, vault and VNC](08-local-computer-media-and-vault.md) | Resident execution, viewing/takeover, secure intake, credential use and creation |
 | [02 Roadmap](02-implementation-roadmap.md) | Foundation alpha → desktop alpha → beta → v1 and defaults |
-| [06 Agent execution guide](06-agent-execution-guide.md) | Handoff prompt, execution procedure, 39-task index and evidence |
+| [06 Agent execution guide](06-agent-execution-guide.md) | Handoff prompt, execution procedure, 43-task index and evidence |
 | [03 Contracts](03-contracts-security-and-tests.md) | States, transactions, authorization, recovery and resource/media/secret records |
-| [07 Evaluation](07-evaluation-and-release-gates.md) | E00–E21, quality targets, live evidence and release gates |
+| [07 Evaluation](07-evaluation-and-release-gates.md) | E00–E24, quality targets, live evidence and release gates |
 | [04 Decisions/source audit](04-decisions-and-source-audit.md) | Existing versus new capabilities, defaults and activation inputs |
 | [05 Research](05-research-and-product-lessons.md) | Products, expert/designer analysis, Superagent principles and evidence limits |
 | [09 Plugin architecture](09-plugin-architecture.md) | Replaceable media/memory, development, configuration, migration and rollback |
+| [10 Model routing and gateway](10-model-routing-and-gateway.md) | Difficulty/effort, user pools, quotas, fallback configuration and implementation comparison |
 
 Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. All tasks are `planned`. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
 

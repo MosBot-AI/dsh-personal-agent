@@ -30,6 +30,9 @@ All thresholds are proposed targets, not measured results. Product test files ar
 | E19 | Live VNC, forged view-only input, takeover, disconnect and revocation | Real frames; server-side input checks; one controller; stale streams closed; private raw ports | PA-036, PA-029 |
 | E20 | Secure password/key input, replay, expiry, disconnect and failed save | Direct broker intake, opaque reference, no plaintext trace/context, exact-purpose authority and lease expiry | PA-037, PA-032 |
 | E21 | Custom plugins, incompatible versions, media switching and memory migration/rollback | No core edits; existing jobs pinned; records/sources/tombstones preserved; failed migration recovers without reviving forgotten facts | PA-038, PA-039, PA-012, PA-033–034 |
+| E22 | Difficulty, unsupported effort, overrides and escalation | Capability-first selection, valid mappings, fixed mode and unchanged acceptance | PA-040, PA-041, PA-043 |
+| E23 | Shared quotas, limits, exhaustion, budget races and interrupted recovery | Correct fallback/wait, no extra authority/spend or repeated tools | PA-042 |
+| E24 | Settings/dry-run, gateway outage, retry layering and live evaluation | Explainable controls, bounded requests and measured quality/cost | PA-043 |
 
 Each scenario needs a normal path and a counterexample; method-call assertions alone are insufficient.
 
@@ -56,9 +59,9 @@ Foundation examples cover project brief, research, reminders, reviews, code chan
 ## 3. Release sets
 
 - **Foundation alpha (PA-028):** E00–E12, seven-day trial, real model/tool/write/readback and cancellation/restart. This validates the foundation, not the complete desktop assistant.
-- **Desktop alpha (PA-035, default first complete product):** foundation plus E14 and E16–E21, including computer operation, VNC, vault, images and playable video; seven-day resident trial.
+- **Desktop alpha (PA-035, default first complete product):** foundation plus E14 and E16–E24, including computer operation, VNC, vault, images and playable video; seven-day resident trial.
 - **Beta (PA-029):** desktop regression plus E13, live mail/calendar and remote VNC; seven-day remote trial.
-- **v1 (PA-030):** E00–E21 and fourteen-day cross-device/voice trial.
+- **v1 (PA-030):** E00–E24 and fourteen-day cross-device/voice trial.
 
 Image and generative-video capabilities require separate live-backend evidence. Composition may ship with an accurate label but cannot count as generative video. Missing vault, VNC or hardware validation blocks desktop-alpha release claims.
 

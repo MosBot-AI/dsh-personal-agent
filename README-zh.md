@@ -14,7 +14,7 @@ dshpa 是基于 DeepSeek Harness 规划的个人智能体，目标是常驻用�
 - 安全的密码/密钥输入及限定用途的凭据使用。
 - 可选的远程/移动端访问、连接设备和语音。
 
-请阅读[文档索引](docs/README-zh.md)、[系统架构](docs/01-product-and-architecture-zh.md)和[插件规范](docs/09-plugin-architecture-zh.md)。实施 agent 从[执行指南](docs/06-agent-execution-guide-zh.md)和 [39 项任务清单](docs/implementation-tasks.json)开始。
+请阅读[文档索引](docs/README-zh.md)、[系统架构](docs/01-product-and-architecture-zh.md)和[插件规范](docs/09-plugin-architecture-zh.md)。实施 agent 从[执行指南](docs/06-agent-execution-guide-zh.md)和 [43 项任务清单](docs/implementation-tasks.json)开始。
 
 ## 校验计划
 
