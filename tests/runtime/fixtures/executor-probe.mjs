@@ -450,7 +450,9 @@ async function waitAndRelease(ctx, fixture) {
     assert.equal(otherScript.requests.length, 0)
     const saved = current(fixture, seeded.ref)
     assert.equal(saved.active, false)
-    assert.deepEqual(saved.state.attempt.worker, {
+    const { releasedAt, ...worker } = saved.state.attempt.worker
+    assert.ok(releasedAt)
+    assert.deepEqual(worker, {
       presetId, cwd: join(fixture.rootDirectory, seeded.label), provider, model, inputCursor: waitingScript.input.cursor,
       inputHistory: [initial.input.cursor, waitingScript.input.cursor],
     })

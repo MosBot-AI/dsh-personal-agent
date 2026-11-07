@@ -10,12 +10,14 @@ import {
   type WorkCommandResult,
 } from '../domain/commands.js'
 import {
+  artifactSchema,
   attemptSchema,
   conversationSchema,
   deliverySchema,
   effectSchema,
   projectSchema,
   sourceEventSchema,
+  type ArtifactId,
   type AttemptId,
   type ConversationId,
   type DeliveryId,
@@ -45,6 +47,7 @@ import { sqliteCode, StorageError, transaction } from './schema.js'
 
 const MAX_BYTES = 1024 * 1024
 const MAX_INTENTS = 64
+const INBOX_LIMIT = 64
 const intentsSchema = z.strictObject({
   sourceEvent: sourceEventSchema.optional(),
   effects: z.array(effectSchema).max(MAX_INTENTS).optional(),
@@ -188,12 +191,13 @@ class WorkStore {
     return this.outbox
   }
 
-  createVerifier(options: VerificationOptions) {
+  createVerifier(options: VerificationOptions & { readonly authorizeCommit?: () => boolean }) {
     return createVerifier({
       readWork: ref => this.getWork(ref),
       readArtifact: (ref, id) => this.artifacts.read(ref, id),
       readEffect: (ref, id) => this.getEffect(ref, id),
-      commit: (ref, evidence) => this.commitVerification(ref, evidence),
+      commit: (ref, evidence) => options.authorizeCommit !== undefined && !options.authorizeCommit()
+        ? { ok: false, code: 'permission_denied' } : this.commitVerification(ref, evidence),
     }, options)
   }
 
@@ -226,6 +230,75 @@ class WorkStore {
     if (!conversation.success) throw new StorageError('invalid_input', 'Invalid conversation record')
     this.access(db => db.prepare('INSERT INTO conversations (id, record) VALUES (?, ?)')
       .run(conversation.data.id, recordEncoder()(conversation.data)))
+  }
+
+  getProject(scope: Scope, id: ProjectId) {
+    return this.access(db => {
+      const row = db.prepare('SELECT record FROM projects WHERE id = ? AND owner_id = ? AND profile_id = ?')
+        .get(id, scope.ownerId, scope.profileId)
+      return row && decodeRecord(row.record, projectSchema)
+    })
+  }
+
+  getConversation(scope: Scope, id: ConversationId) {
+    return this.access(db => {
+      const row = db.prepare('SELECT record FROM conversations WHERE id = ? AND owner_id = ? AND profile_id = ?')
+        .get(id, scope.ownerId, scope.profileId)
+      return row && decodeRecord(row.record, conversationSchema)
+    })
+  }
+
+  listInboxProjects(scope: Scope) {
+    return this.access(db => db.prepare(`
+      SELECT record FROM projects WHERE owner_id = ? AND profile_id = ? ORDER BY rowid DESC LIMIT ?
+    `).all(scope.ownerId, scope.profileId, INBOX_LIMIT).map(row => decodeRecord(row.record, projectSchema)))
+  }
+
+  listInboxWork(scope: Scope): WorkState[] {
+    return this.access(db => db.prepare(`
+      SELECT t.record AS task, a.record AS attempt FROM tasks t
+      LEFT JOIN attempts a ON a.id = t.attempt_id AND a.task_id = t.id
+      WHERE t.owner_id = ? AND t.profile_id = ? AND t.conversation_id IS NOT NULL
+      ORDER BY CASE
+        WHEN (t.record ->> '$.status') IN ('waiting_input', 'waiting_approval', 'blocked', 'reconciliation_required') THEN 0
+        WHEN (t.record ->> '$.status') = 'completed' THEN 1
+        ELSE 2
+      END, (t.record ->> '$.updatedAt') DESC, t.rowid DESC
+      LIMIT ?
+    `).all(scope.ownerId, scope.profileId, INBOX_LIMIT).map(row => this.decodeWork(row)))
+  }
+
+  listInboxDeliveries(ref: WorkRef) {
+    return this.access(db => db.prepare(`
+      SELECT record FROM outbox WHERE task_id = ? AND owner_id = ? AND profile_id = ?
+      ORDER BY rowid DESC LIMIT 16
+    `).all(ref.taskId, ref.ownerId, ref.profileId).map(row => decodeRecord(row.record, deliverySchema)))
+  }
+
+  listInboxArtifacts(ref: WorkRef, attemptId: AttemptId, generation: number, artifactIds: readonly ArtifactId[]) {
+    const ids = artifactIds.slice(0, INBOX_LIMIT)
+    if (ids.length === 0) return []
+    return this.access(db => db.prepare(`
+      SELECT id, version, (record -> '$.artifact') AS metadata FROM artifacts
+      WHERE owner_id = ? AND profile_id = ? AND task_id = ? AND attempt_id = ? AND generation = ?
+        AND id IN (${ids.map(() => '?').join(', ')})
+    `).all(ref.ownerId, ref.profileId, ref.taskId, attemptId, generation, ...ids).map(row => {
+      const artifact = decodeRecord(row.metadata, artifactSchema)
+      if (artifact.id !== row.id || !sameScope(ref, artifact) || artifact.attemptId !== attemptId || typeof row.version !== 'number') {
+        throw new StorageError('corrupt', 'Artifact metadata does not match its stored scope')
+      }
+      return { artifact, version: row.version }
+    }))
+  }
+
+  getWakeSource(ref: WorkRef, version: number) {
+    return this.access(db => {
+      const row = db.prepare(`
+        SELECT s.record FROM work_events w JOIN source_events s ON s.id = w.source_event_id
+        WHERE w.task_id = ? AND w.owner_id = ? AND w.profile_id = ? AND w.version = ? AND w.type = 'wake'
+      `).get(ref.taskId, ref.ownerId, ref.profileId, version)
+      return row && decodeRecord(row.record, sourceEventSchema)
+    })
   }
 
   getWork(ref: WorkRef): WorkState | undefined {
@@ -486,7 +559,10 @@ class WorkStore {
       LEFT JOIN attempts a ON a.id = t.attempt_id AND a.task_id = t.id
       WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ?
     `).get(ref.taskId, ref.ownerId, ref.profileId)
-    if (!row) return undefined
+    return row === undefined ? undefined : this.decodeWork(row)
+  }
+
+  private decodeWork(row: Record<string, unknown>): WorkState {
     const decoded = workStateSchema.safeParse({
       task: readJson(row.task),
       attempt: readJson(row.attempt),
