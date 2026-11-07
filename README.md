@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, read-only GitHub, compute and attention controls, durable schedules, proactive preparation, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-016, PA-018–019, PA-021, and PA-038).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, read-only GitHub, compute and attention controls, durable schedules, proactive preparation, reviewed skills, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-016, PA-018–020, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -22,6 +22,7 @@ The [local knowledge evidence](docs/evidence/PA-015.md) covers explicit roots, i
 The [GitHub read connector evidence](docs/evidence/PA-016.md) covers live readback, scoped cursors, and MCP capability revalidation.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [proactive evidence](docs/evidence/PA-019.md) covers rule replay, staged review, private briefs and local notice limits.
+The reviewed skills evidence covers accepted examples, held-out evaluation, exact activation, reuse and rollback. [PA-020 evidence](docs/evidence/PA-020.md)
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
 The [capability plugin evidence](docs/evidence/PA-038.md) covers versioned registration, scoped consumers, and independent keyless examples.
@@ -278,6 +279,14 @@ Set `config.inbox.proactive: true` and configure a priced or explicitly unmetere
 Choose **Start observing** after replay and set the global initiative limit to at least Observe. The router checks scope, source freshness, keywords, deduplication, cooldown and model budget before assessment. Observations record proposed or suppressed outcomes for review. Review at least 20 proposals with at least 70% marked useful before granting source read and private preparation. Private briefs retain their source reference and are available to the owner for inspection.
 
 After reviewing a useful private brief, you can separately grant local brief notices. With both rule and global policy set to Act, approved local notices can appear in **Today**. They share the existing limit of three unsolicited notices per owner and local day across routes and honor quiet hours. Rules whose goal revision, source enrollment or model route changed require revalidation. An assessment with no useful proposal stays silent.
+
+### Reuse a reviewed skill
+
+Open **Reviewed skills** in **Today** and select a project. After accepting two Markdown or plain-text task results, select them as examples for a candidate. Write a Markdown template with named fields such as `## {{topic}}`. Select a separate accepted task artifact as the expected result of a held-out example and enter its inputs as a JSON object, such as `{"topic":"North"}`. The evaluator substitutes the inputs once and compares the resulting UTF-8 bytes to the accepted artifact.
+
+Review the schema, sources and evaluation, then approve and activate the exact passing revision. Run it with new values to produce local Markdown you can copy. Record acceptance or a correction against that revision. A new draft keeps the current revision active until you approve the replacement. Select a previously approved revision to roll back when its evidence is still available.
+
+Skill runs are explicit, local and limited to text rendering. An unavailable or excluded source blocks further use of the affected revision. The skill workflow leaves personal memory and schedules unchanged. [PA-020 evidence](docs/evidence/PA-020.md)
 
 ### Schedule local reminders and task wakes
 

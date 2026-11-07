@@ -26,6 +26,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Reserve and reconcile model costs before dispatch, enforce compute limits and a separate heavy GPU queue, and expose scoped usage and attention decisions in the local inbox.
 - Reconcile native schedule wakes with versioned routine intent and show deduplicated local reminders and scoped task wakes in the inbox.
 - Add opt-in goal-bound proactive rules with replay, owner-reviewed staging, private briefs and granted local notices.
+- Add project-scoped Markdown skills with accepted examples, held-out evaluation, explicit version approval and rollback.
 - Operate a single resident profile with local readiness, diagnostic watchdogs, warm schedule recovery, online backup retention, and metadata audit export.
 - Add versioned capability plugin contracts, a lifecycle registry, policy-wrapped consumers, and independently loadable memory and mock media examples.
 - Map 43 implementation tasks into GitHub Project and English Issues with native dependencies, reporting protocol, live readiness and acceptance-gated Actions reconciliation.

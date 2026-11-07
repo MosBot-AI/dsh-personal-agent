@@ -1,3 +1,4 @@
+import { skillResponseSchema } from '../context/skill-contract.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
@@ -169,6 +170,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   }
   if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'context') return value.value === null || Array.isArray(value.value) || isRecord(value.value)
+  if (typeof value.kind === 'string' && value.kind.startsWith('skill_')) return skillResponseSchema.safeParse(value).success
   if (value.kind === 'proactive_state') return isProactiveState(value)
   if (value.kind === 'proactive_artifact') return typeof value.candidateId === 'string' && typeof value.text === 'string' && value.text.length <= 1024
   if (value.kind === 'connector_status' || value.kind === 'connector_page') {
