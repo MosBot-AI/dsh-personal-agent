@@ -2,7 +2,7 @@
   "schema_version": 1,
   "plan_revision": "2026-11-07-r7",
   "timezone": "Asia/Shanghai",
-  "status": "design_only",
+  "status": "implementation_started",
   "baseline": {
     "personal_agent": "8928cd989d76db55bb1a5f30efcf37f099d7c4ed",
     "harness": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
@@ -13,11 +13,10 @@
     "S": "/Users/charleypeng/dev/dsh-superagent-prototype"
   },
   "execution_rules": {
-    "current_task": "documentation_only",
     "first_task": "PA-001",
     "default_release": "desktop-alpha",
     "one_active_task_per_agent": true,
-    "implementation_commands_exist": false,
+    "implementation_commands_exist": true,
     "live_credentials_required_for_live_claims": true,
     "status_requires_evidence": true,
     "progress_source": "GitHub Project and linked Issues",
@@ -59,8 +58,8 @@
       ],
       "validation_commands": [
         "pnpm typecheck",
-        "pnpm exec vitest run tests/contracts/bundle.spec.ts",
         "pnpm build",
+        "pnpm exec vitest run tests/contracts/bundle.spec.ts",
         "python3 scripts/check_plan.py"
       ],
       "evidence_path": "docs/evidence/PA-001.md"

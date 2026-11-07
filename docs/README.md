@@ -2,7 +2,7 @@
 
 [简体中文](README-zh.md)
 
-**Status: detailed plan; product not implemented.** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
+**Status: native bundle bootstrap under PA-001.** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
 
 Build a **persistent personal work system on the owner's computer**: one primary agent coordinates goals and tasks, delegates execution and returns inspectable outcomes while conserving human attention. Cloud services are optional. DSH remains the native runtime and orchestration host.
 
@@ -42,6 +42,6 @@ python3 scripts/check_plan.py --check-sources
 git diff --check
 ```
 
-These checks validate plan structure, dependencies, bilingual files, local links and source paths, **not unimplemented product behavior**. PA-001 creates future pnpm scripts. Live model, media, VNC and vault checks belong to their task cards.
+These checks validate plan structure, dependencies, bilingual files, local links and source paths. Run `pnpm check` for the workspace build and keyless bundle contract checks. Live model, media, VNC and vault checks belong to their task cards.
 
-The specified `/Users/charleypeng/Documents/llmwiki` path was absent; no historical conclusions were invented. No software was installed, accounts connected, real secrets read, models/media jobs run or product published. Concrete accounts, budgets, hardware and providers are activation inputs, not blockers for keyless development.
+The specified `/Users/charleypeng/Documents/llmwiki` path was absent; no historical conclusions were invented. Concrete accounts, budgets, hardware and providers are activation inputs, not blockers for keyless development.

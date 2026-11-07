@@ -2,7 +2,7 @@
 
 [Documentation index](README.md) · [简体中文](06-agent-execution-guide-zh.md)
 
-The engineering baseline is specific enough to begin implementation. **This delivery is documentation only; future pnpm commands and product paths do not exist until their owning tasks implement them.** The plan checker is currently executable.
+PA-001 provides the native bundle workspace and the initial validation commands. The remaining product paths and test suites become available as their owning tasks land.
 
 Before implementation read the [GitHub Project protocol](11-github-project-workflow.md), use `scripts/project_ready.py` for live candidates, and claim/report in Project/Issues. Execution states below belong to GitHub; manifest status remains a planning snapshot.
 
@@ -40,7 +40,7 @@ Preserve cards and evidence across handoffs. Committing the plan does not comple
 
 ## 3. Task index and machine contract
 
-Each card contains stable ID, stage/release, status, dependencies, paths, sources, steps, scenarios, test files, commands and evidence path. All are currently planned. States are planned → in_progress → review → done; blocked records a concrete condition and resumes to in_progress once resolved.
+Each card contains stable ID, stage/release, status, dependencies, paths, sources, steps, scenarios, test files, commands and evidence path. The manifest keeps initial planning states. States are planned → in_progress → review → done; blocked records a concrete condition and resumes to in_progress once resolved.
 
 `release` is the first delivery tier. Desktop alpha is PA-035 plus its transitive dependencies; beta is PA-029's closure; v1 is PA-030's closure. PA-036 precedes PA-035 despite its larger number.
 
@@ -92,9 +92,9 @@ Each card contains stable ID, stage/release, status, dependencies, paths, source
 
 ## 4. Toolchain and commands
 
-PA-001 creates pinned scripts: `pnpm typecheck`, `pnpm build`, `pnpm test`, `pnpm test:contracts`, `pnpm test:recovery`, `pnpm test:e2e`, `pnpm check`. Per-card Vitest commands target behavior; empty test files do not satisfy acceptance. Live tests require explicit activation, budget and scoped accounts; otherwise report skipped.
+The workspace provides pinned scripts: `pnpm typecheck`, `pnpm build`, `pnpm test`, `pnpm test:contracts`, `pnpm test:recovery`, `pnpm test:e2e`, `pnpm check`. Per-card Vitest commands target behavior; empty test files do not satisfy acceptance. Live tests require explicit activation, budget and scoped accounts; otherwise report skipped.
 
-Launch through `dsh --profile <created-profile>`; the angle-bracket value is a placeholder. Record verified profile creation/loading commands after M0 rather than inventing CLI syntax.
+See the [workspace README](../README.md#start-the-native-profile) for the named DSH profile commands.
 
 Currently executable:
 
