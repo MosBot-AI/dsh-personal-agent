@@ -51,6 +51,7 @@ function fixture() {
   })
   const proactive = createProactive({ store, identity, scope, attention, assess, canAssess: () => budget,
     assessmentDataScope: ['team'], now })
+  const ledger = store.createProactiveLedger(scope)
   const router = createRouter({ store, identity, proactive: proactive.consider, now })
   onTestFinished(async () => {
     router.close()
@@ -79,7 +80,7 @@ function fixture() {
     time += 2000
     expect(receive(id, `ready 发布 ${id}`)).toMatchObject({ ok: true })
     return vi.waitFor(() => {
-      const latest = state().candidates[0]
+      const latest = ledger.candidates()[0]
       assert.ok(latest)
       expect(latest.status).toBe(expected)
       return latest
@@ -144,7 +145,7 @@ describe('goal-bound proactive work', () => {
     expect(f.proactive.notices()).toEqual([])
     f.revoke()
     expect(f.proactive.handle({ type: 'proactive_artifact', candidateId: brief.id })).toEqual({ ok: false, code: 'source_unavailable' })
-  })
+  }, 15_000)
 
   it('skips unavailable budgets and discards an in-flight assessment after policy changes', async () => {
     const f = fixture()

@@ -176,6 +176,7 @@ export function createProactive(options: {
     return { ok: true as const, kind: 'proactive_state' as const, policy,
       rules: ledger.rules().map(rule => ({ ...rule, evidence: ledger.counts(rule), current: currentRule(rule) })),
       candidates: ledger.candidates().map(candidate => {
+        if (candidate.summary === undefined && candidate.artifactId === undefined) return candidate
         if (!canSee(candidate)) return noText(candidate)
         const rule = ledger.rule(candidate.ruleId)
         if (candidate.status === 'surfaced' && (policy.mode !== 'act' || policy.version !== candidate.policyVersion
