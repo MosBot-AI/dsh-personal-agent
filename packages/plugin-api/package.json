@@ -1,0 +1,18 @@
+{
+  "name": "@mosbot-ai/dshpa-plugin-api",
+  "version": "0.1.0",
+  "description": "Pre-stable capability provider contracts for DSH Personal Agent",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    "./memory": { "types": "./lib/memory.d.ts", "default": "./lib/memory.js" },
+    "./media": { "types": "./lib/media.d.ts", "default": "./lib/media.js" },
+    "./workflow": { "types": "./lib/workflow.d.ts", "default": "./lib/workflow.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["lib"],
+  "engines": { "node": ">=24.9.0" },
+  "dependencies": { "zod": "4.6.7" },
+  "scripts": { "build": "tsc -p tsconfig.json" }
+}

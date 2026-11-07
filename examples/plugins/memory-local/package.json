@@ -1,0 +1,17 @@
+{
+  "name": "@mosbot-ai/dshpa-example-memory",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "cordis.patch.yml", "README.md", "README-zh.md"],
+  "engines": { "node": ">=24.9.0", "dsh": "0.2.2-rc.1" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "dependencies": { "@mosbot-ai/dshpa-plugin-api": "workspace:*", "zod": "4.6.7" },
+  "peerDependencies": { "@deepseek-ai/cordis": "4.1.0" },
+  "scripts": { "build": "tsc -p tsconfig.json" }
+}

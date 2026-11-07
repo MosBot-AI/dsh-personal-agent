@@ -34,6 +34,7 @@ interface NativeProfileOptions {
   probe: string
   patchRows: string[]
   requiredDshVersion?: string
+  localPackages?: readonly { directory: string; bundle?: boolean }[]
 }
 
 export function createNativeProfile(options: NativeProfileOptions) {
@@ -54,11 +55,27 @@ export function createNativeProfile(options: NativeProfileOptions) {
     symlinkSync(join(bundleSource, 'node_modules'), join(installedBundle, 'node_modules'), 'junction')
     copyFileSync(options.probe, join(profile, 'contract-probe.mjs'))
 
+    const dependencies: Record<string, string> = { [bundleName]: manifest.version }
+    const bundles = [bundleName]
+    for (const { directory: source, bundle } of options.localPackages ?? []) {
+      const metadata = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name: string; version: string }
+      const installed = join(profile, 'node_modules', metadata.name)
+      mkdirSync(installed, { recursive: true })
+      copyFileSync(join(source, 'package.json'), join(installed, 'package.json'))
+      cpSync(join(source, 'lib'), join(installed, 'lib'), { recursive: true })
+      symlinkSync(join(source, 'node_modules'), join(installed, 'node_modules'), 'junction')
+      dependencies[metadata.name] = metadata.version
+      if (bundle) {
+        copyFileSync(join(source, 'cordis.patch.yml'), join(installed, 'cordis.patch.yml'))
+        bundles.push(metadata.name)
+      }
+    }
+
     writeFileSync(join(profile, 'package.json'), JSON.stringify({
       name: profileName,
       private: true,
-      dependencies: { [bundleName]: manifest.version },
-      dsh: { profile: { bundles: [bundleName] } },
+      dependencies,
+      dsh: { profile: { bundles } },
     }))
     writeFileSync(join(profile, 'cordis.patch.yml'), [
       '- insert:',

@@ -1,0 +1,3 @@
+- insert:
+    - id: dshpa-example-media-mock
+      name: '@mosbot-ai/dshpa-example-media-mock'
