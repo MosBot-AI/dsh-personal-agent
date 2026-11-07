@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-015, PA-018, PA-021, and PA-038).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, goal planning, local knowledge, read-only GitHub, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-016, PA-018, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -19,6 +19,7 @@ The [context evidence](docs/evidence/PA-011.md) covers native checkpoint capture
 The [personal memory evidence](docs/evidence/PA-012.md) covers owner controls, provider snapshots, and exclusions that survive stale provider data.
 The [goal planning evidence](docs/evidence/PA-014.md) covers revisions, Worker drafts, task prerequisites and on-demand review.
 The [local knowledge evidence](docs/evidence/PA-015.md) covers explicit roots, incremental indexing and source revocation.
+The [GitHub read connector evidence](docs/evidence/PA-016.md) covers live readback, scoped cursors, and MCP capability revalidation.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
@@ -212,6 +213,29 @@ In **Today**, open **Local knowledge** and select **Check sources** or enter key
 The in-memory index reuses unchanged entries and checks current files before returning results. Files and directories must be reachable from their configured root without symlinks. Hidden entries, hard links, binary content and files over the configured limits are skipped. The built-in type allowlist is `.md`, `.markdown`, `.txt`, `.rst`, `.csv` and `.json`. The default types are Markdown and plain text. Each root has a 4 MiB derived text budget. Limited roots may show partial results.
 
 Source text is displayed as evidence. The connector keeps it out of automatic Worker input, personal memory and native compaction summaries. The source root stays read-only, and the index is rebuilt on demand after restart.
+
+### Read one GitHub repository
+
+Add `githubRead` under `config.inbox` on the `dshpa` row. Enter the actual numeric GitHub user and repository IDs and their current names. If you add an exact dshpa `projectId`, the configured project must be active. Without a project binding, the read belongs to the local owner profile.
+
+```yaml
+githubRead:
+  binding:
+    account: { id: 12345, login: your-login }
+    repository: { id: 123456, owner: your-org, name: your-repository }
+  transport:
+    kind: github
+```
+
+Load `DSHPA_GITHUB_READ_TOKEN` into the trusted host environment from your secret store. Use a credential scoped to read the selected repository. **GitHub read-only** in **Today** verifies the connection and reads issue and comment pages. The connector uses fixed GET endpoints, checks the account and repository before each page, and honors provider backoff. The page cursor stays with its original operation and issue. Historical text remains read-only evidence. [GitHub REST pagination](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api) · [GitHub REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
+
+A reviewed MCP facade can replace the REST transport. Set `kind: mcp`, `url` to its literal loopback HTTP endpoint and `fingerprint` to its approved SHA-256 capability fingerprint. The facade uses stateless MCP 2025-06-18. Discover the fingerprint without invoking a tool from a built workspace:
+
+```sh
+node --input-type=module -e 'import { inspectMcpReadFingerprint } from "./packages/personal-agent/lib/connectors/mcp.js"; console.log(await inspectMcpReadFingerprint(process.argv[1]))' http://127.0.0.1:39017/mcp
+```
+
+The facade exposes `dshpa_github_inspect`, `dshpa_github_issues` and `dshpa_github_comments`. Inspect receives empty arguments and returns its independently bound `binding` in `structuredContent`. Page tools receive `binding`, `operation`, `page`, `limit`, and `issue` for comments. They return structured `binding`, `operation`, `page`, `items`, `hasNext`, and `issue` for comments. Rows carry numeric `id` and `number`, `kind` (`issue`, `pull`, or `comment`), `author`, optional numeric `authorId`, UTC millisecond `createdAt` and `updatedAt`, `text`, and `title` for issues and pulls. Use a facade whose own GitHub account and permissions are restricted to the selected repository. The connector sends no GitHub credential to MCP and checks the tool fingerprint before and after calls. [MCP transports](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) · [MCP tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
 
 ### Set compute and attention limits
 

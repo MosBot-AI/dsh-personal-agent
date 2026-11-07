@@ -107,6 +107,31 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('keeps GitHub pages on their exact read scope and renders issue text literally', async () => {
+    const binding = { account: { id: 7, login: 'Owner' }, repository: { id: 42, owner: 'Org', name: 'Repo' } }
+    const cursor = 'c2bcbb6d-3db1-45e1-b79a-7fc9c2e0db16'
+    const payload = '<img src=x onerror=alert(1)>'
+    const port = vi.fn<InboxPort>(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot({ githubRead: { projectId: project.id } }) }
+      if (request.type === 'connector_status') return { ok: true, kind: 'connector_status', binding, fingerprint: 'a'.repeat(64) }
+      if (request.type === 'connector_read' && !request.read.cursor) return { ok: true, kind: 'connector_page', binding,
+        fingerprint: 'a'.repeat(64), nextCursor: cursor, items: [{ id: 7, number: 12, kind: 'issue', author: 'reviewer',
+          title: 'Owner evidence', createdAt: verifiedAt, updatedAt: verifiedAt, text: payload, url: 'https://github.com/Org/Repo/issues/12' }] }
+      if (request.type === 'connector_read') return { ok: false, code: 'rate_limited', retryAt: verifiedAt }
+      throw new Error(`Unexpected ${request.type}`)
+    })
+    const { node } = await mount(port)
+    await click(button(node, 'Verify GitHub connection'))
+    expect(node.textContent).toContain('Org/Repo · Owner')
+    await click(button(node, 'Read repository issues'))
+    expect(node.querySelector('pre')?.textContent).toBe(payload)
+    expect(node.querySelector('img')).toBeNull()
+    await click(button(node, 'Next GitHub page'))
+    expect(port.mock.calls.map(([request]) => request)).toContainEqual({ type: 'connector_read', projectId: project.id,
+      read: { operation: 'issues', cursor } })
+    expect(node.textContent).toContain('The connector is rate limited until')
+  })
+
   it('shows missing roots and opens exact knowledge pages as plain text', async () => {
     const roots = [{ id: 'llmwiki', status: 'unavailable' as const, files: 0 }, { id: 'local', status: 'available' as const, files: 1 }]
     const source = { ref: { rootId: 'local', id: 'a'.repeat(64) }, path: '资料.md', revision: 'b'.repeat(64) }

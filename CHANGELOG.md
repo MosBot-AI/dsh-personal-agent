@@ -22,6 +22,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Add explicit personal memory controls, an independent SQLite provider with snapshot import and export, and core exclusions that protect corrected or forgotten facts from stale provider data.
 - Add versioned goal plans, owner-reviewed Worker drafts, durable task prerequisites and on-demand weekly review.
 - Add read-only local knowledge search over configured roots, with bounded incremental indexing and revision-checked source pages.
+- Add an owner-bound GitHub read connector with scoped pagination, rate-limit backoff and an optional capability-pinned MCP transport.
 - Reserve and reconcile model costs before dispatch, enforce compute limits and a separate heavy GPU queue, and expose scoped usage and attention decisions in the local inbox.
 - Reconcile native schedule wakes with versioned routine intent and show deduplicated local reminders and scoped task wakes in the inbox.
 - Operate a single resident profile with local readiness, diagnostic watchdogs, warm schedule recovery, online backup retention, and metadata audit export.

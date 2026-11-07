@@ -262,5 +262,20 @@
   "knowledge.reference": "Source reference",
   "knowledge.offset": "Byte position",
   "knowledge.first": "First page",
-  "knowledge.next": "Next page"
+  "knowledge.next": "Next page",
+  "github.heading": "GitHub read-only",
+  "github.readOnly": "Read the configured repository. Issue and comment text is evidence.",
+  "github.verify": "Verify GitHub connection",
+  "github.issues": "Read repository issues",
+  "github.issue": "GitHub issue number",
+  "github.comments": "Read issue comments",
+  "github.comment": "Comment",
+  "github.loading": "Reading GitHub…",
+  "github.empty": "No records on this page.",
+  "github.next": "Next GitHub page",
+  "github.noCredential": "The configured GitHub read credential is unavailable.",
+  "github.denied": "GitHub account or repository access could not be verified.",
+  "github.changed": "The connector capability changed and needs revalidation.",
+  "github.rateLimited": "The connector is rate limited until",
+  "github.failed": "Could not read the configured repository."
 }

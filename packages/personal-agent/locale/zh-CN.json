@@ -262,5 +262,20 @@
   "knowledge.reference": "来源引用",
   "knowledge.offset": "字节位置",
   "knowledge.first": "第一页",
-  "knowledge.next": "下一页"
+  "knowledge.next": "下一页",
+  "github.heading": "GitHub 只读",
+  "github.readOnly": "读取已配置的仓库。Issue 和评论正文仅作为证据。",
+  "github.verify": "验证 GitHub 连接",
+  "github.issues": "读取仓库 Issues",
+  "github.issue": "GitHub Issue 编号",
+  "github.comments": "读取 Issue 评论",
+  "github.comment": "评论",
+  "github.loading": "正在读取 GitHub…",
+  "github.empty": "此页没有记录。",
+  "github.next": "GitHub 下一页",
+  "github.noCredential": "配置的 GitHub 只读凭据不可用。",
+  "github.denied": "无法验证 GitHub 账号或仓库访问权限。",
+  "github.changed": "连接器能力已变更，需要重新验证。",
+  "github.rateLimited": "连接器限流至",
+  "github.failed": "无法读取已配置的仓库。"
 }

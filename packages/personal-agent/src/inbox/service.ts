@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { knowledgeRequestSchemas, type LocalKnowledge } from '../connectors/local-knowledge.js'
+import { connectorRequestSchemas, type ReadConnector } from '../connectors/registry.js'
 import { contextEvidencePointerSchema } from '../context/checkpoint.js'
 import type { LocalContext } from '../context/local-context.js'
 import { memoryRequestSchemas, type LocalMemory } from '../context/memory.js'
@@ -31,6 +32,7 @@ import {
   workerCursorSchema,
   type SessionId,
   type Project,
+  type ProjectId,
   type TaskId,
   type UtcInstant,
 } from '../domain/model.js'
@@ -89,6 +91,7 @@ const requestSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('set_attention_policy'), expectedVersion: versionSchema, policy: z.unknown() }),
   ...memoryRequestSchemas,
   ...knowledgeRequestSchemas,
+  ...connectorRequestSchemas,
   ...routineRequestSchemas,
   z.strictObject({ type: z.enum(['resident_status', 'resident_backup']) }),
   z.strictObject({ type: z.literal('resident_audit'), afterSequence: versionSchema.optional() }),
@@ -117,6 +120,8 @@ export interface InboxServiceOptions {
   readonly context?: LocalContext
   readonly memory?: LocalMemory
   readonly knowledge?: LocalKnowledge
+  readonly githubRead?: { readonly connector: ReadConnector; readonly scope: Pick<OwnerIdentity, 'ownerId' | 'profileId'>;
+    readonly projectId?: ProjectId }
   readonly now?: () => UtcInstant
 }
 
@@ -234,6 +239,7 @@ export function createInboxService(options: InboxServiceOptions) {
       workerConfigured: executor !== undefined && worker !== undefined,
       ...(options.memory ? { memoryConfigured: true } : {}),
       ...(options.knowledge ? { knowledgeConfigured: true } : {}),
+      ...(options.githubRead ? { githubRead: { projectId: options.githubRead.projectId } } : {}),
       ...(recoveryMode === 'normal' ? {} : { recoveryMode }),
       sessions,
       projects: store.listInboxProjects(owner).map(({ id, title, purpose, kind }) => ({ id, title, purpose, kind })),
@@ -345,6 +351,16 @@ export function createInboxService(options: InboxServiceOptions) {
           if (!options.knowledge) return failure('resource_unavailable')
           if (!store.canDispatch()) return failure('recovery_required')
           return await options.knowledge.handle(request, () => identity.resolveOwner(ownerToken) === owner && store.canDispatch(), signal)
+        }
+        case 'connector_status':
+        case 'connector_read': {
+          const connector = options.githubRead
+          if (!connector) return failure('resource_unavailable')
+          if (!store.canDispatch()) return failure('recovery_required')
+          const permitted = () => identity.resolveOwner(ownerToken) === owner && store.canDispatch()
+            && owner.ownerId === connector.scope.ownerId && owner.profileId === connector.scope.profileId
+            && (connector.projectId === undefined || store.getProject(owner, connector.projectId)?.status === 'active')
+          return await connector.connector.handle(request, permitted, signal)
         }
         case 'save_plan': {
           if ((request.projectId === undefined) !== (request.expectedRevision === undefined)) return failure('invalid_input')
