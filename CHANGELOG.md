@@ -9,6 +9,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 ### Added
 
 - Add the pinned TypeScript and pnpm workspace and a native bundle that loads through the named `dshpa` profile.
+- Add a native DSH agent and session adapter, with real-host contract checks and compatibility evidence for control, persistence, and scheduling.
 - Map 43 implementation tasks into GitHub Project and English Issues with native dependencies, reporting protocol, live readiness and acceptance-gated Actions reconciliation.
 
 - Specify configurable model routing with difficulty-based model/effort selection, quota-aware fallbacks, an optional LiteLLM adapter and implementation/evaluation tasks.
