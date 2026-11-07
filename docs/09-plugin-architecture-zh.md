@@ -2,7 +2,7 @@
 
 [文档索引](README-zh.md) · [English](09-plugin-architecture.md)
 
-用户明确要求图片/视频创作和记忆可以自行替换。因此它们从首个完整版本开始就是**独立的 DSH/Cordis 插件**，拥有公开、版本化的服务接口、配置和契约测试。仅在同一包里抽象一个类不算完成这个要求。本章是实施规范，插件代码尚未实现。
+架构将图片/视频创作和记忆定义为可独立替换的 **DSH/Cordis 插件**，拥有文档化、带版本的服务接口、配置和契约测试。PA-038 实现公开 API、注册表、策略消费者、测试工具包及免密钥本地示例。持久默认提供方与设置工作流由第 6 节中的任务负责。
 
 ## 1. 用户能够更改什么
 
@@ -32,17 +32,29 @@ examples/plugins/      # 明确标注的记忆示例和媒体模拟 provider
 
 依赖方向是核心消费者 → `plugin-api` ← provider；provider 不能导入核心私有目录，也不能直接修改核心任务/授权数据库。bundle 默认组合这些插件，但用户可以按支持的配置覆盖 provider。保持 Service Definition / Provider / Consumer 三种角色完整；不把每个辅助类都拆成 npm 包。
 
-`plugin-api` 从 alpha 起提供有文档的扩展面，首版仍标为 pre-stable：固定接口版本并拒绝不兼容插件；破坏性变更提供迁移说明。插件使用 effect 注册并返回 disposer，支持 validate、start、health、drain、stop；禁止卸载后继续产生新工作。
+预稳定的 `@mosbot-ai/dshpa-plugin-api` 包版本为 `0.1.0`，使用确切的能力 API 版本 `1`。`ProviderDefinition` 将清单、配置 Schema、校验和启动结合起来。`dshpaPlugins.register(definition, instance, config)` 返回 `ready` 与 `dispose`。宿主在启动前校验版本和配置，再接受对已就绪实例的明确选择。卸载先关闭准入，等待实际调用及迟到的启动结果，再排空并执行一次停止。健康与声明元数据和私有配置分开。
+
+### 加载免密钥示例
+
+在工作区根目录使用已安装 dshpa 的现有命名 DSH Profile。
+
+```sh
+pnpm build
+pnpm exec dsh plugin --profile your-profile add "link:$PWD/examples/plugins/memory-local"
+pnpm exec dsh plugin --profile your-profile add "link:$PWD/examples/plugins/media-mock"
+```
+
+记忆示例在内存中保存测试记录，支持快照往返。媒体示例声明 `mock: true`，提供测试夹具元数据。配置字段在各示例中分别说明。[本地记忆](../examples/plugins/memory-local/README-zh.md) · [模拟媒体](../examples/plugins/media-mock/README-zh.md)
 
 ## 3. Provider 契约
 
-**MediaProvider：** `capabilities`、`submit`、`inspect`、`cancel`、`collect`，返回持久可恢复的后端句柄和结构化错误。能力声明包含图/视频、编辑/生成、支持规格、取消粒度、资源需求、网络目的地与价格信息。图片和视频可以配置不同 provider，也可共享一个 ComfyUI provider。一次 MediaJob 固定 provider ID、插件版本和配置版本；切换默认项只影响新作业。不能把正在运行的作业送到新后端查询或取消。
+**MediaProvider：** `capabilities`、`submit`、`inspect`、`cancel`、`collect`，提供持久句柄和结构化错误。声明图/视频、编辑/生成、支持规格、取消粒度、资源、目的地与价格。图片和视频可配置不同 provider，也可共享一个 ComfyUI 实例。每个 MediaJob 固定配置实例、实现 ID、插件版本和配置修订。选择变更仅影响新作业。读回解析已记录的确切句柄，原绑定缺失时报告其提供方不可用。
 
-**CreationWorkflowProvider：** 声明输入/输出规格、依赖能力、工作流版本、步骤与恢复点；使用核心的媒体/工具执行接口提交工作。用户可替换分镜、合成与编辑流程，无须改路由器。工作流声明不能自授访问权限或自动安装 custom nodes。
+**CreationWorkflowProvider：** 声明输入/输出、依赖能力、工作流版本、步骤与恢复点。核心包装的媒体与工具回调继承确切任务范围，并在返回、取消或提供方排空时关闭。核心在交接前记录子媒体意图，在工作流取得句柄前记录已受理回执。核心策略检查每个子调用及声明的结果结构。
 
 **MemoryProvider：** `read`、`search`、`upsert`、`supersede`、`forget`、`exportSnapshot`、`importSnapshot`、`health`。记录格式保留稳定 ID、owner/scope、内容、来源、显式/推断、有效期、revision 和删除标记。只支持向量检索的组件实现可选 `MemoryRetrievalProvider`，不能伪装成完整记忆存储；检索返回稳定记录 ID、分数和来源，核心再次检查范围与遗忘排除项。
 
-记忆 provider 的规范化记录是个人事实的存储来源，核心任务、授权、交付和安全排除记录继续保存在核心数据库。不能把更换记忆引擎变成更换整个 agent 的权威状态。`forget` 采用核心先写排除记录，再通知后端删除的流程；后端离线或延迟删除也不能让已遗忘内容再次进入上下文。删除完成与删除待处理分别显示。
+记忆 provider 的记录保存个人事实，核心任务、授权、交付和排除记录保存在核心数据库。遗忘会先记录核心排除项，再请求提供方删除，并区分完成和待处理。检索候选通过范围一致的规范记录读回核实，在返回前再检查披露权限。快照导入保留已获确切核心排除确认的墓碑。处于排除范围内的活动记录无法召回或导入。
 
 ## 4. 用户配置和切换
 

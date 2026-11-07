@@ -2,7 +2,7 @@
 
 [Documentation index](README.md) · [简体中文](09-plugin-architecture-zh.md)
 
-Image/video creation and memory must be independently replaceable **DSH/Cordis plugins** from the first complete release, with documented versioned interfaces, configuration and contract tests. An abstract class inside one package is insufficient. These are implementation requirements; the plugins are not yet built.
+The architecture defines image/video creation and memory as independently replaceable **DSH/Cordis plugins**, with documented versioned interfaces, configuration and contract tests. PA-038 implements the public API, registry, policy consumers, testkit and keyless local examples. The durable default providers and settings workflows are assigned to the tasks in section 6.
 
 ## 1. User-customizable capabilities
 
@@ -32,17 +32,29 @@ examples/plugins/      # explicitly labeled memory and mock-media examples
 
 Dependency direction is core consumers → `plugin-api` ← providers. Providers cannot import private core paths or modify core task/grant tables. The bundle supplies defaults that users can override. Keep Definition/Provider/Consumer roles complete without creating a package for every helper.
 
-The documented extension API ships in alpha but remains pre-stable: pin interface versions, reject incompatibility and document breaking migrations. Registrations are effects with disposers. Lifecycle includes validate/start/health/drain/stop; unloaded plugins cannot admit new work.
+The pre-stable `@mosbot-ai/dshpa-plugin-api` package is version `0.1.0` and uses exact capability API version `1`. `ProviderDefinition` pairs the manifest and configuration schema with validation and startup. `dshpaPlugins.register(definition, instance, config)` returns `ready` and `dispose`. The host validates the version and configuration before start, then accepts an explicit selection of a ready instance. Disposing closes admission, waits for physical calls and any late startup result, drains and stops once. Health and declaration metadata stay separate from private configuration.
+
+### Load the keyless examples
+
+From the workspace root, use an existing named DSH profile with dshpa installed.
+
+```sh
+pnpm build
+pnpm exec dsh plugin --profile your-profile add "link:$PWD/examples/plugins/memory-local"
+pnpm exec dsh plugin --profile your-profile add "link:$PWD/examples/plugins/media-mock"
+```
+
+The memory example holds synthetic records in memory and supports snapshot round trips. The media example declares `mock: true` and supplies fixture metadata. The examples' configuration fields are documented separately. [Local memory](../examples/plugins/memory-local/README.md) · [Mock media](../examples/plugins/media-mock/README.md)
 
 ## 3. Provider contracts
 
-**MediaProvider:** `capabilities`, `submit`, `inspect`, `cancel`, `collect`, with durable handles and structured failures. Declare modalities, generation/editing, specifications, cancellation granularity, resources, destinations and pricing. Images and video may use different providers or one ComfyUI instance. Each MediaJob pins provider ID, plugin version and configuration revision. Default changes affect new jobs only; old jobs are never queried/cancelled against the new backend.
+**MediaProvider:** `capabilities`, `submit`, `inspect`, `cancel`, `collect`, with durable handles and structured failures. Declare modalities, generation/editing, specifications, cancellation granularity, resources, destinations and pricing. Images and video may use different providers or one ComfyUI instance. Each MediaJob pins the configured instance, implementation ID, plugin version and configuration revision. Selection changes apply to new jobs. Readback resolves the exact recorded handle and reports its original provider unavailable when that pin is missing.
 
-**CreationWorkflowProvider:** declares input/output, required capabilities, workflow version, steps and checkpoints. It submits work through core media/tool services. Users can replace storyboarding, assembly and editing without changing the Router. Workflows cannot grant authority or install custom nodes automatically.
+**CreationWorkflowProvider:** declares input/output, required capabilities, workflow version, steps and checkpoints. Its core-wrapped media and tool callbacks inherit the exact task scope and close on return, cancellation or provider drain. The core records child media intent before handoff and records the accepted receipt before the workflow receives the handle. Core policy checks each child call and the declared result shape.
 
 **MemoryProvider:** `read`, `search`, `upsert`, `supersede`, `forget`, `exportSnapshot`, `importSnapshot`, `health`. Canonical records preserve IDs, owner/scope, content, sources, explicit/inferred status, validity, revision and tombstones. A vector-only component implements optional `MemoryRetrievalProvider`, not a complete store. Retrieval returns record IDs, scores and sources; the core rechecks scope and forgetting exclusions.
 
-Memory-provider records store personal facts. Core tasks, grants, delivery and exclusion records remain in the core database. Replacing memory does not replace the entire agent's state. Forgetting first records a core exclusion, then requests provider deletion; offline or delayed deletion cannot allow forgotten content back into context. Show completed versus pending deletion separately.
+Memory-provider records store personal facts. Core tasks, grants, delivery and exclusion records remain in the core database. Forgetting records a core exclusion before requesting provider deletion, with separate completed and pending states. Retrieval candidates are resolved through canonical scoped reads, and disclosure is checked again before publishing hits. Snapshot import preserves tombstones that have an exact confirmed core exclusion. Active records under an exclusion stay out of recall and import.
 
 ## 4. Configuration and switching
 

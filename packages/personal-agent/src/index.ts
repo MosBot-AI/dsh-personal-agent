@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import {
   activateLocalInbox, localInboxConfigSchema, type LocalAttentionService, type LocalComputeService, type LocalRoutingService,
 } from './inbox/host.js'
+import { installCapabilityPlugins } from './runtime/capability-registry.js'
 import { createHostAdapter, type HostAdapter } from './runtime/host-adapter.js'
 import { installNativeScheduleSink } from './runtime/native-schedule.js'
 import { openWorkStore, type WorkStore } from './storage/store.js'
@@ -62,6 +63,7 @@ export function apply(ctx: Context, config?: { inbox?: unknown }): void {
     }
     ctx.provide('dshpaScheduleSink', sink)
     ctx.provide('dshpaScheduleResolverReady', true)
+    installCapabilityPlugins(ctx)
   } catch (error) {
     if (inbox?.resident) exitResident()
     throw error

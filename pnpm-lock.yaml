@@ -15,6 +15,12 @@ importers:
       '@deepseek-ai/dsh':
         specifier: 0.2.2-rc.1
         version: 0.2.2-rc.1(f6448efa96431dc8c5ef528714cf4c37)
+      '@mosbot-ai/dshpa-plugin-api':
+        specifier: workspace:*
+        version: link:packages/plugin-api
+      '@mosbot-ai/dshpa-plugin-testkit':
+        specifier: workspace:*
+        version: link:packages/plugin-testkit
       '@types/node':
         specifier: 24.9.0
         version: 24.9.0
@@ -42,6 +48,33 @@ importers:
       vitest:
         specifier: 4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.9.0)(jsdom@29.1.1)(vite@8.3.6(@types/node@24.9.0)(yaml@2.9.1))
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  examples/plugins/media-mock:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.1.0
+        version: 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
+      '@mosbot-ai/dshpa-plugin-api':
+        specifier: workspace:*
+        version: link:../../../packages/plugin-api
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  examples/plugins/memory-local:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.1.0
+        version: 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
+      '@mosbot-ai/dshpa-plugin-api':
+        specifier: workspace:*
+        version: link:../../../packages/plugin-api
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/personal-agent:
     dependencies:
@@ -69,6 +102,9 @@ importers:
       '@deepseek-ai/dsh-util-time':
         specifier: 0.2.2-rc.1
         version: 0.2.2-rc.1(@deepseek-ai/cordis@4.1.0)
+      '@mosbot-ai/dshpa-plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -94,6 +130,18 @@ importers:
       '@deepseek-ai/dsh-schedule':
         specifier: 0.2.2-rc.1
         version: 0.2.2-rc.1(085cedcaaf30a1ca370a8fe8930e2ac1)
+
+  packages/plugin-api:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  packages/plugin-testkit:
+    dependencies:
+      '@mosbot-ai/dshpa-plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
 
 packages:
 

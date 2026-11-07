@@ -1,0 +1,3 @@
+- insert:
+    - id: dshpa-example-memory
+      name: '@mosbot-ai/dshpa-example-memory'

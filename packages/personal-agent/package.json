@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-util-time": "0.2.2-rc.1",
+    "@mosbot-ai/dshpa-plugin-api": "workspace:*",
     "zod": "4.6.7"
   },
   "peerDependencies": {

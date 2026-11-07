@@ -8,8 +8,8 @@
     "pnpm": "11.28.5"
   },
   "scripts": {
-    "build": "pnpm --filter @mosbot-ai/dshpa build",
-    "typecheck": "tsc --noEmit",
+    "build": "pnpm -r --filter './packages/**' --filter './examples/plugins/**' run build",
+    "typecheck": "pnpm --filter '@mosbot-ai/dshpa-plugin-testkit...' run build && tsc --noEmit",
     "test": "vitest run --exclude \"tests/e2e/**\"",
     "test:contracts": "pnpm build && vitest run tests/contracts",
     "test:recovery": "vitest run tests/recovery",
@@ -20,6 +20,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh": "0.2.2-rc.1",
+    "@mosbot-ai/dshpa-plugin-api": "workspace:*",
+    "@mosbot-ai/dshpa-plugin-testkit": "workspace:*",
     "@types/node": "24.9.0",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
@@ -28,6 +30,7 @@
     "react-dom": "18.3.1",
     "rolldown": "1.2.16",
     "typescript": "6.0.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "zod": "4.6.7"
   }
 }
