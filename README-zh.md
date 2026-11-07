@@ -2,9 +2,9 @@
 
 [English](README.md)
 
-dshpa 是基于 DeepSeek Harness 规划的个人智能体，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
+dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用户自己的电脑，通过原生、可替换的插件协调持续工作，并交付可检查的成果。
 
-**当前状态：仅有架构和实施计划，应用尚未实现。**
+**当前状态为原生 Bundle 启动骨架（PA-001）。**
 
 [实施 Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent 协作流程](docs/11-github-project-workflow-zh.md)
 
@@ -17,6 +17,29 @@ dshpa 是基于 DeepSeek Harness 规划的个人智能体，目标是常驻用�
 - 可选的远程/移动端访问、连接设备和语音。
 
 请阅读[文档索引](docs/README-zh.md)、[系统架构](docs/01-product-and-architecture-zh.md)和[插件规范](docs/09-plugin-architecture-zh.md)。实施 agent 从[执行指南](docs/06-agent-execution-guide-zh.md)和 [43 项任务清单](docs/implementation-tasks.json)开始。
+
+## 构建工作区
+
+在仓库根目录使用 Node.js 24.9.0 或更高版本、pnpm 11.28.5 和 Python 3。工作区将 DeepSeek Harness 固定为 `0.2.2-rc.1`。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm check
+```
+
+## 启动原生 Profile
+
+构建 Bundle 后，在仓库根目录，用 `sdk` 模板在全新的 `DSH_HOME` 中初始化 `dshpa`，再安装本地 Bundle。初始化命令会替换同名 Profile，因此在这个检出目录中只执行一次。
+
+```sh
+export DSH_HOME="$PWD/.dshpa/harness"
+export DSH_PERMISSION_MODE=workspace-write
+pnpm exec dsh --profile dshpa --from-default-profile sdk --dump-config
+pnpm exec dsh plugin --profile dshpa add "link:$PWD/packages/personal-agent"
+pnpm exec dsh --profile dshpa
+```
+
+`sdk` Profile 通过标准输入和输出提供 JSON-RPC 服务。连接 JSON-RPC 客户端后即可通过这两个流发送请求。前台运行时按 Ctrl+C 停止实例。
 
 ## 校验计划
 

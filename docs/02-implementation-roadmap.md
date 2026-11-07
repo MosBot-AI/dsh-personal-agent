@@ -2,7 +2,7 @@
 
 [Documentation index](README.md) · [简体中文](02-implementation-roadmap-zh.md)
 
-Revision: 2026-11-07-r7. Everything remains planned. Stable PA-001–PA-043 cards replace the older M0.1-style outline. The [machine-readable manifest](implementation-tasks.json) owns detailed dependencies, paths, steps and commands. [06](06-agent-execution-guide.md) defines execution; [07](07-evaluation-and-release-gates.md) defines E00–E24.
+Revision: 2026-11-07-r7. GitHub Project tracks implementation progress. Stable PA-001–PA-043 cards replace the older M0.1-style outline. The [machine-readable manifest](implementation-tasks.json) owns detailed dependencies, paths, steps and commands. [06](06-agent-execution-guide.md) defines execution; [07](07-evaluation-and-release-gates.md) defines E00–E24.
 
 ## 1. Releases and scope
 

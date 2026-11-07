@@ -1,0 +1,21 @@
+packages:
+  - packages/*
+
+# The bootstrap profile does not use the upstream optional Office engines.
+ignoredOptionalDependencies:
+  - '@deepseek-ai/libreoffice-kit-*'
+
+overrides:
+  '@deepseek-ai/cordis': 4.1.0
+  '@deepseek-ai/schemastery': 3.19.0
+
+allowBuilds:
+  esbuild: true
+  koffi: true
+  node-pty: true
+  # The pinned DSH postinstall restores node-pty's helper executable bit.
+  '@deepseek-ai/dsh-subprocess-local@0.2.2-rc.1': true
+  '@google/genai': false
+  msgpackr-extract: false
+  node-addon-require-builtin: false
+  protobufjs: false

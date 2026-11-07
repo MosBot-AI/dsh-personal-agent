@@ -1,0 +1,25 @@
+{
+  "name": "dsh-personal-agent",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=24.9.0",
+    "pnpm": "11.28.5"
+  },
+  "scripts": {
+    "build": "pnpm --filter @mosbot-ai/dshpa build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude \"tests/e2e/**\"",
+    "test:contracts": "pnpm build && vitest run tests/contracts",
+    "test:recovery": "vitest run tests/recovery",
+    "test:e2e": "node scripts/run-live-e2e.mjs",
+    "check": "pnpm typecheck && pnpm build && pnpm test && python3 scripts/check_plan.py"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh": "0.2.2-rc.1",
+    "@types/node": "24.9.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}

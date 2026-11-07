@@ -2,7 +2,7 @@
 
 [文档索引](README-zh.md) · [English](02-implementation-roadmap.md)
 
-修订：2026-11-07-r7。所有工作仍为计划，尚未实现。本轮将旧版 M0.1 等概略条目替换为稳定的 PA-001–PA-043 任务卡；[机器可读清单](implementation-tasks.json)是依赖、文件范围、步骤及验证命令的唯一任务明细来源。[06](06-agent-execution-guide-zh.md)规定 agent 执行流程，[07](07-evaluation-and-release-gates-zh.md)定义 E00–E24 验收。
+修订：2026-11-07-r7。实施进度以 GitHub Project 为准。本轮将旧版 M0.1 等概略条目替换为稳定的 PA-001–PA-043 任务卡；[机器可读清单](implementation-tasks.json)是依赖、文件范围、步骤及验证命令的唯一任务明细来源。[06](06-agent-execution-guide-zh.md)规定 agent 执行流程，[07](07-evaluation-and-release-gates-zh.md)定义 E00–E24 验收。
 
 ## 1. 发布路径与范围
 

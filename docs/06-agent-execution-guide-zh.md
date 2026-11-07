@@ -2,7 +2,7 @@
 
 [文档索引](README-zh.md) · [English](06-agent-execution-guide.md)
 
-本计划已经给出可开始实现的工程基线。**本轮交付仅为方案，下面的 pnpm 命令和产品文件在 PA-001 等任务完成前尚不存在。** 不要直接启动任意模型/账户来“试一下”。当前真正可运行的是计划校验脚本。
+PA-001 提供原生 Bundle 工作区和初始验证命令。其余产品路径和测试套件随对应任务落地。
 
 实施前必须先读 [GitHub Project 协议](11-github-project-workflow-zh.md)；通过 `scripts/project_ready.py` 读取实时候选，并在 Project/Issue 认领和汇报。下文的 done/blocked 等执行状态以 GitHub 为准，manifest 仅保留计划快照。
 
@@ -39,7 +39,7 @@
 
 ## 3. 任务清单与机器契约
 
-`implementation-tasks.json` 每张卡包含：稳定 ID、阶段、发布级别、状态、依赖、目标路径、上游来源、实施步骤、场景 ID、测试文件、验证命令和证据路径。当前全部 planned。状态允许 planned → in_progress → review → done；blocked 必须记录具体条件及恢复条件，恢复后回到 in_progress。
+`implementation-tasks.json` 每张卡包含：稳定 ID、阶段、发布级别、状态、依赖、目标路径、上游来源、实施步骤、场景 ID、测试文件、验证命令和证据路径。清单保留初始计划状态。状态允许 planned → in_progress → review → done；blocked 必须记录具体条件及恢复条件，恢复后回到 in_progress。
 
 字段 `release` 表示首次交付级别，不代表互斥集合。选定桌面 alpha 时取 PA-035 的传递依赖和 PA-035；beta 取 PA-029 的闭包；v1 取 PA-030 的闭包。PA-036 数字较大，但它是 PA-035 的依赖，应先执行。
 
@@ -91,9 +91,9 @@
 
 ## 4. 工具链与验证命令
 
-PA-001 固定工具链后创建下列脚本：`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm test:contracts`、`pnpm test:recovery`、`pnpm test:e2e`、`pnpm check`。每个 task 的 Vitest 文件命令用于定向验证；不得用空测试文件使清单通过。live 测试必须显式启用并限定预算/测试账号，未启用时报告 skipped。
+工作区提供下列固定工具链脚本：`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm test:contracts`、`pnpm test:recovery`、`pnpm test:e2e`、`pnpm check`。每个 task 的 Vitest 文件命令用于定向验证；不得用空测试文件使清单通过。live 测试必须显式启用并限定预算/测试账号，未启用时报告 skipped。
 
-启动通过 `dsh --profile <已创建的配置档案>`；尖括号是占位符，不是可直接执行命令。M0 验证后把实际 profile 创建及加载命令写入安装文档。不要猜测新的 DSH CLI 子命令。
+具名 DSH Profile 的启动命令见[工作区 README](../README-zh.md#启动原生-profile)。
 
 当前可执行：
 
