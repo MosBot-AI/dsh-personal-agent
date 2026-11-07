@@ -27,11 +27,10 @@ function scheduleProfile() {
       '    - id: storage-domain',
       '      name: "@deepseek-ai/dsh-storage-domain"',
       '      config: { backend: json }',
-    ],
-    // The embedding must register the target resolver before overdue delivery starts.
-    trailingRows: [
       '    - id: schedule',
       '      name: "@deepseek-ai/dsh-schedule"',
+      // Overdue delivery can start during service initialization.
+      '      inject: [dshpaScheduleProbeReady]',
     ],
   })
 }

@@ -164,6 +164,7 @@ export function apply(ctx) {
     if (id !== sessionId) return next()
     return ctx.agents.get(id) ?? (await ctx.agents.resume({ resumeSessionId: id, agentOptions: route })).agent
   })
+  ctx.provide('dshpaScheduleProbeReady', true)
   ctx.inject(['schedule'], scheduleCtx => {
     scheduleCtx.effect(() => scheduleCtx.appReady.onReady(() => {
       const operation = phase === 'deliver' || phase === 'interrupt-flush'
