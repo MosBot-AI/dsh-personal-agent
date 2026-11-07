@@ -2,7 +2,7 @@
 
 [简体中文](README-zh.md)
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, and event routing are implemented (PA-001 through PA-010).** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, and compute and attention controls are implemented (PA-001 through PA-010 and PA-013).** Revision `2026-11-07-r7`, Asia/Shanghai. DSH Personal Agent is abbreviated **dshpa**. This revision combines the earlier plan, two pinned local DSH repositories, official Grok Bot/Muse/dots material and original analysis, incorporating resident operation, computer use, media, vaults, secure input and VNC.
 
 Build a **persistent personal work system on the owner's computer**: one primary agent coordinates goals and tasks, delegates execution and returns inspectable outcomes while conserving human attention. Cloud services are optional. DSH remains the native runtime and orchestration host.
 
@@ -30,6 +30,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Local Web inbox evidence](evidence/PA-008.md) | Native conversation, scoped work controls, and owner acceptance |
 | [Recovery evidence](evidence/PA-009.md) | Input journaling, exact readback, cancellation, and guarded restore |
 | [Routing evidence](evidence/PA-010.md) | Authenticated intake, subscriptions, bounded assessment, and foreground control |
+| [Budget and attention evidence](evidence/PA-013.md) | Model claims, resource limits, notification policy, and usage |
 
 Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. Task statuses are initial `planned` snapshots; GitHub Project owns live progress. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
 
