@@ -7,6 +7,9 @@ import { pathToFileURL } from 'node:url'
 import { openWorkStore } from './node_modules/@mosbot-ai/dshpa/lib/storage/store.js'
 import { createRecovery } from './node_modules/@mosbot-ai/dshpa/lib/runtime/recovery.js'
 import { createSessionReadback } from './node_modules/@mosbot-ai/dshpa/lib/runtime/recovery-session.js'
+import { createRoutingQueue } from './node_modules/@mosbot-ai/dshpa/lib/runtime/routing-queue.js'
+import { createInboxService } from './node_modules/@mosbot-ai/dshpa/lib/inbox/service.js'
+import { createIdentityBoundary } from './node_modules/@mosbot-ai/dshpa/lib/policy/identity.js'
 
 const cliRequire = createRequire(process.argv[1])
 const baseRequire = createRequire(cliRequire.resolve('@deepseek-ai/dsh-base/package.json'))
@@ -252,6 +255,24 @@ function cancel(fixture, seeded) {
 
 async function controls(ctx, fixture) {
   const { executor, script } = fixture
+  const assessmentStarted = Promise.withResolvers()
+  const assessmentOutput = Promise.withResolvers()
+  const assessments = createRoutingQueue({
+    deadlineMs: 10_000,
+    async assess(items, signal) {
+      assessmentStarted.resolve({ items, signal })
+      return assessmentOutput.promise
+    },
+  })
+  const profile = { id: scope.profileId, ownerId: scope.ownerId, policyVersion: actor.policyVersion,
+    verifiedAccounts: [], verifiedDevices: [{ deviceId: actor.deviceId, verifiedAt: seededAt }] }
+  const identity = createIdentityBoundary(id => id === profile.id ? profile : undefined)
+  const ownerToken = identity.bindOwner({ ...scope, clientId: actor.clientId, deviceId: actor.deviceId, sessionId: 'fixture-inbox-owner' })
+  assert.ok(ownerToken)
+  const inbox = createInboxService({
+    store: fixture.store, executor, identity, resolveSession: () => false,
+    worker: { presetId, cwd: fixture.rootDirectory, dataScope },
+  })
   const tasks = ['one', 'two', 'three', 'four', 'five'].map(label => seed(fixture, label))
   const initial = tasks.map(task => script(`start-${task.label}`))
   const [one, two, three, four, five] = tasks
@@ -302,12 +323,23 @@ async function controls(ctx, fixture) {
     assert.equal(await executor.waitForRelease(one.ref), false)
     assert.equal(executor.query({ ...one.ref, profileId: 'other-profile' }).state, undefined)
 
+    const candidateOne = assessments.enqueue('thread-one', 'candidate-one', 'fixture-scope')
+    const candidateTwo = assessments.enqueue('thread-two', 'candidate-two', 'fixture-scope')
+    assert.ok(candidateOne.ok && candidateTwo.ok)
+    const assessment = await assessmentStarted.promise
+    assert.deepEqual(assessment.items, ['candidate-one', 'candidate-two'])
+    const overview = await inbox.handle(ownerToken, { type: 'snapshot' })
+    assert.ok(overview.ok && overview.kind === 'snapshot')
+    assert.equal(overview.snapshot.tasks.filter(task => task.runtime === 'active').length, 4)
+
     const oldVersion = workers[0].task.version
-    const redirect = mustSucceed(executor.redirect(one.ref, oldVersion, redirected.input), 'redirect worker')
-    assert.equal(redirect.state.attempt.worker.inputCursor, redirected.input.cursor)
+    assert.deepEqual(await inbox.handle(ownerToken, { type: 'redirect', taskId: one.ref.taskId,
+      expectedVersion: oldVersion, ...redirected.input }), { ok: true, kind: 'updated', taskId: one.ref.taskId })
+    const redirectedState = current(fixture, one.ref).state
+    assert.equal(redirectedState.attempt.worker.inputCursor, redirected.input.cursor)
     assert.deepEqual(executor.redirect(one.ref, oldVersion, { cursor: 'stale-redirect', text: 'Reject this.' }),
       { ok: false, code: 'version_conflict' })
-    assert.deepEqual(executor.redirect(one.ref, redirect.state.task.version, redirected.input),
+    assert.deepEqual(executor.redirect(one.ref, redirectedState.task.version, redirected.input),
       { ok: false, code: 'duplicate_input' })
     assert.equal(initial[0].abortReason, undefined)
     initial[0].report('progress')
@@ -315,9 +347,17 @@ async function controls(ctx, fixture) {
     assert.match(JSON.stringify(redirected.requests[0].messages), /PA006_INPUT\[redirected-one\]/)
     assert.equal(current(fixture, one.ref).state.task.status, 'running')
 
-    const cancelled = cancel(fixture, two)
-    assert.equal(cancelled.state.task.status, 'cancelling')
-    assert.equal(cancelled.state.task.generation, workers[1].task.generation + 1)
+    assert.deepEqual(await inbox.handle(ownerToken, { type: 'cancel', taskId: two.ref.taskId,
+      commandId: 'cancel-via-inbox', expectedVersion: workers[1].task.version }), { ok: true, kind: 'updated', taskId: two.ref.taskId })
+    const cancelling = current(fixture, two.ref).state
+    assert.equal(cancelling.task.status, 'cancelling')
+    assert.equal(cancelling.task.generation, workers[1].task.generation + 1)
+    assert.equal(assessment.signal.aborted, false)
+    assert.deepEqual(assessments.snapshot(), { queued: 0, inFlight: 2, closed: false })
+    assessmentOutput.resolve(['first decision', 'second decision'])
+    assert.deepEqual(await Promise.all([candidateOne.completion, candidateTwo.completion]), [
+      { ok: true, value: 'first decision' }, { ok: true, value: 'second decision' },
+    ])
     await eventually(() => ownedJob.stopRequested, 'owned native job cancellation')
     assert.equal(ctx.jobs.get(ownedJob.id, workers[1].attempt.sessionId).status, 'stopping')
     assert.deepEqual(await executor.launch(five.ref, launchInput(five, initial[4])), { ok: false, code: 'capacity' })
@@ -408,6 +448,8 @@ async function controls(ctx, fixture) {
     assert.equal(ctx.agents.get(started.attempt.sessionId), undefined)
     assert.equal(openingScript.requests.length, 0)
   } finally {
+    assessments.close()
+    assessmentOutput.resolve([])
     for (const { job } of otherWorkerJobs) job.finish()
     ownedJob?.finish('killed')
     lateJob?.finish('killed')

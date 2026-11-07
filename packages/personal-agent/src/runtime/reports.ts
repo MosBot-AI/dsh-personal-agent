@@ -24,6 +24,7 @@ const workerReportSchema = z.discriminatedUnion('kind', [
     wait: waitReasonSchema.extend({ reason: z.literal('dependency') }),
   }),
   z.strictObject({ kind: z.literal('failed'), ...reportFields }),
+  z.strictObject({ kind: z.literal('handback'), ...reportFields }),
 ])
 
 export type WorkerReport = z.infer<typeof workerReportSchema>
@@ -52,6 +53,7 @@ export function workerReportInstructions(cursor: string): string {
     'For "ready", include "artifactIds" as an array of unique artifact references. Report readiness for verification.',
     'For "waiting", include "wait" with "reason" (input, approval, event, environment, or resource), "referenceId", and "resumeCondition".',
     'For "blocked", include the same "wait" fields with "reason": "dependency" and the exact dependency reference.',
+    'Use "handback" only when the latest subscribed source observation falls outside the current mandate. Explain briefly in "summary" and do not add identifiers or request authority.',
     'A wait may include "deadline" as a UTC instant with milliseconds. Include only the fields for the chosen kind.',
   ].join('\n')
 }

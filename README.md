@@ -81,6 +81,12 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 
 Open or create a native conversation, then select **Today** in the DSH sidebar. Create a project and attach tasks to the conversation. Start work explicitly, review the candidate artifact after the Worker releases, and accept the result in the inbox. Use the conversation link to return to the native transcript and composer.
 
+### Route events from trusted adapters
+
+The local Web host publishes the `dshpaRouting` service for in-process adapters. The owner can declare previously verified accounts in `inbox.sourceAccounts` with `sourceInstanceId`, `accountId` and the UTC `verifiedAt` instant. An adapter authenticates the account independently of message content before binding its source token. It submits the original occurrence time and a stable external event ID and revision. The owner manages versioned `work` or `context` subscriptions through the authenticated inbox `set_subscription` operation. Work delivery uses the exact source, account, thread, project and task. A `routed` receipt includes the current native input journal status. Context subscriptions record the association without feeding or waking a Worker.
+
+Semantic assessment is optional. For a deployment that incurs no model charges, add an `inbox.routing` block with `provider`, `model`, permitted `dataScope` labels and `unmetered: true`. The assessor evaluates bounded batches and returns proposals for owner review. Exact work subscriptions can route without this block when `inbox.worker.unmetered` is `true` or a trusted policy permits the input. An event-triggered Worker wake requires a trusted wake policy for the current grant, budget, and wait condition. Connector enrollment and metered background dispatch are separate implementation tasks.
+
 ## Restore a standalone work backup
 
 Use a private standalone SQLite backup and an absolute destination path that does not exist. From the repository root after building the workspace, set `BACKUP_FILE` and `RESTORE_DIR` to those paths and run the restore command.

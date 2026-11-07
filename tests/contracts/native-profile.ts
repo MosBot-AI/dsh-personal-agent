@@ -50,6 +50,7 @@ export function createNativeProfile(options: NativeProfileOptions) {
     writeFileSync(join(installedBundle, 'package.json'), JSON.stringify(manifest))
     copyFileSync(join(bundleSource, 'cordis.patch.yml'), join(installedBundle, 'cordis.patch.yml'))
     cpSync(join(bundleSource, 'lib'), join(installedBundle, 'lib'), { recursive: true })
+    cpSync(join(bundleSource, 'prompts'), join(installedBundle, 'prompts'), { recursive: true })
     symlinkSync(join(bundleSource, 'node_modules'), join(installedBundle, 'node_modules'), 'junction')
     copyFileSync(options.probe, join(profile, 'contract-probe.mjs'))
 

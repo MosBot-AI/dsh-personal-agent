@@ -7,14 +7,18 @@ import { SessionId as nativeSessionId, type SessionHeader } from '@deepseek-ai/d
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { z } from 'zod'
 import {
-  deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema, utcInstantSchema,
-  type Profile, type SessionId,
+  accountIdSchema, deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema,
+  sourceInstanceIdSchema, utcInstantSchema,
+  type Profile, type SessionId, type SourceEvent,
 } from '../domain/model.js'
-import { createIdentityBoundary } from '../policy/identity.js'
+import type { WorkState } from '../domain/transitions.js'
+import { createIdentityBoundary, type SourceToken } from '../policy/identity.js'
 import type { ActionRoute } from '../policy/dispatch.js'
 import type { HostAdapter } from '../runtime/host-adapter.js'
 import { createRecovery } from '../runtime/recovery.js'
 import { createSessionReadback } from '../runtime/recovery-session.js'
+import { createRouter, type EventRouter } from '../runtime/router.js'
+import { createDshRoutingAssessor } from '../runtime/routing-model.js'
 import { StorageError } from '../storage/schema.js'
 import { openWorkStore } from '../storage/store.js'
 import { INBOX_RPC_ENDPOINT, type InboxSession } from './protocol.js'
@@ -31,11 +35,19 @@ const MAX_INBOX_REQUEST_BYTES = 512 * 1024
 export const localInboxConfigSchema = z.strictObject({
   storageDirectory: pathSchema,
   workRoot: pathSchema,
+  sourceAccounts: profileSchema.shape.verifiedAccounts.max(64).optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
     model: nonEmptyTextSchema.max(256),
     dataScope: z.array(nonEmptyTextSchema.max(256)).max(64).default([]),
     concurrency: z.int().min(1).max(32).optional(),
+    unmetered: z.literal(true).optional(),
+  }).optional(),
+  routing: z.strictObject({
+    provider: nonEmptyTextSchema.max(256),
+    model: nonEmptyTextSchema.max(256),
+    dataScope: z.array(nonEmptyTextSchema.max(256)).min(1).max(64),
+    unmetered: z.literal(true),
   }).optional(),
 })
 
@@ -45,6 +57,7 @@ const localIdentitySchema = z.strictObject({
   deviceId: deviceIdSchema,
   verifiedAt: utcInstantSchema,
 })
+const sourceBindingSchema = z.strictObject({ sourceInstanceId: sourceInstanceIdSchema, accountId: accountIdSchema })
 
 function readLocalIdentity(directory: string) {
   const path = join(directory, 'local-inbox-identity.json')
@@ -147,6 +160,8 @@ async function readInboxEnvelope(request: Request) {
 export interface LocalInboxOptions {
   readonly verifiedAccounts?: Profile['verifiedAccounts']
   readonly actionRoutes?: readonly ActionRoute[]
+  readonly authorizeRoutedInput?: (state: WorkState, event: SourceEvent) => boolean
+  readonly authorizeEventWake?: (state: WorkState, event: SourceEvent) => boolean
 }
 
 /** Mount the inbox on the existing local Web carrier. The caller owns the Host plugin scope. */
@@ -164,12 +179,13 @@ export function activateLocalInbox(
     throw new Error('The inbox requires the local-only DSH Web connection')
   }
   const store = openWorkStore(config.storageDirectory)
+  let router: EventRouter | undefined
   try {
     const local = readLocalIdentity(config.storageDirectory)
     const profile = profileSchema.parse({
       id: local.profileId,
       ownerId: local.ownerId,
-      verifiedAccounts: options.verifiedAccounts ?? [],
+      verifiedAccounts: options.verifiedAccounts ?? config.sourceAccounts ?? [],
       verifiedDevices: [{ deviceId: local.deviceId, verifiedAt: local.verifiedAt }],
       policyVersion: 'local-web-1',
     })
@@ -185,6 +201,9 @@ export function activateLocalInbox(
     const owner = identity.resolveOwner(token)
     if (!token || !owner) throw new Error('The local inbox owner binding is unavailable')
 
+    const llm = config.routing && ctx.get('llm')
+    if (config.routing && !llm) throw new Error('The configured routing assessor requires the DSH LLM service')
+    const assess = config.routing && llm ? createDshRoutingAssessor(llm, config.routing) : undefined
     const worker = config.worker
     if (worker) mkdirSync(config.workRoot, { recursive: true, mode: 0o700 })
     const executor = worker ? host.createWorkerExecutor({
@@ -198,12 +217,27 @@ export function activateLocalInbox(
       }],
       concurrency: worker.concurrency,
       captureResultSummary: true,
+      onHandback: (ref, eventId) => router?.handback(ref, eventId),
     }) : undefined
+    const eventRouter = createRouter({ store, identity, executor, assess, assessmentDataScope: config.routing?.dataScope,
+      authorizeDelivery: options.authorizeRoutedInput ?? (() => worker?.unmetered === true),
+      authorizeWake: options.authorizeEventWake })
+    router = eventRouter
+    const routing = Object.freeze({
+      bindSource(authenticatedMetadata: unknown) {
+        const source = sourceBindingSchema.safeParse(authenticatedMetadata)
+        return source.success ? identity.bindSource({ ...source.data, ownerId: local.ownerId, profileId: local.profileId }) : undefined
+      },
+      releaseSource(token: SourceToken) { identity.release(token) },
+      receive: eventRouter.receive,
+      status: eventRouter.status,
+      snapshot: eventRouter.snapshot,
+    })
     const actionGate = store.createActionGate({ identity, routes: options.actionRoutes ?? [] })
     const recovery = createRecovery(store, { readSession: createSessionReadback(ctx) })
     const startupRecovery = recovery.reconcileStartup().catch(() => undefined)
     const service = createInboxService({
-      store, executor, identity, actionGate, ...nativeSessions(ctx),
+      store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
     })
     // The pinned Connection carrier authorizes exact Fetch routes for owner
@@ -238,11 +272,12 @@ export function activateLocalInbox(
     })
 
     return Object.freeze({
-      store, executor, identity, actionGate, ownerToken, owner, recovery,
+      store, executor, identity, actionGate, ownerToken, owner, recovery, routing,
       async dispose() {
         identity.release(token)
         const detached = remove()
         try {
+          eventRouter.close()
           if (executor && !await executor.close()) throw new Error('Inbox Worker cleanup remains unverified')
         } finally {
           await detached
@@ -252,7 +287,13 @@ export function activateLocalInbox(
       },
     })
   } catch (error) {
-    store.close()
+    try {
+      router?.close()
+    } finally {
+      store.close()
+    }
     throw error
   }
 }
+
+export type LocalRoutingService = ReturnType<typeof activateLocalInbox>['routing']

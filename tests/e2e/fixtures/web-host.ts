@@ -54,7 +54,7 @@ export async function openWebHost(probe: string, options: { patch?: readonly str
   for (const file of ['package.json', 'cordis.patch.yml']) {
     copyFileSync(join(bundleSource, file), join(installed, file))
   }
-  for (const directory of ['lib', 'locale']) {
+  for (const directory of ['lib', 'locale', 'prompts']) {
     cpSync(join(bundleSource, directory), join(installed, directory), { recursive: true })
   }
   symlinkSync(join(bundleSource, 'node_modules'), join(installed, 'node_modules'), 'junction')

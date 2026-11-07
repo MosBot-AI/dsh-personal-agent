@@ -11,7 +11,7 @@ import type { WorkRef } from '../storage/store.js'
 import { workerReportInstructions } from './reports.js'
 
 const MAX_CONTENT_BYTES = 80 * 1024
-const inputStatusSchema = z.enum(['intent', 'flushed', 'pending', 'admitted', 'cancelled', 'not_delivered', 'unknown'])
+export const inputStatusSchema = z.enum(['intent', 'flushed', 'pending', 'admitted', 'cancelled', 'not_delivered', 'unknown'])
 const intentSchema = z.strictObject({
   taskId: taskIdSchema,
   attemptId: attemptIdSchema,

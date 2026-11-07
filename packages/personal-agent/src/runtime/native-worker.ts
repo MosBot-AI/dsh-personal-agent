@@ -19,6 +19,8 @@ export interface NativeWorkerInput {
   readonly digest: string
   /** Synchronous exact journal acknowledgement after the native flush. */
   readonly acknowledge: () => boolean
+  /** Trusted routed-input disclosure check, repeated at native step admission. */
+  readonly authorize?: () => boolean
 }
 
 export interface NativeWorker {
@@ -81,6 +83,16 @@ interface MintedInput {
   readonly cursor: string
   readonly digest: string
   readonly durable: Promise<boolean>
+  readonly authorize?: () => boolean
+}
+
+function authorized(check: (() => boolean) | undefined): boolean {
+  if (!check) return true
+  try {
+    return check() === true
+  } catch {
+    return false
+  }
 }
 
 async function acknowledged(acks: readonly Promise<boolean>[], signal: AbortSignal): Promise<boolean> {
@@ -289,23 +301,26 @@ export function createNativeWorkerRuntime(
         checkLaunch()
         agentCtx.on('agent/pre-step', async ({ messages, modelSelection, signal }, next) => {
           let owned = true
-          const acks: Promise<boolean>[] = []
+          const inputs: MintedInput[] = []
           for (const { id, source } of messages) {
             const message = minted.get(id)
             minted.delete(id)
             if (!message || source.kind !== 'dshpa-work-input' || source.cursor !== message.cursor || source.digest !== message.digest) {
               owned = false
             } else {
-              acks.push(message.durable)
+              inputs.push(message)
             }
           }
-          if (!owned || (acks.length === 0 && !admittedInput) || !active() || !matchesRoute(input, modelSelection)) {
+          const mayDisclose = () => inputs.every(message => authorized(message.authorize))
+          if (!owned || (inputs.length === 0 && !admittedInput) || !active()
+            || !matchesRoute(input, modelSelection) || !mayDisclose()) {
             return { kind: 'reject' }
           }
-          if (!await acknowledged(acks, signal) || signal.aborted || !active()) return { kind: 'reject' }
+          if (!await acknowledged(inputs.map(message => message.durable), signal)
+            || signal.aborted || !active() || !mayDisclose()) return { kind: 'reject' }
           const decision = await next()
-          if (!active() || signal.aborted) return { kind: 'reject' }
-          if (decision.kind === 'enter' && acks.length > 0) admittedInput = true
+          if (!active() || signal.aborted || !mayDisclose()) return { kind: 'reject' }
+          if (decision.kind === 'enter' && inputs.length > 0) admittedInput = true
           return decision
         }, { prepend: true })
         agentCtx.on('session/event', (session, event) => {
@@ -320,8 +335,11 @@ export function createNativeWorkerRuntime(
         : await workers.create({ sessionId: id, meta: { cwd: input.cwd }, agentOptions, signal: input.signal })
       const { agent } = handle
 
-      async function deliver(method: 'followup' | 'steer', { cursor, text, messageId, digest, acknowledge }: NativeWorkerInput) {
+      async function deliver(method: 'followup' | 'steer', {
+        cursor, text, messageId, digest, acknowledge, authorize,
+      }: NativeWorkerInput) {
         assertActive()
+        if (!authorized(authorize)) throw new Error('The private worker input authority changed')
         if (sends >= WORKER_INPUT_LIMIT) throw new Error('The private worker input limit was reached')
         if (sent.has(messageId) || workerMessageDigest(text) !== digest) {
           throw new Error('The private worker input identity or digest does not match')
@@ -335,7 +353,7 @@ export function createNativeWorkerRuntime(
         const durable = Promise.withResolvers<boolean>()
         sends++
         sent.add(message.id)
-        minted.set(message.id, { cursor, digest, durable: durable.promise })
+        minted.set(message.id, { cursor, digest, durable: durable.promise, authorize })
         delivery = { cursor, messageId: message.id, digest, ended: false }
         try {
           agent[method](message)
@@ -343,7 +361,7 @@ export function createNativeWorkerRuntime(
           // barrier and the exact SQLite acknowledgement before inference.
           await flushSession(agent.session)
           assertActive()
-          if (acknowledge() !== true) throw new Error('The private worker input acknowledgement was rejected')
+          if (!authorized(authorize) || acknowledge() !== true) throw new Error('The private worker input acknowledgement was rejected')
           assertActive()
           durable.resolve(true)
         } catch (error) {
