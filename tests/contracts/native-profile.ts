@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -50,6 +50,7 @@ export function createNativeProfile(options: NativeProfileOptions) {
     writeFileSync(join(installedBundle, 'package.json'), JSON.stringify(manifest))
     copyFileSync(join(bundleSource, 'cordis.patch.yml'), join(installedBundle, 'cordis.patch.yml'))
     cpSync(join(bundleSource, 'lib'), join(installedBundle, 'lib'), { recursive: true })
+    symlinkSync(join(bundleSource, 'node_modules'), join(installedBundle, 'node_modules'), 'junction')
     copyFileSync(options.probe, join(profile, 'contract-probe.mjs'))
 
     writeFileSync(join(profile, 'package.json'), JSON.stringify({

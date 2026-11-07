@@ -14,18 +14,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
+import { conversationSchema, deliverySchema, effectSchema, projectSchema } from '../../packages/personal-agent/src/domain/model.js'
+import { workStateSchema } from '../../packages/personal-agent/src/domain/transitions.js'
 import {
   DATABASE_FILENAME,
   openStorageDatabase,
   QUARANTINE_FILENAME,
   WRITER_LOCK_FILENAME,
 } from '../../packages/personal-agent/src/storage/database.js'
+import { migration001 } from '../../packages/personal-agent/src/storage/migrations/001.js'
 import {
   APPLICATION_ID,
   migrateSchema,
   SCHEMA_VERSION,
   sqliteCode,
   transaction,
+  V1_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -38,6 +42,70 @@ function fixtureDirectory(): string {
 
 function createPrivateFixture(path: string, content = ''): void {
   writeFileSync(path, content, { flag: 'wx', mode: 0o600 })
+}
+
+function createVersion1Fixture(wal = false) {
+  const directory = fixtureDirectory()
+  const path = join(directory, DATABASE_FILENAME)
+  createPrivateFixture(path)
+  const db = new DatabaseSync(path, { enableForeignKeyConstraints: true })
+  const at = '2026-11-07T09:00:00.000Z'
+  const scope = { ownerId: 'owner-v1', profileId: 'profile-v1' }
+  const destination = { sourceInstanceId: 'source-v1', externalDestinationId: 'thread-v1' }
+  const project = projectSchema.parse({
+    id: 'project-v1', ...scope, kind: 'project', title: 'Existing project', purpose: 'Test upgrades',
+    resourceRefs: [], status: 'active', successCriteria: ['Preserve records'], planRevision: 1, milestones: [],
+  })
+  const conversation = conversationSchema.parse({
+    id: 'conversation-v1', ...scope, sessionIds: [], originalDestination: destination,
+  })
+  const work = workStateSchema.parse({
+    task: {
+      id: 'task-v1', ...scope, projectId: project.id, conversationId: conversation.id,
+      requestedOutcome: 'Preserve existing work.', constraints: [],
+      acceptance: { criteria: ['Retain work'], requiresArtifact: false, requiresReceipt: false },
+      provenance: { sourceEventIds: [] }, version: 1, generation: 1, status: 'queued',
+      attemptId: 'attempt-v1', createdAt: at, updatedAt: at,
+    },
+    attempt: {
+      id: 'attempt-v1', taskId: 'task-v1', generation: 1, status: 'queued', artifactIds: [],
+      mandate: { id: 'mandate-v1', ...scope, policyVersion: 'policy-v1' },
+    },
+  })
+  const effect = effectSchema.parse({
+    operationId: 'effect-v1', taskId: work.task.id, attemptId: work.attempt.id, generation: 1,
+    status: 'prepared', intent: 'Retain existing intent.', payloadDigest: '1'.repeat(64),
+  })
+  const delivery = deliverySchema.parse({
+    id: 'delivery-v1', ...scope, destination, payload: { text: 'Retain existing notice.', artifactIds: [] },
+    dedupeKey: 'notice-v1', retries: 0, status: 'pending',
+  })
+
+  try {
+    transaction(db, () => {
+      db.exec(migration001)
+      db.exec(`PRAGMA application_id = ${APPLICATION_ID}; PRAGMA user_version = 1`)
+    })
+    if (wal) db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA wal_autocheckpoint = 0')
+    transaction(db, () => {
+      db.prepare('INSERT INTO projects (id, record) VALUES (?, ?)').run(project.id, JSON.stringify(project))
+      db.prepare('INSERT INTO conversations (id, record) VALUES (?, ?)').run(conversation.id, JSON.stringify(conversation))
+      db.prepare('INSERT INTO tasks (id, record) VALUES (?, ?)').run(work.task.id, JSON.stringify(work.task))
+      db.prepare('INSERT INTO attempts (id, record) VALUES (?, ?)').run(work.attempt.id, JSON.stringify(work.attempt))
+      db.prepare('INSERT INTO effects (operation_id, record) VALUES (?, ?)').run(effect.operationId, JSON.stringify(effect))
+      db.prepare('INSERT INTO outbox (id, task_id, attempt_id, generation, record) VALUES (?, ?, ?, ?, ?)')
+        .run(delivery.id, work.task.id, work.attempt.id, work.attempt.generation, JSON.stringify(delivery))
+    })
+    return { directory, path, db }
+  } catch (error) {
+    db.close()
+    throw error
+  }
+}
+
+function readVersion1Records(db: DatabaseSync) {
+  return ['projects', 'conversations', 'tasks', 'attempts', 'effects', 'outbox']
+    .map(table => db.prepare(`SELECT record FROM ${table}`).all())
 }
 
 afterEach(() => {
@@ -289,6 +357,91 @@ describe('SQLite failure recovery', () => {
       expect(db.prepare('SELECT id FROM capacity_fixture').all()).toEqual([])
     } finally {
       storage.close()
+    }
+  })
+})
+
+describe('SQLite v1 to v2 upgrade', () => {
+  it('preserves original work and backs up a consistent v1 view including committed WAL rows', () => {
+    const v1 = createVersion1Fixture(true)
+    try {
+      const originals = readVersion1Records(v1.db)
+      expect(statSync(v1.path + '-wal').size).toBeGreaterThan(0)
+      const storage = openStorageDatabase(v1.directory)
+      try {
+        expect(storage.db.prepare('PRAGMA user_version').get()?.user_version).toBe(2)
+        expect(readVersion1Records(storage.db)).toEqual(originals)
+        expect(storage.db.prepare('SELECT COUNT(*) AS count FROM action_dispatches').get()?.count).toBe(0)
+        expect(storage.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      } finally {
+        storage.close()
+      }
+
+      const backupPath = v1.path + V1_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(backupPath).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(backupPath, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(1)
+        expect(backup.prepare('PRAGMA application_id').get()?.application_id).toBe(APPLICATION_ID)
+        expect(backup.prepare('PRAGMA quick_check').get()?.quick_check).toBe('ok')
+        expect(readVersion1Records(backup)).toEqual(originals)
+        expect(backup.prepare("SELECT name FROM sqlite_schema WHERE name = 'action_proposals'").get()).toBeUndefined()
+      } finally {
+        backup.close()
+      }
+      const saved = readFileSync(backupPath)
+      const reopened = openStorageDatabase(v1.directory)
+      reopened.close()
+      expect(readFileSync(backupPath)).toEqual(saved)
+    } finally {
+      v1.db.close()
+    }
+  })
+
+  it('retains v1 and its backup when SQLite runs out of pages during the additive upgrade', () => {
+    const v1 = createVersion1Fixture()
+    try {
+      const originals = readVersion1Records(v1.db)
+      const pages = v1.db.prepare('PRAGMA page_count').get()?.page_count
+      if (typeof pages !== 'number') throw new Error('Expected the v1 database page count')
+      v1.db.exec(`PRAGMA max_page_count = ${pages + 2}`)
+      expect(() => migrateSchema(v1.db)).toThrow(expect.objectContaining({ code: 'full' }))
+      expect(v1.db.isTransaction).toBe(false)
+      expect(v1.db.prepare('PRAGMA user_version').get()?.user_version).toBe(1)
+      expect(v1.db.prepare("SELECT name FROM sqlite_schema WHERE name LIKE 'action_%'").all()).toEqual([])
+      expect(readVersion1Records(v1.db)).toEqual(originals)
+
+      const backup = new DatabaseSync(v1.path + V1_BACKUP_SUFFIX, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(1)
+        expect(readVersion1Records(backup)).toEqual(originals)
+      } finally {
+        backup.close()
+      }
+      v1.db.exec(`PRAGMA max_page_count = ${pages + 128}`)
+      migrateSchema(v1.db)
+      expect(v1.db.prepare('PRAGMA user_version').get()?.user_version).toBe(2)
+      expect(readVersion1Records(v1.db)).toEqual(originals)
+    } finally {
+      v1.db.close()
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')('refuses a symlink at the reserved backup path before migrating', () => {
+    const v1 = createVersion1Fixture()
+    v1.db.close()
+    const sentinel = join(fixtureDirectory(), 'sentinel')
+    createPrivateFixture(sentinel, 'Keep original target')
+    symlinkSync(sentinel, v1.path + V1_BACKUP_SUFFIX)
+
+    expect(() => openStorageDatabase(v1.directory)).toThrow(expect.objectContaining({ code: 'unsafe_path' }))
+    expect(readFileSync(sentinel, 'utf8')).toBe('Keep original target')
+    expect(existsSync(join(v1.directory, QUARANTINE_FILENAME))).toBe(false)
+    const source = new DatabaseSync(v1.path, { readOnly: true })
+    try {
+      expect(source.prepare('PRAGMA user_version').get()?.user_version).toBe(1)
+    } finally {
+      source.close()
     }
   })
 })

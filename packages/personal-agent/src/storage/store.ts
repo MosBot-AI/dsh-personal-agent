@@ -31,6 +31,7 @@ import {
   type WorkState,
   type WorkTransitionResult,
 } from '../domain/transitions.js'
+import { createActionGate, type ActionGateOptions } from '../policy/dispatch.js'
 import { openStorageDatabase, type StorageDatabase } from './database.js'
 import { sqliteCode, StorageError, transaction } from './schema.js'
 
@@ -160,6 +161,10 @@ class WorkStore {
   close(): void {
     this.closed = true
     this.storage.close()
+  }
+
+  createActionGate(options: ActionGateOptions) {
+    return createActionGate(operation => this.access(operation), options)
   }
 
   insertProject(input: unknown): void {

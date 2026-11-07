@@ -1,8 +1,21 @@
+import {
+  closeSync,
+  fchmodSync,
+  fsyncSync,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  renameSync,
+  rmSync,
+} from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { migration001 } from './migrations/001.js'
+import { migration002 } from './migrations/002.js'
 
 export const APPLICATION_ID = 0x44534850 // DSHP
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
+export const V1_BACKUP_SUFFIX = '.v1.bak'
 
 export type StorageErrorCode =
   | 'busy'
@@ -55,32 +68,98 @@ export function transaction<T>(db: DatabaseSync, operation: () => T): T {
   }
 }
 
-const requiredTables = [
+const schema1Tables = [
   'projects', 'conversations', 'tasks', 'attempts', 'source_events', 'effects', 'outbox', 'commands', 'work_events',
 ]
+const schema2Tables = [
+  ...schema1Tables, 'action_proposals', 'action_approvals', 'action_grants', 'action_dispatches',
+]
 
-/** Recognize an owned database or install the first schema into an empty database. */
+function requireTables(db: DatabaseSync, required: readonly string[]): void {
+  const tables = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name))
+  if (!required.every(table => tables.has(table))) {
+    throw new StorageError('corrupt', 'The storage schema is missing required tables')
+  }
+}
+
+function syncPath(path: string, flags: 'r' | 'r+'): void {
+  const descriptor = openSync(path, flags)
+  try {
+    fsyncSync(descriptor)
+  } finally {
+    closeSync(descriptor)
+  }
+}
+
+/** Snapshot the live connection before DDL, including committed WAL contents. */
+function backupVersion1(db: DatabaseSync): void {
+  const path = db.location()
+  if (!path) throw new StorageError('migration_failed', 'A version 1 upgrade requires an on-disk backup')
+  const directory = dirname(path)
+  const backup = path + V1_BACKUP_SUFFIX
+  const existing = lstatSync(backup, { throwIfNoEntry: false })
+  const uid = process.getuid?.()
+  if (existing && (!existing.isFile() || existing.nlink !== 1
+    || (uid !== undefined && (existing.uid !== uid || (existing.mode & 0o777) !== 0o600)))) {
+    throw new StorageError('unsafe_path', 'Migration backup path must be an owner-private file')
+  }
+
+  const staging = mkdtempSync(join(directory, '.migration-v2-'))
+  const temporaryBackup = join(staging, 'snapshot.sqlite')
+  try {
+    const descriptor = openSync(temporaryBackup, 'wx', 0o600)
+    try {
+      if (uid !== undefined) fchmodSync(descriptor, 0o600)
+    } finally {
+      closeSync(descriptor)
+    }
+    db.prepare('VACUUM main INTO ?').run(temporaryBackup)
+    syncPath(temporaryBackup, 'r+')
+    renameSync(temporaryBackup, backup)
+    if (process.platform !== 'win32') syncPath(directory, 'r')
+  } finally {
+    rmSync(staging, { recursive: true, force: true })
+  }
+}
+
+/** Initialize or upgrade the database. The caller holds the profile writer guard. */
 export function migrateSchema(db: DatabaseSync): void {
   try {
-    transaction(db, () => {
-      const applicationId = db.prepare('PRAGMA application_id').get()?.application_id
-      const version = db.prepare('PRAGMA user_version').get()?.user_version
-      if (applicationId === APPLICATION_ID && version === SCHEMA_VERSION) {
-        const tables = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name))
-        if (!requiredTables.every(table => tables.has(table))) {
-          throw new StorageError('corrupt', 'The storage schema is missing required tables')
-        }
-        return
-      }
-      if (applicationId !== 0 || version !== 0 || db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get() !== undefined) {
-        throw new StorageError('unsupported_schema', 'The database has an unsupported application or schema version')
-      }
+    const applicationId = db.prepare('PRAGMA application_id').get()?.application_id
+    const version = db.prepare('PRAGMA user_version').get()?.user_version
+    if (applicationId === APPLICATION_ID && version === SCHEMA_VERSION) {
+      requireTables(db, schema2Tables)
+      return
+    }
 
-      db.exec(migration001)
-      db.exec(`PRAGMA application_id = ${APPLICATION_ID}; PRAGMA user_version = ${SCHEMA_VERSION}`)
+    const isUpgrade = applicationId === APPLICATION_ID && version === 1
+    const isEmpty = applicationId === 0 && version === 0
+      && db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get() === undefined
+    if (!isUpgrade && !isEmpty) {
+      throw new StorageError('unsupported_schema', 'The database has an unsupported application or schema version')
+    }
+    if (isUpgrade) {
+      requireTables(db, schema1Tables)
+      if (db.prepare('PRAGMA foreign_key_check').get() !== undefined) {
+        throw new StorageError('corrupt', 'SQLite foreign key check failed before migration')
+      }
+      backupVersion1(db)
+    }
+
+    transaction(db, () => {
+      if (isEmpty) {
+        db.exec(migration001)
+        db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
+      }
+      db.exec(migration002)
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     })
   } catch (cause) {
     if (cause instanceof StorageError) throw cause
+    if (typeof cause === 'object' && cause !== null && 'code' in cause
+      && (cause.code === 'ENOSPC' || cause.code === 'EDQUOT')) {
+      throw new StorageError('full', 'Storage ran out of space during migration', { cause })
+    }
     switch (sqliteCode(cause)) {
       case 5: // SQLITE_BUSY
       case 6: // SQLITE_LOCKED
