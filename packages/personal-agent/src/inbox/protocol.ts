@@ -121,6 +121,7 @@ export interface InboxSnapshot {
 }
 
 type TaskControl = { taskId: string; expectedVersion: number }
+type EvidencePointer = { kind: 'event'; eventId: string } | { kind: 'artifact'; artifactId: string }
 
 export type InboxRequest =
   | { type: 'snapshot' }
@@ -134,6 +135,10 @@ export type InboxRequest =
   | ({ type: 'accept_result' } & TaskControl)
   | { type: 'approval'; requestId: string; expectedVersion: number; digest: string; decision: 'approve' | 'deny' }
   | { type: 'artifact'; taskId: string; artifactId: string }
+  | { type: 'context_recall'; taskId: string; ref: EvidencePointer | { kind: 'task'; taskId: string }; cursor?: string; maxBytes?: number }
+  | { type: 'context_search'; taskId: string; query: string; limit?: number }
+  | { type: 'context_checkpoint'; taskId: string }
+  | ({ type: 'context_exclude'; ref: EvidencePointer; reason: 'forgotten' | 'superseded' } & TaskControl)
   | { type: 'set_subscription'; subscription: {
     sourceInstanceId: string; accountId: string; threadId: string; projectId: string; taskId: string;
     mode: 'context' | 'work'; enabled: boolean; expectedVersion?: number; expiresAt?: string;
@@ -151,6 +156,7 @@ export type InboxResponse =
   | { ok: true; kind: 'subscription'; version: number }
   | { ok: true; kind: 'attention_policy'; version: number }
   | { ok: true; kind: 'resident'; value: object }
+  | { ok: true; kind: 'context'; value: object | null }
   | { ok: false; code: string }
 
 export type InboxPort = (request: InboxRequest, signal?: AbortSignal) => Promise<InboxResponse>

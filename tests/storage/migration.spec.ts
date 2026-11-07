@@ -25,6 +25,7 @@ import {
   projectSchema,
   sourceEventSchema,
 } from '../../packages/personal-agent/src/domain/model.js'
+import { routineSchema } from '../../packages/personal-agent/src/domain/routines.js'
 import { workStateSchema } from '../../packages/personal-agent/src/domain/transitions.js'
 import { verificationRecordSchema } from '../../packages/personal-agent/src/domain/verification.js'
 import { canonicalizeAction } from '../../packages/personal-agent/src/policy/grants.js'
@@ -40,6 +41,7 @@ import { migration003 } from '../../packages/personal-agent/src/storage/migratio
 import { migration004 } from '../../packages/personal-agent/src/storage/migrations/004.js'
 import { migration005 } from '../../packages/personal-agent/src/storage/migrations/005.js'
 import { migration006 } from '../../packages/personal-agent/src/storage/migrations/006.js'
+import { migration007 } from '../../packages/personal-agent/src/storage/migrations/007.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -53,9 +55,17 @@ import {
   V4_BACKUP_SUFFIX,
   V5_BACKUP_SUFFIX,
   V6_BACKUP_SUFFIX,
+  V7_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
+
+function preContextRows(db: DatabaseSync, tables: readonly string[]) {
+  return tables.map(table => db.prepare(table === 'worker_inputs' ? `
+    SELECT task_id, attempt_id, generation, cursor, session_id, message_id, digest, content, kind, status,
+      flushed_at, observed_at FROM worker_inputs
+  ` : `SELECT * FROM ${table}`).all())
+}
 
 function fixtureDirectory(): string {
   const directory = mkdtempSync(join(tmpdir(), 'dshpa-storage-'))
@@ -719,8 +729,7 @@ describe('SQLite v3 to v6 upgrade', () => {
 describe('SQLite v4 to v6 upgrade', () => {
   it('retains legacy source dedupe rows, Worker input journals and the recovery fence in a v4 backup', () => {
     const v4 = createVersionFixture(4, true)
-    const recoveryRows = (db: DatabaseSync) => ['source_events', 'worker_inputs', 'runtime_recovery']
-      .map(table => db.prepare(`SELECT * FROM ${table}`).all())
+    const recoveryRows = (db: DatabaseSync) => preContextRows(db, ['source_events', 'worker_inputs', 'runtime_recovery'])
     try {
       v4.db.exec("UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1")
       const originals = recoveryRows(v4.db)
@@ -751,8 +760,7 @@ describe('SQLite v4 to v6 upgrade', () => {
 describe('SQLite v5 to v6 upgrade', () => {
   it('preserves committed routing and recovery records while initializing budget and attention ledgers', () => {
     const v5 = createVersionFixture(4, true)
-    const rows = (db: DatabaseSync) => ['source_events', 'routing_receipts', 'worker_inputs', 'runtime_recovery']
-      .map(table => db.prepare(`SELECT * FROM ${table}`).all())
+    const rows = (db: DatabaseSync) => preContextRows(db, ['source_events', 'routing_receipts', 'worker_inputs', 'runtime_recovery'])
     try {
       transaction(v5.db, () => {
         v5.db.exec(migration005)
@@ -803,8 +811,7 @@ describe('SQLite v5 to v6 upgrade', () => {
 describe('SQLite v6 to v7 upgrade', () => {
   it('preserves committed budget, attention, and recovery state in the upgrade and the private v6 backup', () => {
     const v6 = createVersionFixture(4, true)
-    const rows = (db: DatabaseSync) => ['budget_reservations', 'attention_policies', 'worker_inputs', 'runtime_recovery']
-      .map(table => db.prepare(`SELECT * FROM ${table}`).all())
+    const rows = (db: DatabaseSync) => preContextRows(db, ['budget_reservations', 'attention_policies', 'worker_inputs', 'runtime_recovery'])
     const at = '2026-11-07T09:00:00.000Z'
     try {
       transaction(v6.db, () => {
@@ -847,6 +854,55 @@ describe('SQLite v6 to v7 upgrade', () => {
       }
     } finally {
       v6.db.close()
+    }
+  })
+})
+
+describe('SQLite v7 to v8 upgrade', () => {
+  it('rolls back capacity failures and preserves committed work, routines and recovery mode in a private v7 backup', () => {
+    const v7 = createVersionFixture(4, true)
+    const at = '2026-11-07T09:00:00.000Z'
+    const rows = (db: DatabaseSync) => preContextRows(db, ['tasks', 'work_events', 'artifacts', 'routines', 'runtime_recovery', 'worker_inputs'])
+    try {
+      transaction(v7.db, () => {
+        v7.db.exec(migration005)
+        v7.db.exec(migration006)
+        v7.db.exec(migration007)
+        v7.db.exec("PRAGMA user_version = 7; UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1")
+        const routine = routineSchema.parse({
+          id: 'legacy-routine', ownerId: 'owner-v1', profileId: 'profile-v1', revision: 1, status: 'draft', updatedAt: at,
+          title: 'Legacy reminder', timing: { kind: 'at', at }, timeZone: 'UTC', localTimeIntent: '09:00 UTC',
+          dst: { gap: 'skip', overlap: 'earlier' }, misfire: 'skip', target: { kind: 'reminder', text: 'Keep this routine.' },
+        })
+        v7.db.prepare('INSERT INTO routines (id, record) VALUES (?, ?)').run(routine.id, JSON.stringify(routine))
+      })
+      const original = rows(v7.db)
+      const pages = v7.db.prepare('PRAGMA page_count').get()?.page_count
+      expect(typeof pages).toBe('number')
+      v7.db.exec(`PRAGMA max_page_count = ${Number(pages) + 2}`)
+      expect(() => migrateSchema(v7.db)).toThrow(expect.objectContaining({ code: 'full' }))
+      expect(v7.db.prepare('PRAGMA user_version').get()?.user_version).toBe(7)
+      expect(v7.db.prepare("SELECT name FROM sqlite_schema WHERE name LIKE 'context_%'").all()).toEqual([])
+      expect(rows(v7.db)).toEqual(original)
+      v7.db.exec(`PRAGMA max_page_count = ${Number(pages) + 128}`)
+      migrateSchema(v7.db)
+      expect(v7.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+      expect(rows(v7.db)).toEqual(original)
+      expect(v7.db.prepare('SELECT count(*) AS count FROM context_checkpoints').get()?.count).toBe(0)
+      expect(v7.db.prepare('SELECT count(*) AS count FROM context_exclusions').get()?.count).toBe(0)
+      expect(v7.db.prepare('SELECT context_sources FROM worker_inputs').all()).toEqual([{ context_sources: null }])
+      expect(v7.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      const backupPath = v7.path + V7_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(backupPath).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(backupPath, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(7)
+        expect(rows(backup)).toEqual(original)
+      } finally {
+        backup.close()
+      }
+    } finally {
+      v7.db.close()
     }
   })
 })

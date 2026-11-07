@@ -10,6 +10,14 @@
       "default": "./lib/index.js"
     },
     "./package.json": "./package.json",
+    "./checkpoint-compaction": {
+      "types": "./lib/runtime/checkpoint-compaction.d.ts",
+      "default": "./lib/runtime/checkpoint-compaction.js"
+    },
+    "./checkpoint-pruner": {
+      "types": "./lib/runtime/checkpoint-pruner.d.ts",
+      "default": "./lib/runtime/checkpoint-pruner.js"
+    },
     "./client": "./lib/client.js"
   },
   "files": ["lib", "locale", "prompts", "cordis.patch.yml"],
@@ -41,10 +49,15 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
     "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.1",
     "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-compaction": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "0.2.2-rc.1",
     "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
     "@deepseek-ai/dsh-session": "0.2.2-rc.1",
     "@deepseek-ai/dsh-session-persistence": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-token-meter": "0.2.2-rc.1",
     "@deepseek-ai/dsh-tools": "0.2.2-rc.1"
   },
   "devDependencies": {

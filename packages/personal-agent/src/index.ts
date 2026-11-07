@@ -1,9 +1,11 @@
 import { mkdirSync, realpathSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
+import { isManagedWorkerSession, type LocalContext } from './context/local-context.js'
 import {
   activateLocalInbox, localInboxConfigSchema, type LocalAttentionService, type LocalComputeService, type LocalRoutingService,
 } from './inbox/host.js'
 import { installCapabilityPlugins } from './runtime/capability-registry.js'
+import { computeDenied } from './runtime/compute.js'
 import { createHostAdapter, type HostAdapter } from './runtime/host-adapter.js'
 import { installNativeScheduleSink } from './runtime/native-schedule.js'
 import { openWorkStore, type WorkStore } from './storage/store.js'
@@ -44,6 +46,18 @@ export function apply(ctx: Context, config?: { inbox?: unknown }): void {
     if (launchedResident || inbox?.resident) exitResident()
     throw error
   }
+  let activeContext: LocalContext | undefined
+  ctx.provide('dshpaCheckpointPolicy', {
+    capture: (session, operation) => activeContext?.checkpointPolicy.capture(session, operation)
+      ?? (inbox?.context || isManagedWorkerSession(session.id) ? { kind: 'unavailable' } : { kind: 'unmanaged' }),
+  })
+  if (inbox?.context) ctx.on('llm/stream', (request, next) => {
+    if (request.purpose !== 'compaction' || request.sessionId === undefined) return next()
+    try {
+      if (activeContext && !activeContext.managesSession(request.sessionId)) return next()
+    } catch { /* An unknown scope cannot disclose a managed transcript. */ }
+    return (async function* () { yield computeDenied('permission_denied') })()
+  }, { prepend: true })
   // The resident writer lease precedes the native schedule resolver readiness.
   // Once the inbox validates its carrier, the inbox owns this store's teardown.
   if (reservedStore) ctx.effect(() => () => reservedStore?.close(), 'dshpa: resident startup writer')
@@ -70,17 +84,22 @@ export function apply(ctx: Context, config?: { inbox?: unknown }): void {
   }
   if (!inbox) return
   const dependencies = ['connection', 'sessions', 'webServer', ...(inbox.routines ? ['schedule'] : []),
-    ...(inbox.resident ? ['appReady'] : [])]
+    ...(inbox.resident ? ['appReady'] : []),
+    ...(inbox.context ? ['dshpaCheckpointCompactionReady', 'dshpaCheckpointPrunerReady'] : [])]
   ctx.inject(dependencies, web => {
     web.effect(() => {
       try {
         const runtime = activateLocalInbox(web, host, inbox, {
           schedule: inbox.routines ? sink.connect(web) : undefined, takeResidentStore,
         })
+        activeContext = runtime.context
         web.provide('dshpaRouting', runtime.routing)
         web.provide('dshpaAttention', runtime.attention)
         web.provide('dshpaCompute', runtime.compute)
-        return () => runtime.dispose()
+        return () => {
+          activeContext = undefined
+          return runtime.dispose()
+        }
       } catch (error) {
         if (inbox.resident) exitResident()
         throw error

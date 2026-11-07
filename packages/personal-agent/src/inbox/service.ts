@@ -2,6 +2,9 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { contextEvidencePointerSchema } from '../context/checkpoint.js'
+import type { LocalContext } from '../context/local-context.js'
+import { contextRecallRequestSchema, contextSearchRequestSchema } from '../context/recall.js'
 import {
   artifactIdSchema,
   attemptIdSchema,
@@ -67,6 +70,11 @@ const requestSchema = z.discriminatedUnion('type', [
     digest: sha256DigestSchema, decision: z.enum(['approve', 'deny']),
   }),
   z.strictObject({ type: z.literal('artifact'), taskId: taskIdSchema, artifactId: artifactIdSchema }),
+  z.strictObject({ type: z.literal('context_recall'), taskId: taskIdSchema, ...contextRecallRequestSchema.shape }),
+  z.strictObject({ type: z.literal('context_search'), taskId: taskIdSchema, ...contextSearchRequestSchema.shape }),
+  z.strictObject({ type: z.literal('context_checkpoint'), taskId: taskIdSchema }),
+  z.strictObject({ type: z.literal('context_exclude'), ...control, ref: contextEvidencePointerSchema,
+    reason: z.enum(['forgotten', 'superseded']) }),
   z.strictObject({ type: z.literal('set_subscription'), subscription: z.unknown() }),
   z.strictObject({ type: z.literal('set_attention_policy'), expectedVersion: versionSchema, policy: z.unknown() }),
   ...routineRequestSchemas,
@@ -94,6 +102,7 @@ export interface InboxServiceOptions {
   readonly invalidateResources?: (ref: WorkRef) => void
   readonly routines?: RoutineInbox
   readonly resident?: ResidentOperations
+  readonly context?: LocalContext
   readonly now?: () => UtcInstant
 }
 
@@ -261,12 +270,40 @@ export function createInboxService(options: InboxServiceOptions) {
     if (!decoded.success) return failure('invalid_input')
     const request = decoded.data
     if (store.recoveryMode() === 'restore' && request.type !== 'snapshot' && request.type !== 'artifact'
+      && request.type !== 'context_recall' && request.type !== 'context_search' && request.type !== 'context_checkpoint'
       && request.type !== 'cancel' && request.type !== 'resident_status' && request.type !== 'resident_audit') return failure('recovery_required')
 
     try {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
         case 'create_task': return await createTask(ownerToken, request)
+        case 'context_recall':
+        case 'context_search':
+        case 'context_checkpoint':
+        case 'context_exclude': {
+          const context = options.context
+          if (!context) return failure('resource_unavailable')
+          const ref = refFor(owner, request.taskId)
+          if (request.type === 'context_checkpoint') {
+            const result = context.inspect(ref, ownerToken)
+            return result.ok ? { ok: true, kind: 'context', value: result.value } : failure(result.code)
+          }
+          if (request.type === 'context_exclude') {
+            if (!store.canDispatch()) return failure('recovery_required')
+            const state = store.getWork(ref)
+            if (!state) return failure('not_found')
+            if (state.task.version !== request.expectedVersion) return failure('version_conflict')
+            if (state.attempt.mandate.policyVersion !== owner.policyVersion) return failure('policy_changed')
+            const result = store.excludeContextPointer(ref, request.ref, { kind: request.reason, at: now() })
+            return result.ok ? { ok: true, kind: 'updated', taskId: ref.taskId } : failure(result.code)
+          }
+          if (request.type === 'context_recall') {
+            const result = context.recall.lookup(ref, ownerToken, { ref: request.ref, cursor: request.cursor, maxBytes: request.maxBytes })
+            return result.ok ? { ok: true, kind: 'context', value: result.page } : failure(result.code)
+          }
+          const result = context.recall.search(ref, ownerToken, { query: request.query, limit: request.limit })
+          return result.ok ? { ok: true, kind: 'context', value: result.hits } : failure(result.code)
+        }
         case 'resident_status':
         case 'resident_backup':
         case 'resident_audit': {
@@ -367,15 +404,26 @@ export function createInboxService(options: InboxServiceOptions) {
         case 'start': {
           if (state.task.status !== 'queued') return failure('invalid_transition')
           if (!executor.canStart(ref, worker.presetId)) return failure('budget_exceeded')
-          const source = store.getWakeSource(ref, state.task.version)
-          const answer = source?.sourceInstanceId === LOCAL_SOURCE ? answerBodySchema.safeParse(source.body) : undefined
-          const outcome = state.task.requestedOutcome
-          const text = answer?.success ? `${outcome}\n\nOwner answer:\n${answer.data.text}` : outcome
+          const assembly = options.context
+          const currentInput = () => {
+            const readAt = now()
+            if (assembly && !assembly.taskTextUsable(ref, state, readAt)) return undefined
+            const source = store.getWakeSource(ref, state.task.version)
+            const outcome = state.task.requestedOutcome
+            if (source?.sourceInstanceId === LOCAL_SOURCE && (!assembly || assembly.sourceUsable(ref, source.id, readAt))) {
+              const answer = answerBodySchema.safeParse(source.body)
+              if (answer.success) return { text: `${outcome}\n\nOwner answer:\n${answer.data.text}`, sources: [source.id] }
+            }
+            return { text: outcome }
+          }
+          const prepared = assembly ? await assembly.prepare(ref, ownerToken, state, request.cursor, currentInput)
+            : { ok: true as const, text: currentInput()?.text ?? state.task.requestedOutcome, sources: undefined }
+          if (!prepared.ok) return failure(prepared.code)
           const cwd = state.attempt.worker?.cwd ?? join(worker.cwd, stableId('workspace', owner.ownerId, owner.profileId, ref.taskId))
           if (state.attempt.worker === undefined) mkdirSync(cwd, { recursive: true, mode: 0o700 })
           const result = await executor.launch(ref, {
-            expectedVersion: request.expectedVersion, ...worker, cwd, input: { cursor: request.cursor, text },
-          })
+            expectedVersion: request.expectedVersion, ...worker, cwd, input: { cursor: request.cursor, text: prepared.text },
+          }, prepared.sources)
           return result.ok ? { ok: true, kind: 'updated', taskId: ref.taskId } : failure(result.code)
         }
         case 'resume': {

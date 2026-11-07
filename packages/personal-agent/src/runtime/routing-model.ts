@@ -4,7 +4,7 @@ import type { OwnerId, ProfileId } from '../domain/model.js'
 import { computeLimitsSchema, meteredStream, type WorkerComputeOptions } from './compute.js'
 import type { RoutingAssessor } from './router.js'
 
-declare module '@deepseek-ai/dsh-llm' {
+declare module '@deepseek-ai/dsh-llm/types' {
   interface LlmRequestPurposeMap {
     'dshpa-routing': true
   }

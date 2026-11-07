@@ -2,10 +2,12 @@ import { createHash, randomUUID } from 'node:crypto'
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import { SessionId as nativeSessionId, type SessionHeader } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { z } from 'zod'
+import { createLocalContext, localContextConfigSchema } from '../context/local-context.js'
 import {
   accountIdSchema, deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema,
   sourceInstanceIdSchema, utcInstantSchema,
@@ -16,6 +18,8 @@ import { ROUTINE_SOURCE } from '../domain/routines.js'
 import { createIdentityBoundary, type SourceToken } from '../policy/identity.js'
 import type { ActionRoute } from '../policy/dispatch.js'
 import { budgetConfigSchema, type BudgetConfig, type BudgetCurrencyUsage } from '../runtime/budget.js'
+import CheckpointedCompactionEngine from '../runtime/checkpoint-compaction.js'
+import CheckpointedToolResultPruner from '../runtime/checkpoint-pruner.js'
 import { computeLimitsSchema } from '../runtime/compute.js'
 import { createGpuQueue, gpuConfigSchema } from '../runtime/gpu-queue.js'
 import type { AttentionExternalRequest } from '../runtime/attention.js'
@@ -51,6 +55,7 @@ export const localInboxConfigSchema = z.strictObject({
   sourceAccounts: profileSchema.shape.verifiedAccounts.max(64).optional(),
   budget: budgetConfigSchema.optional(),
   computeLimits: computeLimitsSchema.optional(),
+  context: localContextConfigSchema.optional(),
   gpu: gpuConfigSchema.optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
@@ -147,12 +152,23 @@ function isPrimary(header: SessionHeader): boolean {
   return header.origin !== 'subagent' && !/^dshpa-[0-9a-f]{64}$/.test(header.id) && !isRoutineSinkSession(header.id)
 }
 
-function nativeSessions(ctx: Context) {
+function nativeSessions(ctx: Context, checkpointed: boolean) {
+  function eligible(header: SessionHeader): boolean {
+    if (!isPrimary(header)) return false
+    if (!checkpointed) return true
+    const agent = ctx.agents.get(header.id)
+    if (!agent) return false
+    const presets = ctx.get('agentPresets')
+    const compaction = presets?.serviceFor(agent, 'compaction') ?? agent.ctx.get('compaction')
+    const pruner = presets?.serviceFor(agent, 'toolResultPruner') ?? agent.ctx.get('toolResultPruner')
+    return compaction instanceof CheckpointedCompactionEngine && pruner instanceof CheckpointedToolResultPruner
+  }
   return {
     async resolveSession(id: SessionId): Promise<boolean> {
       const nativeId = nativeSessionId(id)
       const live = ctx.get('sessions')?.get(nativeId)
-      if (live) return isPrimary(live.header)
+      if (live) return eligible(live.header)
+      if (checkpointed) return false
       const stored = await ctx.get('sessionPersistence')?.list() ?? []
       return stored.some(entry => entry.header.id === nativeId
         && entry.formatStatus !== 'migration-required' && isPrimary(entry.header))
@@ -160,12 +176,12 @@ function nativeSessions(ctx: Context) {
     async listSessions(): Promise<readonly InboxSession[]> {
       const headers = new Map<string, SessionHeader>()
       for (const entry of await ctx.get('sessionPersistence')?.list() ?? []) {
-        if (entry.formatStatus !== 'migration-required' && isPrimary(entry.header)) {
+        if (entry.formatStatus !== 'migration-required' && eligible(entry.header)) {
           headers.set(entry.header.id, entry.header)
         }
       }
       for (const session of ctx.get('sessions')?.list() ?? []) {
-        if (isPrimary(session.header)) headers.set(session.header.id, session.header)
+        if (eligible(session.header)) headers.set(session.header.id, session.header)
       }
       return [...headers.values()].sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, 50).map(header => ({ id: header.id, label: header.id }))
@@ -218,6 +234,9 @@ export function activateLocalInbox(
 ) {
   const config = localInboxConfigSchema.parse(input)
   if (config.routines && options.schedule === undefined) throw new Error('Enabled routines require the private native schedule carrier')
+  if (config.context && (!ctx.get('dshpaCheckpointCompactionReady') || !ctx.get('dshpaCheckpointPrunerReady'))) {
+    throw new Error('Enabled context requires both dshpa checkpoint plugins')
+  }
   const connection: HostConnectionHandle | undefined = ctx.get('connection')
   const listener = ctx.get('webServer') as ResidentListener | undefined
   if (!connection || connection.allowsRemoteAuthorities !== false
@@ -286,6 +305,9 @@ export function activateLocalInbox(
       budget, ...scope, limits: config.computeLimits,
     }) : undefined
     const worker = config.worker
+    const limits = computeLimitsSchema.parse(config.computeLimits ?? {})
+    const context = config.context && createLocalContext({ ctx, store, identity, ownerToken: token, owner, config: config.context,
+      worker: worker && { ...worker, outputReserve: limits.maxOutputTokens, maxInputBytes: limits.maxInputBytes } })
     if (worker) mkdirSync(config.workRoot, { recursive: true, mode: 0o700 })
     executor = worker ? host.createWorkerExecutor({
       store,
@@ -299,6 +321,10 @@ export function activateLocalInbox(
       concurrency: worker.concurrency,
       compute: { budget, limits: config.computeLimits },
       captureResultSummary: true,
+      prepareContextInput: context?.prepareCached,
+      authorizeContextHistory: context?.historyUsable,
+      resolveContextRoute: context?.resolveRoute,
+      contextWindow: context?.contextWindow,
       onHandback: (ref, eventId) => router?.handback(ref, eventId),
       onObservation: resident?.observe,
       onProgress(ref, state, report) {
@@ -353,10 +379,10 @@ export function activateLocalInbox(
     }, () => resident?.recoveryUnavailable())
     startup = startupRecovery
     const service = createInboxService({
-      store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx),
+      store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
-      resident,
+      resident, context,
       configureAttention: (_owner, policy, expectedVersion) => attention.configure(scope, policy, expectedVersion),
       invalidateResources: gpu.cancelStale,
       inspectUsage() {
@@ -431,7 +457,7 @@ export function activateLocalInbox(
     }
 
     return Object.freeze({
-      store, executor, identity, actionGate, ownerToken, owner, recovery, routing, attention, schedules: schedule,
+      store, executor, identity, actionGate, ownerToken, owner, recovery, routing, attention, context, schedules: schedule,
       compute: Object.freeze({ budget, gpu }),
       async dispose() {
         const operations = resident?.close()

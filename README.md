@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-010, PA-013, PA-018, PA-021, and PA-038).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-011, PA-013, PA-018, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -15,6 +15,7 @@ The [artifact and delivery evidence](docs/evidence/PA-007.md) covers immutable c
 The [local Web inbox evidence](docs/evidence/PA-008.md) covers native conversation integration, task controls, approval, and result acceptance.
 The [recovery evidence](docs/evidence/PA-009.md) covers input acknowledgments, cancellation fences, and backup restore.
 The [routing evidence](docs/evidence/PA-010.md) covers source intake, subscriptions, Worker handbacks, and responsive controls.
+The [context evidence](docs/evidence/PA-011.md) covers native checkpoint capture, reference recall, exclusions, and input budgets.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
@@ -91,6 +92,64 @@ Open or create a native conversation, then select **Today** in the DSH sidebar. 
 The local Web host publishes the `dshpaRouting` service for in-process adapters. The owner can declare previously verified accounts in `inbox.sourceAccounts` with `sourceInstanceId`, `accountId` and the UTC `verifiedAt` instant. An adapter authenticates the account independently of message content before binding its source token. It submits the original occurrence time and a stable external event ID and revision. The owner manages versioned `work` or `context` subscriptions through the authenticated inbox `set_subscription` operation. Work delivery uses the exact source, account, thread, project and task. A `routed` receipt includes the current native input journal status. Context subscriptions record the association without feeding or waking a Worker.
 
 Semantic assessment is optional. Add an `inbox.routing` block with `provider`, `model` and permitted `dataScope` labels. The assessor evaluates bounded batches and returns proposals for owner review. Both assessments and subscribed Worker input require known pricing with limits or an explicitly unmetered route. An event-triggered Worker wake also requires a trusted policy for the current grant and wait condition. Provider account enrollment belongs to the connector tasks.
+
+### Preserve task context through compaction
+
+Add `context: {}` under `config.inbox` in the existing `dshpa` row. Add the following rows to the same Web profile overlay. The root wrappers cover private Workers. The `dshpa-context` preset installs the wrappers and `/compact` inside the primary conversation's own compaction group. Keep the four isolated service keys together when customizing the preset. Automatic compaction is enabled by default. The pruner uses the shipped defaults.
+
+```yaml
+- id: compaction-basic
+  disabled: true
+- id: tool-result-pruner
+  disabled: true
+- insert:
+    - id: dshpa-checkpoint-compaction
+      name: '@mosbot-ai/dshpa/checkpoint-compaction'
+    - id: dshpa-checkpoint-pruner
+      name: '@mosbot-ai/dshpa/checkpoint-pruner'
+    - id: preset-dshpa-context
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: dshpa-context
+        order: 90
+        plugins:
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+              dshpaCheckpointCompactionReady: true
+              dshpaCheckpointPrunerReady: true
+            config:
+              - id: dshpa-checkpoint-compaction
+                name: '@mosbot-ai/dshpa/checkpoint-compaction'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: dshpa-checkpoint-pruner
+                name: '@mosbot-ai/dshpa/checkpoint-pruner'
+```
+
+In DSH Web, create a primary conversation using the `dshpa-context` preset, then attach a task through the inbox. With context enabled, the inbox offers only live primary Sessions whose effective compaction engine and pruner are both dshpa wrappers.
+
+Before DSH compacts or prunes an attached Session, dshpa saves a scoped task checkpoint to SQLite. It records the objective, constraints, acceptance criteria, canonical wait and source references. It includes a bounded set of explicit owner answers as source-backed decisions and retains the current question or continuation condition from the task's wait. dshpa generates the replacement summary locally from checkpoint references and brief guidance. Sessions without attached work use native summarization.
+
+For Worker input, dshpa uses the configured model's context window and DSH's token estimator. It reserves the configured `inbox.computeLimits.maxOutputTokens` and keeps the fixed instructions and current input verbatim. The remaining budget defaults to 30% authoritative task state, 25% recent context, 25% retrieval and 20% checkpoint context. Optional `inbox.context.weights` uses integer percentages under `authoritative`, `recent`, `retrieval` and `checkpoint` totaling 100. `inbox.context.maxInputBytes` defaults to 32 KiB, accepts 1–64 KiB in bytes, and is capped by the Worker compute input limit. If required input exceeds the budget, the request fails.
+
+The authenticated owner can use these request payloads through the local `dshpa/inbox` RPC.
+
+| Request `type` | Payload fields |
+| --- | --- |
+| `context_checkpoint` | `taskId` for the latest scoped checkpoint metadata. |
+| `context_recall` | `taskId`, `ref`, and optional `cursor` and `maxBytes` for one UTF-8 page. |
+| `context_search` | `taskId`, `query`, and optional `limit` for matching excerpts. |
+| `context_exclude` | `taskId`, an event or artifact `ref`, the current task `expectedVersion`, and `reason` set to `forgotten` or `superseded`. |
+
+A `ref` is `{kind: 'task', taskId}`, `{kind: 'event', eventId}` or `{kind: 'artifact', artifactId}`. Recall checks the task scope and current authorization for each page. A page defaults to 1,024 bytes and accepts 4–4,096 bytes. Use `nextCursor` with the same reference for the next page. Cursors are bound to the content revision and current host process. After a restart, begin a fresh lookup.
+
+Search checks the task and up to 12 recent eligible candidates of each evidence type. It searches up to 8 KiB per candidate and returns up to 10 excerpts. It supports normalized Chinese and English text. Use an exact reference to retrieve older evidence or the rest of a large artifact. An exclusion is a durable recall rule for that task and filters old checkpoint material derived from the excluded evidence.
+
+Before a Worker sends its actual model request, dshpa checks the sources recorded for its retained inputs against current authorization and exclusions. If a source is revoked or a relevant event is excluded, the old Worker Session is fenced from the provider. Start a fresh task with the evidence still authorized. SQLite source records, DSH Session logs and backup copies have separate retention rules. DSH keeps the original events in its Session log when it compacts the active context.
 
 ### Set compute and attention limits
 

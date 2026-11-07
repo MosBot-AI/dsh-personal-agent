@@ -56,6 +56,9 @@ function noticeFor(code: string): MessageKey {
     case 'action_changed': return 'notice.conflict'
     case 'capacity': return 'notice.capacity'
     case 'budget_exceeded':
+    case 'context_budget_exceeded':
+    case 'context_budget_unavailable':
+    case 'invalid_context_budget':
     case 'price_unknown':
     case 'pricing_unavailable': return 'notice.budget'
     case 'condition_unmet': return 'notice.waitCondition'
@@ -75,7 +78,7 @@ function retainRequest(memory: InboxMemory, key: string, request: InboxRequest):
     memory.requests.set(key, { signature, id })
     return { ...request, commandId: id }
   }
-  if ('cursor' in request) {
+  if (request.type === 'start' || request.type === 'redirect' || request.type === 'answer') {
     const signature = JSON.stringify({ ...request, cursor: undefined, expectedVersion: undefined })
     const prior = memory.requests.get(key)
     const id = prior?.signature === signature ? prior.id : request.cursor
