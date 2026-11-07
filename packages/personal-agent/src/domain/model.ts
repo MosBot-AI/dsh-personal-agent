@@ -204,6 +204,18 @@ export const mandateRefSchema = z.strictObject({
 }).readonly()
 
 export const attemptScopeSchema = z.strictObject({ capabilities: textListSchema, dataScope: textListSchema })
+export const workerCursorSchema = z.string().max(256).regex(/^[^\s\p{Cc}]+$/u)
+export const WORKER_INPUT_LIMIT = 64
+export const workerExecutionSchema = z.strictObject({
+  presetId: nonEmptyTextSchema,
+  cwd: nonEmptyTextSchema,
+  provider: nonEmptyTextSchema,
+  model: nonEmptyTextSchema,
+  inputCursor: workerCursorSchema,
+  inputHistory: z.array(workerCursorSchema).min(1).max(WORKER_INPUT_LIMIT),
+}).refine(worker => worker.inputHistory.at(-1) === worker.inputCursor
+  && new Set(worker.inputHistory).size === worker.inputHistory.length,
+{ path: ['inputHistory'], error: 'Worker history must end at the current unique cursor' })
 
 export const attemptStatusSchema = z.enum([
   'queued', 'running', 'waiting', 'paused', 'verifying', 'cancelling', 'completed', 'failed', 'cancelled',
@@ -230,11 +242,13 @@ export const attemptSchema = z.strictObject({
   agentId: nonEmptyTextSchema.optional(),
   sessionId: sessionIdSchema.optional(),
   scope: attemptScopeSchema.optional(),
+  worker: workerExecutionSchema.optional(),
   startedAt: utcInstantSchema.optional(),
   endedAt: utcInstantSchema.optional(),
   heartbeatAt: utcInstantSchema.optional(),
   outcome: attemptOutcomeSchema.optional(),
 }).refine(attempt => {
+  if (attempt.worker !== undefined && (attempt.sessionId === undefined || attempt.startedAt === undefined)) return false
   if (attempt.startedAt !== undefined) return attempt.executor !== undefined
   return !startedAttemptStatuses.has(attempt.status)
     && attempt.executor === undefined && attempt.agentId === undefined

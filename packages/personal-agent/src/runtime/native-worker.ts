@@ -1,0 +1,319 @@
+import type { Context } from '@deepseek-ai/cordis'
+import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { SessionId as nativeSessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '../domain/model.js'
+import { createPrivateWorkers } from '../policy/private-worker.js'
+import { workerReportInstructions } from './reports.js'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'dshpa-work-input': { kind: 'dshpa-work-input'; cursor: string }
+  }
+}
+
+export interface NativeWorkerInput {
+  readonly cursor: string
+  readonly text: string
+}
+
+export interface NativeWorker {
+  followup(input: NativeWorkerInput): void
+  steer(input: NativeWorkerInput): void
+  flush(): Promise<void>
+  whenIdle(): Promise<void>
+  readReport(): string | undefined
+  stop(): Promise<boolean>
+}
+
+export interface NativeWorkerRuntime {
+  open(input: {
+    readonly sessionId: SessionId
+    readonly cwd: string
+    readonly provider: string
+    readonly model: string
+    readonly resume: boolean
+    readonly signal: AbortSignal
+    readonly isCurrent: () => boolean
+  }): Promise<NativeWorker>
+}
+
+type OpenInput = Parameters<NativeWorkerRuntime['open']>[0]
+
+interface Delivery {
+  readonly cursor: string
+  readonly messageId: string
+  stepTurn?: number
+  matchingTurn?: number
+  text?: string
+  report?: string
+  ended: boolean
+}
+
+/** Scope verified against the installed DSH jobs and subagent services. */
+interface OwnedJob {
+  readonly id: string
+  readonly owner?: string
+  readonly status: 'running' | 'stopping' | 'completed' | 'killed' | 'failed'
+}
+
+interface Jobs {
+  readonly events: {
+    subscribe(filter: { owners: 'all' }, listener: (event: { job?: OwnedJob }) => void): () => void
+  }
+  list(caller: Agent['id']): readonly OwnedJob[]
+  wait(id: string, timeoutMs: number, caller: Agent['id']): Promise<OwnedJob>
+  kill(id: string, caller: Agent['id'], reason: string): unknown
+}
+
+interface Subagents {
+  drainDescendants(parents: readonly Agent[]): Promise<void>
+}
+
+const STOP_TIMEOUT_MS = 10_000
+const MAX_DELIVERIES = 64
+
+function observeDelivery(delivery: Delivery, event: SessionEvent): void {
+  if (delivery.ended) return
+  switch (event.type) {
+    case 'step/start':
+      delivery.stepTurn = event.data.turn
+      break
+    case 'user/message': {
+      const { id, source } = event.data
+      if (id === delivery.messageId && source.kind === 'dshpa-work-input' && source.cursor === delivery.cursor) {
+        delivery.matchingTurn = delivery.stepTurn
+      }
+      break
+    }
+    case 'assistant/attempt':
+      if (event.data.turn === delivery.matchingTurn) delivery.text = undefined
+      break
+    case 'assistant/message': {
+      if (event.data.turn !== delivery.matchingTurn) break
+      const { content } = event.data.message
+      delivery.text = event.data.interrupted || content.some(block => block.type === 'tool-call')
+        ? undefined
+        : content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+      break
+    }
+    case 'turn/end':
+      if (event.data.turn === delivery.matchingTurn) {
+        delivery.ended = true
+        if (event.data.reason.kind === 'completed' && delivery.text?.trim()) delivery.report = delivery.text
+      }
+      break
+  }
+}
+
+function ownedAgents(registry: AgentRegistry, parent: Agent): Agent[] {
+  const live = registry.list()
+  const owned = new Set([parent])
+  for (const owner of owned) {
+    for (const candidate of live) {
+      if (registry.isOwnedBy(candidate.id, owner)) owned.add(candidate)
+    }
+  }
+  return [...owned]
+}
+
+function isLiveJob(job: OwnedJob): boolean {
+  return job.status === 'running' || job.status === 'stopping'
+}
+
+function isSettledJob(job: OwnedJob): boolean {
+  return job.status === 'killed' || job.status === 'completed'
+}
+
+function jobsOwnedBy(jobs: Jobs | undefined, registry: AgentRegistry, owners: readonly Agent[]) {
+  if (jobs === undefined) return []
+  return owners.flatMap(owner => registry.get(owner.id) === owner
+    ? jobs.list(owner.id).filter(job => job.owner === owner.id).map(job => ({ owner, job }))
+    : [])
+}
+
+async function stopJob(jobs: Jobs, registry: AgentRegistry, owner: Agent, job: OwnedJob): Promise<boolean> {
+  if (registry.get(owner.id) !== owner) return false
+  // Install the waiter first so job settlement is collected by the stop.
+  const completion = jobs.wait(job.id, STOP_TIMEOUT_MS, owner.id).catch(() => undefined)
+  let requested = true
+  try {
+    if (job.status === 'running') jobs.kill(job.id, owner.id, 'Private worker stopped')
+  } catch {
+    requested = false
+  }
+  let settled = await completion
+  while (requested && settled && registry.get(owner.id) === owner && isLiveJob(settled)) {
+    settled = await jobs.wait(job.id, STOP_TIMEOUT_MS, owner.id).catch(() => undefined)
+  }
+  return requested && settled !== undefined && settled.id === job.id
+    && settled.owner === owner.id && isSettledJob(settled)
+}
+
+async function stopOwnedWorker(ctx: Context, handle: AgentHandle): Promise<boolean> {
+  const { agent } = handle
+  const registry = ctx.agents
+  const jobs = ctx.get('jobs') as Jobs | undefined
+  const subagents = ctx.get('subagents') as Subagents | undefined
+  const seenOwners = new Set<Agent>()
+  const observedJobs = new Map<string, OwnedJob>()
+  let verified = true
+  let unsubscribe: (() => void) | undefined
+
+  const recordJob = (job: OwnedJob) => {
+    observedJobs.set(job.id, job)
+    if (!isLiveJob(job) && !isSettledJob(job)) verified = false
+  }
+  const snapshotJobs = (owners: readonly Agent[]) => {
+    const owned = jobsOwnedBy(jobs, registry, owners)
+    for (const { job } of owned) recordJob(job)
+    return owned
+  }
+
+  async function drain(owners: Agent[]) {
+    for (const owner of owners) seenOwners.add(owner)
+    const jobsStopped = async () => {
+      const live = snapshotJobs(owners).filter(({ job }) => isLiveJob(job))
+      if (jobs === undefined) return true
+      return (await Promise.all(live.map(({ owner, job }) => stopJob(jobs, registry, owner, job)))).every(Boolean)
+    }
+    const cleanup = await Promise.allSettled([
+      jobsStopped(),
+      Promise.resolve().then(() => subagents?.drainDescendants([agent])),
+      Promise.allSettled(owners.map(async owner => {
+        owner.cancel({ kind: 'user' })
+        await owner.whenIdle()
+      })).then(results => results.every(result => result.status === 'fulfilled')),
+    ])
+    if (cleanup.some(result => result.status === 'rejected' || result.value === false)) verified = false
+  }
+
+  try {
+    // Observe through disposal so a late trusted callback cannot hide an
+    // unverified job by creating it after the last explicit inventory.
+    unsubscribe = jobs?.events.subscribe({ owners: 'all' }, ({ job }) => {
+      if (job?.owner === undefined) return
+      if (ownedAgents(registry, agent).some(owner => owner.id === job.owner && registry.get(owner.id) === owner)) {
+        recordJob(job)
+      }
+    })
+    await drain(ownedAgents(registry, agent))
+    const late = ownedAgents(registry, agent)
+    if (late.some(owner => !seenOwners.has(owner)) || snapshotJobs(late).some(({ job }) => isLiveJob(job))) {
+      await drain(late)
+    }
+    const final = ownedAgents(registry, agent)
+    if (final.some(owner => !seenOwners.has(owner)) || snapshotJobs(final).some(({ job }) => isLiveJob(job))) verified = false
+  } catch {
+    verified = false
+  }
+  try {
+    await handle.dispose()
+    return verified && [...observedJobs.values()].every(isSettledJob)
+      && [...seenOwners].every(owner => registry.get(owner.id) !== owner)
+      && registry.get(agent.id) !== agent
+      && ownedAgents(registry, agent).length === 1
+  } catch {
+    return false
+  } finally {
+    unsubscribe?.()
+  }
+}
+
+async function boundedStop(completion: Promise<boolean>): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    const timeout = new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), STOP_TIMEOUT_MS) })
+    return await Promise.race([completion, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function matchesRoute(input: OpenInput, route: { provider: string; model: string } | undefined): boolean {
+  return route?.provider === input.provider && route.model === input.model
+}
+
+export function createNativeWorkerRuntime(
+  ctx: Context,
+  flushSession: (session: Session) => Promise<void>,
+): NativeWorkerRuntime {
+  return Object.freeze<NativeWorkerRuntime>({
+    async open(options) {
+      const input = { ...options }
+      let stopping: Promise<boolean> | undefined
+      let delivery: Delivery | undefined
+      let sends = 0
+      const minted = new Map<string, string>()
+      const active = () => stopping === undefined && !input.signal.aborted && input.isCurrent()
+      const assertActive = () => {
+        if (!active()) throw new Error('The private worker attempt is no longer current')
+      }
+      assertActive()
+      const workers = createPrivateWorkers(ctx, (agentCtx, agent) => {
+        function checkLaunch() {
+          assertActive()
+          if (agent.session.header.cwd !== input.cwd || !matchesRoute(input, agent.model.current())) {
+            throw new Error('The private worker session does not match its authorized directory and model')
+          }
+          if (agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) {
+            throw new Error('Pending native worker input requires reconciliation')
+          }
+        }
+        checkLaunch()
+        agentCtx.on('agent/pre-step', async ({ messages, modelSelection }, next) => {
+          let owned = true
+          for (const { id, source } of messages) {
+            const cursor = minted.get(id)
+            minted.delete(id)
+            if (cursor === undefined || source.kind !== 'dshpa-work-input' || source.cursor !== cursor) owned = false
+          }
+          if (!owned || delivery === undefined || !active() || !matchesRoute(input, modelSelection)) return { kind: 'reject' }
+          const decision = await next()
+          return active() ? decision : { kind: 'reject' }
+        }, { prepend: true })
+        agentCtx.on('session/event', (session, event) => {
+          if (session === agent.session && delivery !== undefined) observeDelivery(delivery, event)
+        })
+        return { commit: checkLaunch }
+      })
+      const id = nativeSessionId(input.sessionId)
+      const agentOptions = { provider: input.provider, model: input.model }
+      const handle = input.resume
+        ? await workers.resume({ resumeSessionId: id, agentOptions, signal: input.signal })
+        : await workers.create({ sessionId: id, meta: { cwd: input.cwd }, agentOptions, signal: input.signal })
+      const { agent } = handle
+
+      function deliver(method: 'followup' | 'steer', { cursor, text }: NativeWorkerInput) {
+        assertActive()
+        if (sends >= MAX_DELIVERIES) throw new Error('The private worker input limit was reached')
+        const message = createUserMessage({
+          content: [{ type: 'text', text: `${workerReportInstructions(cursor)}\n\n${text}` }],
+          source: { kind: 'dshpa-work-input', cursor },
+        })
+        sends++
+        minted.set(message.id, cursor)
+        delivery = { cursor, messageId: message.id, ended: false }
+        try {
+          agent[method](message)
+        } catch (error) {
+          minted.delete(message.id)
+          delivery = undefined
+          throw error
+        }
+      }
+
+      return Object.freeze<NativeWorker>({
+        followup: input => deliver('followup', input),
+        steer: input => deliver('steer', input),
+        flush: () => flushSession(agent.session),
+        whenIdle: () => agent.whenIdle(),
+        readReport: () => active() ? delivery?.report : undefined,
+        stop() {
+          stopping ??= Promise.resolve().then(() => stopOwnedWorker(ctx, handle)).catch(() => false)
+          return boundedStop(stopping)
+        },
+      })
+    },
+  })
+}

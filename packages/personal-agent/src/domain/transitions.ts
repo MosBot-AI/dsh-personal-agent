@@ -13,6 +13,9 @@ import {
   utcInstantSchema,
   versionSchema,
   waitReasonSchema,
+  workerCursorSchema,
+  workerExecutionSchema,
+  WORKER_INPUT_LIMIT,
 } from './model.js'
 import type { Attempt, Task, WaitReason } from './model.js'
 
@@ -113,7 +116,9 @@ export const workEventSchema = z.discriminatedUnion('type', [
     agentId: nonEmptyTextSchema.optional(),
     sessionId: sessionIdSchema.optional(),
     scope: attemptScopeSchema.optional(),
+    worker: workerExecutionSchema.optional(),
   }),
+  z.strictObject({ type: z.literal('record_input'), ...fenced, cursor: workerCursorSchema }),
   z.strictObject({
     type: z.literal('wait'),
     ...fenced,
@@ -336,7 +341,18 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
         : reject('invalid_transition')
     case 'start': {
       if (task.status !== 'queued') return reject('invalid_transition')
-      const { agentId: _agentId, sessionId: _sessionId, scope: _scope, ...queued } = attempt
+      const { worker } = event
+      if (worker) {
+        const history = attempt.worker?.inputHistory ?? []
+        if (event.sessionId === undefined || history.includes(worker.inputCursor)
+          || worker.inputHistory.length !== history.length + 1
+          || history.some((cursor, index) => worker.inputHistory[index] !== cursor)
+          || worker.inputHistory.at(-1) !== worker.inputCursor) return reject('invalid_input')
+      }
+      if (attempt.worker && (!worker || event.sessionId !== attempt.sessionId
+        || worker.presetId !== attempt.worker.presetId || worker.cwd !== attempt.worker.cwd
+        || worker.provider !== attempt.worker.provider || worker.model !== attempt.worker.model)) return reject('invalid_input')
+      const { agentId: _agentId, sessionId: _sessionId, scope: _scope, worker: _worker, ...queued } = attempt
       return advance(state, 'running', {
         ...queued,
         status: 'running',
@@ -345,12 +361,22 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
         heartbeatAt: event.at,
         ...(event.agentId === undefined ? {} : { agentId: event.agentId }),
         ...(event.sessionId === undefined ? {} : { sessionId: event.sessionId }),
+        ...(worker === undefined ? {} : { worker: { ...worker, inputHistory: [...worker.inputHistory] } }),
         ...(event.scope === undefined ? {} : { scope: {
           capabilities: [...event.scope.capabilities],
           dataScope: [...event.scope.dataScope],
         } }),
       }, event.at)
     }
+    case 'record_input':
+      if (task.status !== 'running' || !attempt.worker || attempt.worker.inputHistory.includes(event.cursor)
+        || attempt.worker.inputHistory.length >= WORKER_INPUT_LIMIT) {
+        return reject('invalid_transition')
+      }
+      return advance(state, 'running', {
+        ...attempt,
+        worker: { ...attempt.worker, inputCursor: event.cursor, inputHistory: [...attempt.worker.inputHistory, event.cursor] },
+      }, event.at)
     case 'wait': {
       const dependencyWait = event.wait.reason === 'dependency'
       if (dependencyWait) {

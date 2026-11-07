@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { AgentHandle, AgentOptions, CreateAgentOptions, ResumeAgentOptions } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentSetupCommit, CreateAgentOptions, ResumeAgentOptions } from '@deepseek-ai/dsh-agent'
 import type { ToolsService } from '@deepseek-ai/dsh-tools'
 import { executeToolBatch, ToolExecutionPipeline } from '@deepseek-ai/dsh-tools/pipeline'
 
@@ -47,7 +47,14 @@ function installPrivatePolicy(ctx: Context): void {
  * Trusted coordinator entry point. Bind resume IDs to this work and check
  * model disclosure authority, including any recorded model choice on resume.
  */
-export function createPrivateWorkers(ctx: Context): Readonly<PrivateWorkers> {
+export function createPrivateWorkers(
+  ctx: Context,
+  prepare?: (agentCtx: Context, agent: Agent) => AgentSetupCommit | void,
+): Readonly<PrivateWorkers> {
+  function setup(agentCtx: Context, agent: Agent) {
+    installPrivatePolicy(agentCtx)
+    return prepare?.(agentCtx, agent)
+  }
   return Object.freeze<PrivateWorkers>({
     async create({ sessionId, agentOptions, signal, meta }) {
       requireTools(ctx)
@@ -56,7 +63,7 @@ export function createPrivateWorkers(ctx: Context): Readonly<PrivateWorkers> {
         agentOptions: modelOptions(agentOptions),
         signal,
         meta: meta?.cwd === undefined ? undefined : { cwd: meta.cwd },
-        setup: installPrivatePolicy,
+        setup,
       })
     },
     async resume({ resumeSessionId, agentOptions, signal }) {
@@ -65,7 +72,7 @@ export function createPrivateWorkers(ctx: Context): Readonly<PrivateWorkers> {
         resumeSessionId,
         agentOptions: modelOptions(agentOptions),
         signal,
-        setup: installPrivatePolicy,
+        setup,
       })
     },
   })
