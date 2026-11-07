@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -14,6 +14,10 @@ import {
 import type { WorkState } from '../domain/transitions.js'
 import { createIdentityBoundary, type SourceToken } from '../policy/identity.js'
 import type { ActionRoute } from '../policy/dispatch.js'
+import { budgetConfigSchema, type BudgetConfig, type BudgetCurrencyUsage } from '../runtime/budget.js'
+import { computeLimitsSchema } from '../runtime/compute.js'
+import { createGpuQueue, gpuConfigSchema } from '../runtime/gpu-queue.js'
+import type { AttentionExternalRequest } from '../runtime/attention.js'
 import type { HostAdapter } from '../runtime/host-adapter.js'
 import { createRecovery } from '../runtime/recovery.js'
 import { createSessionReadback } from '../runtime/recovery-session.js'
@@ -21,7 +25,7 @@ import { createRouter, type EventRouter } from '../runtime/router.js'
 import { createDshRoutingAssessor } from '../runtime/routing-model.js'
 import { StorageError } from '../storage/schema.js'
 import { openWorkStore } from '../storage/store.js'
-import { INBOX_RPC_ENDPOINT, type InboxSession } from './protocol.js'
+import { INBOX_RPC_ENDPOINT, type InboxSession, type InboxUsage } from './protocol.js'
 import { createInboxService } from './service.js'
 
 const pathSchema = z.string().refine(path => isAbsolute(path) && !path.includes('\0'), 'Expected an absolute path')
@@ -36,6 +40,9 @@ export const localInboxConfigSchema = z.strictObject({
   storageDirectory: pathSchema,
   workRoot: pathSchema,
   sourceAccounts: profileSchema.shape.verifiedAccounts.max(64).optional(),
+  budget: budgetConfigSchema.optional(),
+  computeLimits: computeLimitsSchema.optional(),
+  gpu: gpuConfigSchema.optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
     model: nonEmptyTextSchema.max(256),
@@ -47,9 +54,35 @@ export const localInboxConfigSchema = z.strictObject({
     provider: nonEmptyTextSchema.max(256),
     model: nonEmptyTextSchema.max(256),
     dataScope: z.array(nonEmptyTextSchema.max(256)).min(1).max(64),
-    unmetered: z.literal(true),
+    unmetered: z.literal(true).optional(),
   }).optional(),
 })
+
+const zeroPrice = {
+  kind: 'known', inputMicrosPerMillion: 0, outputMicrosPerMillion: 0,
+  cacheReadMicrosPerMillion: 0, cacheWriteMicrosPerMillion: 0, ceilingMicros: 0,
+} as const
+
+function inboxBudgetConfig(config: z.infer<typeof localInboxConfigSchema>): BudgetConfig {
+  const routes = [...config.budget?.routes ?? []]
+  const limits = [...config.budget?.limits ?? []]
+  const selectedRoutes = [config.worker, config.routing].filter(route => route !== undefined)
+  for (const selected of selectedRoutes) {
+    const matches = (route: { provider: string; model: string }) => route.provider === selected.provider && route.model === selected.model
+    const route = routes.find(matches)
+    const unmetered = selectedRoutes.some(candidate => candidate.unmetered === true && matches(candidate))
+    if (route && unmetered && (route.pricing.kind !== 'known' || route.pricing.ceilingMicros !== 0)) {
+      throw new Error('An unmetered inbox route conflicts with its configured price')
+    }
+    if (!route) routes.push({ provider: selected.provider, model: selected.model, currency: null,
+      pricing: unmetered ? zeroPrice : { kind: 'unknown' } })
+  }
+  if (routes.some(route => route.currency === null) && !limits.some(limit => limit.currency === null)) {
+    limits.push({ currency: null, ownerDayMicros: 0, taskMicros: 0, maxCallsPerDay: 128, maxCallsPerTask: 64,
+      maxConcurrent: Math.min(32, (config.worker?.concurrency ?? 2) + (config.routing ? 1 : 0)) })
+  }
+  return budgetConfigSchema.parse({ pricingVersion: config.budget?.pricingVersion ?? 'local-1', routes, limits })
+}
 
 const localIdentitySchema = z.strictObject({
   ownerId: ownerIdSchema,
@@ -162,6 +195,7 @@ export interface LocalInboxOptions {
   readonly actionRoutes?: readonly ActionRoute[]
   readonly authorizeRoutedInput?: (state: WorkState, event: SourceEvent) => boolean
   readonly authorizeEventWake?: (state: WorkState, event: SourceEvent) => boolean
+  readonly allowAttentionDelivery?: (request: AttentionExternalRequest) => boolean
 }
 
 /** Mount the inbox on the existing local Web carrier. The caller owns the Host plugin scope. */
@@ -200,10 +234,25 @@ export function activateLocalInbox(
     const token = ownerToken()
     const owner = identity.resolveOwner(token)
     if (!token || !owner) throw new Error('The local inbox owner binding is unavailable')
+    const scope = { ownerId: owner.ownerId, profileId: owner.profileId }
+    const budgetConfig = inboxBudgetConfig(config)
+    const budget = store.createBudget(budgetConfig)
+    const attention = store.createAttention({ allowExternal: options.allowAttentionDelivery })
+    const gpu = createGpuQueue(config.gpu ?? {}, ref => {
+      if (ref.ownerId !== scope.ownerId || ref.profileId !== scope.profileId || !store.canDispatch()) return false
+      const state = store.getWork(ref)
+      return Boolean(state && state.task.generation === ref.generation && state.attempt.id === ref.attemptId
+        && state.attempt.generation === ref.generation && ['queued', 'running', 'waiting_resource'].includes(state.task.status))
+    })
+    const routeHasPrice = (route: { provider: string; model: string }) => budgetConfig.routes.some(item =>
+      item.provider === route.provider && item.model === route.model && item.pricing.kind === 'known')
 
     const llm = config.routing && ctx.get('llm')
-    if (config.routing && !llm) throw new Error('The configured routing assessor requires the DSH LLM service')
-    const assess = config.routing && llm ? createDshRoutingAssessor(llm, config.routing) : undefined
+    const routingStatus = config.routing === undefined ? 'off' : !routeHasPrice(config.routing) ? 'pricing_unavailable'
+      : llm ? 'configured' : 'provider_unavailable'
+    const assess = config.routing && llm && routingStatus === 'configured' ? createDshRoutingAssessor(llm, config.routing, {
+      budget, ...scope, limits: config.computeLimits,
+    }) : undefined
     const worker = config.worker
     if (worker) mkdirSync(config.workRoot, { recursive: true, mode: 0o700 })
     const executor = worker ? host.createWorkerExecutor({
@@ -216,11 +265,21 @@ export function activateLocalInbox(
         dataScope: worker.dataScope,
       }],
       concurrency: worker.concurrency,
+      compute: { budget, limits: config.computeLimits },
       captureResultSummary: true,
       onHandback: (ref, eventId) => router?.handback(ref, eventId),
+      onProgress(ref, state, report) {
+        const externalEventId = createHash('sha256').update(JSON.stringify([state.attempt.id, state.attempt.generation, report.cursor])).digest('hex')
+        attention.consider(ref, {
+          attemptId: state.attempt.id, generation: state.attempt.generation, expectedVersion: state.task.version,
+          category: 'progress', source: { sourceInstanceId: 'dshpa-worker', externalEventId, externalRevision: '1' },
+          summary: report.summary,
+        })
+      },
     }) : undefined
     const eventRouter = createRouter({ store, identity, executor, assess, assessmentDataScope: config.routing?.dataScope,
-      authorizeDelivery: options.authorizeRoutedInput ?? (() => worker?.unmetered === true),
+      authorizeDelivery: (state, event) => Boolean(worker && routeHasPrice(worker)
+        && (options.authorizeRoutedInput === undefined || options.authorizeRoutedInput(state, event))),
       authorizeWake: options.authorizeEventWake })
     router = eventRouter
     const routing = Object.freeze({
@@ -239,6 +298,38 @@ export function activateLocalInbox(
     const service = createInboxService({
       store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
+      configureAttention: (_owner, policy, expectedVersion) => attention.configure(scope, policy, expectedVersion),
+      invalidateResources: gpu.cancelStale,
+      inspectUsage() {
+        const spend = budget.snapshot(scope)
+        const notices = attention.snapshot(scope)
+        const total = (metric: (row: BudgetCurrencyUsage) => number) => spend.currencies.reduce((count, row) =>
+          Math.min(Number.MAX_SAFE_INTEGER, count + metric(row)), 0)
+        const balances = new Map(spend.currencies.map(row => [row.currency, row]))
+        const currencies = new Set([...balances.keys(), ...budgetConfig.limits.map(limit => limit.currency)])
+        const usage: InboxUsage = {
+          day: spend.day,
+          currencies: [...currencies].filter(currency => currency !== null).sort().map(currency => {
+            const row = balances.get(currency)
+            return { currency, spentMicros: row?.spentMicros ?? 0, reservedMicros: row?.reservedMicros ?? 0,
+              uncertainMicros: row?.uncertainMicros ?? 0, olderHeldMicros: row?.olderHeldMicros ?? 0,
+              overflow: row?.overflow ?? false,
+              dailyLimitMicros: budgetConfig.limits.find(limit => limit.currency === currency)?.ownerDayMicros }
+          }),
+          calls: total(row => row.calls), unknownCalls: total(row => row.unknownCostCalls),
+          uncertainCalls: total(row => row.uncertainCalls + row.olderUnresolvedCalls),
+          routing: routingStatus,
+          tokens: { input: total(row => row.inputTokens), output: total(row => row.outputTokens),
+            cacheRead: total(row => row.cacheReadTokens), cacheWrite: total(row => row.cacheWriteTokens) },
+          workerSlots: executor?.snapshot() ?? { active: 0, limit: 0 },
+          gpu: gpu.snapshot(scope),
+          attention: { mode: notices.policy.mode, version: notices.policy.version, day: notices.day,
+            timeZone: notices.policy.timeZone, unsolicited: notices.unsolicitedUsed, limit: notices.unsolicitedLimit,
+            suppressed: notices.suppressedToday, recent: notices.decisions.filter(decision => decision.category !== 'progress')
+              .slice(0, 6).map(decision => ({ id: decision.id, reason: decision.claimReason ?? decision.reason, at: decision.at })) },
+        }
+        return { usage, progress: notices.progress }
+      },
     })
     // The pinned Connection carrier authorizes exact Fetch routes for owner
     // peers. Its shared RPC interceptor remains owned by native Typert.
@@ -272,13 +363,15 @@ export function activateLocalInbox(
     })
 
     return Object.freeze({
-      store, executor, identity, actionGate, ownerToken, owner, recovery, routing,
+      store, executor, identity, actionGate, ownerToken, owner, recovery, routing, attention,
+      compute: Object.freeze({ budget, gpu }),
       async dispose() {
         identity.release(token)
         const detached = remove()
         try {
           eventRouter.close()
-          if (executor && !await executor.close()) throw new Error('Inbox Worker cleanup remains unverified')
+          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close()])
+          if (!workersReleased || !gpuReleased) throw new Error('Inbox compute cleanup remains unverified')
         } finally {
           await detached
         }
@@ -297,3 +390,5 @@ export function activateLocalInbox(
 }
 
 export type LocalRoutingService = ReturnType<typeof activateLocalInbox>['routing']
+export type LocalAttentionService = ReturnType<typeof activateLocalInbox>['attention']
+export type LocalComputeService = ReturnType<typeof activateLocalInbox>['compute']

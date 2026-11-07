@@ -140,12 +140,20 @@ export const projectSchema = z.strictObject({
   reviewCadence: z.strictObject({ intervalDays: z.int().positive(), timeZone: timeZoneSchema }).optional(),
 })
 
+export const computeWaitPrefix = 'dshpa:compute:'
+export const indefiniteWait = utcInstantSchema.parse('9999-12-31T23:59:59.999Z')
+
 export const waitReasonSchema = z.strictObject({
   reason: z.enum(['input', 'approval', 'event', 'environment', 'resource', 'dependency']),
   referenceId: nonEmptyTextSchema,
   deadline: utcInstantSchema.optional(),
+  notBefore: utcInstantSchema.optional(),
   resumeCondition: nonEmptyTextSchema,
 })
+
+export function waitAllowsWake(wait: WaitReason | undefined, at: UtcInstant): boolean {
+  return wait?.notBefore === undefined || (wait.notBefore !== indefiniteWait && at >= wait.notBefore)
+}
 
 export const acceptanceSchema = z.strictObject({
   criteria: textListSchema.min(1),

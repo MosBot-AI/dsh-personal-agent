@@ -1,9 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
-import { freezeMessage, MessageId } from '@deepseek-ai/dsh-llm'
+import { freezeMessage, isAgentLoopRequest, MessageId } from '@deepseek-ai/dsh-llm'
 import { SessionId as nativeSessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { WORKER_INPUT_LIMIT, type SessionId } from '../domain/model.js'
 import { createPrivateWorkers } from '../policy/private-worker.js'
+import { computeCooldown, computeDenied, meteredStream, type ComputeIssue, type NativeWorkerCompute } from './compute.js'
 import { workerMessageDigest } from './recovery-session.js'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -21,6 +22,7 @@ export interface NativeWorkerInput {
   readonly acknowledge: () => boolean
   /** Trusted routed-input disclosure check, repeated at native step admission. */
   readonly authorize?: () => boolean
+  readonly unattended?: boolean
 }
 
 export interface NativeWorker {
@@ -29,6 +31,7 @@ export interface NativeWorker {
   flush(): Promise<void>
   whenIdle(): Promise<void>
   readReport(): string | undefined
+  readComputeIssue?(): ComputeIssue | undefined
   stop(): Promise<boolean>
 }
 
@@ -41,6 +44,7 @@ export interface NativeWorkerRuntime {
     readonly resume: boolean
     readonly signal: AbortSignal
     readonly isCurrent: () => boolean
+    readonly compute?: NativeWorkerCompute
   }): Promise<NativeWorker>
 }
 
@@ -84,6 +88,7 @@ interface MintedInput {
   readonly digest: string
   readonly durable: Promise<boolean>
   readonly authorize?: () => boolean
+  readonly unattended?: boolean
 }
 
 function authorized(check: (() => boolean) | undefined): boolean {
@@ -270,6 +275,81 @@ function matchesRoute(input: OpenInput, route: { provider: string; model: string
   return route?.provider === input.provider && route.model === input.model
 }
 
+function installComputeGate(
+  ctx: Context, agentCtx: Context, agent: Agent, input: OpenInput,
+  compute: NativeWorkerCompute, active: () => boolean, onIssue: (issue?: ComputeIssue) => void,
+) {
+  const { limits, budget } = compute
+  let deadline: NodeJS.Timeout | undefined
+  let deadlineAt = 0
+  let step: { turn: number; unattended: boolean; claimed: boolean } | undefined
+  const clear = () => {
+    clearTimeout(deadline)
+    deadline = undefined
+    step = undefined
+  }
+  const available = () => active() && performance.now() < deadlineAt
+  const deny = (code: string) => (async function* () {
+    onIssue({ code })
+    yield computeDenied(code)
+  })()
+
+  // The pinned LLM service emits this waterfall for the prepared native
+  // call as well as direct streams. Its dispatch is unscoped, so match the
+  // exact live Session and native request identity here.
+  agentCtx.effect(() => ctx.on('llm/stream', (request, next) => {
+    if (request.sessionId !== agent.id) return next()
+    if (!step || step.claimed || !available() || !matchesRoute(input, request)
+      || !isAgentLoopRequest(request) || ctx.agents.get(agent.id) !== agent) return deny('compute_limit')
+    const scope = compute.scope(step.unattended)
+    if (!scope) return deny('permission_denied')
+    step.claimed = true
+    return meteredStream({ budget, request, limits, scope, next, onIssue, current: available })
+  }, { prepend: true }), 'dshpa: metered native requests')
+  // Retries re-enter llm/stream inside the same step. An explicit new
+  // admitted step must claim separately, even when DSH retry is composed.
+  agentCtx.on('agent/request-error', async () => undefined, { prepend: true })
+  agentCtx.on('session/event', (session, event) => {
+    if (session === agent.session && event.type === 'turn/end' && event.data.turn === step?.turn) clear()
+  })
+  agentCtx.effect(() => clear, 'dshpa: compute deadline')
+
+  return (turn: number, index: number, unattended: boolean): boolean => {
+    if (turn > limits.maxTurns) {
+      onIssue({ code: 'turn_limit' })
+      return false
+    }
+    if (index > limits.maxStepsPerTurn) {
+      onIssue({ code: 'compute_limit' })
+      return false
+    }
+    const automatic = unattended || (step?.turn === turn ? step.unattended : compute.initiallyUnattended === true)
+    const scope = compute.scope(automatic)
+    if (!scope) return false
+    const cooldown = computeCooldown(budget, scope, input.provider, input.model)
+    if (cooldown) {
+      onIssue(cooldown)
+      return false
+    }
+    if (step?.turn !== turn) {
+      clear()
+      deadlineAt = performance.now() + limits.maxWallTimeMs
+      deadline = setTimeout(() => {
+        if (step?.turn !== turn || ctx.agents.get(agent.id) !== agent) return
+        if (active()) onIssue({ code: 'compute_limit' })
+        agent.cancel({ kind: 'hook', reason: 'Worker compute time limit reached' })
+      }, limits.maxWallTimeMs)
+    }
+    if (!available()) {
+      onIssue({ code: 'compute_limit' })
+      return false
+    }
+    onIssue()
+    step = { turn, unattended: automatic, claimed: false }
+    return true
+  }
+}
+
 export function createNativeWorkerRuntime(
   ctx: Context,
   flushSession: (session: Session) => Promise<void>,
@@ -279,6 +359,7 @@ export function createNativeWorkerRuntime(
       const input = { ...options }
       let stopping: Promise<boolean> | undefined
       let delivery: Delivery | undefined
+      let issue: ComputeIssue | undefined
       let sends = 0
       let admittedInput = false
       const minted = new Map<string, MintedInput>()
@@ -299,7 +380,10 @@ export function createNativeWorkerRuntime(
           }
         }
         checkLaunch()
-        agentCtx.on('agent/pre-step', async ({ messages, modelSelection, signal }, next) => {
+        const admitCompute = input.compute && installComputeGate(
+          ctx, agentCtx, agent, input, input.compute, active, observed => { issue = observed },
+        )
+        agentCtx.on('agent/pre-step', async ({ messages, modelSelection, signal, turn, step }, next) => {
           let owned = true
           const inputs: MintedInput[] = []
           for (const { id, source } of messages) {
@@ -320,6 +404,8 @@ export function createNativeWorkerRuntime(
             || signal.aborted || !active() || !mayDisclose()) return { kind: 'reject' }
           const decision = await next()
           if (!active() || signal.aborted || !mayDisclose()) return { kind: 'reject' }
+          if (decision.kind === 'enter' && admitCompute
+            && !admitCompute(turn, step, inputs.some(message => message.unattended === true))) return { kind: 'reject' }
           if (decision.kind === 'enter' && inputs.length > 0) admittedInput = true
           return decision
         }, { prepend: true })
@@ -329,14 +415,14 @@ export function createNativeWorkerRuntime(
         return { commit: checkLaunch }
       })
       const id = nativeSessionId(input.sessionId)
-      const agentOptions = { provider: input.provider, model: input.model }
+      const agentOptions = { provider: input.provider, model: input.model, maxTokens: input.compute?.limits.maxOutputTokens }
       const handle = input.resume
         ? await workers.resume({ resumeSessionId: id, agentOptions, signal: input.signal })
         : await workers.create({ sessionId: id, meta: { cwd: input.cwd }, agentOptions, signal: input.signal })
       const { agent } = handle
 
       async function deliver(method: 'followup' | 'steer', {
-        cursor, text, messageId, digest, acknowledge, authorize,
+        cursor, text, messageId, digest, acknowledge, authorize, unattended,
       }: NativeWorkerInput) {
         assertActive()
         if (!authorized(authorize)) throw new Error('The private worker input authority changed')
@@ -352,8 +438,9 @@ export function createNativeWorkerRuntime(
         })
         const durable = Promise.withResolvers<boolean>()
         sends++
+        issue = undefined
         sent.add(message.id)
-        minted.set(message.id, { cursor, digest, durable: durable.promise, authorize })
+        minted.set(message.id, { cursor, digest, durable: durable.promise, authorize, unattended })
         delivery = { cursor, messageId: message.id, digest, ended: false }
         try {
           agent[method](message)
@@ -378,6 +465,7 @@ export function createNativeWorkerRuntime(
         flush: () => flushSession(agent.session),
         whenIdle: () => agent.whenIdle(),
         readReport: () => active() ? delivery?.report : undefined,
+        readComputeIssue: () => issue,
         stop() {
           stopping ??= Promise.resolve().then(() => stopOwnedWorker(ctx, handle)).catch(() => false)
           return boundedStop(stopping)

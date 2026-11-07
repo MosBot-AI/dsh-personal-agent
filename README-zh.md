@@ -86,7 +86,40 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 
 本地 Web 宿主为进程内适配器提供 `dshpaRouting` 服务。所有者可以在 `inbox.sourceAccounts` 中声明已经验证的账户，填写 `sourceInstanceId`、`accountId` 和 UTC 时间 `verifiedAt`。适配器须独立于消息内容验证账户，再绑定来源令牌，并提交原始发生时间、稳定的外部事件 ID 和修订。所有者通过已认证收件箱的 `set_subscription` 操作管理带版本的 `work` 或 `context` 订阅。工作事件按来源、账户、线程、项目和任务精确送达。`routed` 回执包含当前的原生输入日志状态。上下文订阅只记录关联，不向 Worker 投递输入或唤醒 Worker。
 
-语义评估为可选能力。在不产生模型费用的部署中，可添加 `inbox.routing` 配置块，填写 `provider`、`model`、允许的 `dataScope` 标签和 `unmetered: true`。评估器按有限批次返回供所有者审阅的提议。`inbox.worker.unmetered` 为 `true` 或可信策略允许输入时，精确工作订阅无需 `inbox.routing` 即可路由。通过事件唤醒 Worker 需要针对当前授权、预算和等待条件的可信唤醒策略。连接器登记和按量计费的后台派发由其他实施任务处理。
+语义评估为可选能力。可添加 `inbox.routing` 配置块，填写 `provider`、`model` 和允许的 `dataScope` 标签。评估器按有限批次返回供所有者审阅的提议。评估与订阅触发的 Worker 输入均需要已知价格和限额，或明确声明为不计费的路由。通过事件唤醒 Worker 还需要针对当前授权和等待条件的可信策略。供应商账户登记由连接器任务处理。
+
+### 设置计算与通知限额
+
+在同一个 `inbox` 块中，`budget` 将确切的供应商和模型 ID 与价格版本、单次调用上限及其他限额绑定。下列数值仅用于说明配置结构，请使用自身部署的费率。金额使用所配货币单位的百万分之一，以整数填写。
+
+```yaml
+budget:
+  pricingVersion: owner-quote-1
+  routes:
+    - provider: YOUR_CONFIGURED_PROVIDER
+      model: YOUR_CONFIGURED_MODEL
+      currency: USD
+      pricing:
+        kind: known
+        inputMicrosPerMillion: 1000000
+        outputMicrosPerMillion: 4000000
+        cacheReadMicrosPerMillion: 100000
+        cacheWriteMicrosPerMillion: 1000000
+        ceilingMicros: 200000
+  limits:
+    - currency: USD
+      ownerDayMicros: 1000000
+      taskMicros: 400000
+      maxCallsPerDay: 40
+      maxCallsPerTask: 8
+      maxConcurrent: 2
+```
+
+不产生模型费用的路由可在 `worker` 或 `routing` 块中设置 `unmetered: true`。所有者手动启动且未配置价格的 Worker 会按价格未知记录，并受调用次数限制。计算预算按 UTC 日期结算。不确定的预留在重启和跨 UTC 日期后继续保留，直到完成对账。**计算与通知用量**面板展示按配置价格记录的费用、未结算金额上限、价格未知的调用、Token 用量和资源占用。
+
+`inbox.computeLimits` 设置 `maxInputBytes`、`maxOutputTokens`、`maxTurns`、`maxStepsPerTurn` 和 `maxWallTimeMs`。`inbox.gpu` 设置 `concurrency`、`maxQueued` 和 `timeoutMs`。重型 GPU 工作使用独立的进程内队列，默认一个槽位。已安装宿主中的私有 Worker 禁用工具。遇到供应商限流时，Worker 在实际退出后释放，并记录所有者可恢复的时间。
+
+主动通知默认为 `off`。已认证收件箱的 `set_attention_policy` 操作接受 `expectedVersion` 和 `policy`，后者包含 `mode`、`timeZone`、`quietHours` 和 `urgentRules`。默认静默时段为 UTC 22:00–08:00，可使用 IANA 时区指定本地时间。每位所有者每天跨渠道最多预留三个主动通知槽位。显式提醒与必要决策另行处理。日常进展留在任务视图中。可信通知适配器通过 `dshpaAttention` 记录候选，并使用现有 Outbox 交接符合条件的确切交付。
 
 ## 恢复独立工作备份
 

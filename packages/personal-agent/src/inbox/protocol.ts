@@ -27,11 +27,13 @@ export interface InboxTask {
   readonly status: TaskStatus
   readonly version: number
   readonly runtime: 'active' | 'inactive' | 'unknown'
-  readonly wait?: { readonly reason: string; readonly referenceId: string; readonly prompt: string }
+  readonly wait?: { readonly reason: string; readonly referenceId: string; readonly prompt: string; readonly notBefore?: string }
   readonly artifacts: readonly InboxArtifact[]
   readonly deliveries: readonly { readonly id: string; readonly status: Delivery['status'] }[]
   readonly verifiedAt?: string
   readonly canAccept?: boolean
+  readonly canResumeCompute?: boolean
+  readonly progress?: { readonly summary: string; readonly at: string }
 }
 
 export interface InboxApproval {
@@ -48,6 +50,36 @@ export interface InboxApproval {
   readonly preview: string
 }
 
+export interface InboxUsage {
+  readonly day: string
+  readonly currencies: readonly {
+    readonly currency: string
+    readonly spentMicros: number
+    readonly reservedMicros: number
+    readonly uncertainMicros: number
+    readonly olderHeldMicros: number
+    readonly dailyLimitMicros?: number
+    readonly overflow: boolean
+  }[]
+  readonly unknownCalls: number
+  readonly uncertainCalls: number
+  readonly calls: number
+  readonly routing: 'off' | 'configured' | 'pricing_unavailable' | 'provider_unavailable'
+  readonly tokens: { readonly input: number; readonly output: number; readonly cacheRead: number; readonly cacheWrite: number }
+  readonly workerSlots: { readonly active: number; readonly limit: number }
+  readonly gpu: { readonly active: number; readonly queued: number; readonly limit: number }
+  readonly attention?: {
+    readonly mode: 'off' | 'observe' | 'prepare' | 'act'
+    readonly version: number
+    readonly day: string
+    readonly timeZone: string
+    readonly unsolicited: number
+    readonly limit: number
+    readonly suppressed: number
+    readonly recent: readonly { readonly id: string; readonly reason: string; readonly at: string }[]
+  }
+}
+
 export interface InboxSnapshot {
   readonly workerConfigured: boolean
   readonly recoveryMode?: 'reconciling' | 'restore'
@@ -55,6 +87,7 @@ export interface InboxSnapshot {
   readonly projects: readonly InboxProject[]
   readonly tasks: readonly InboxTask[]
   readonly approvals: readonly InboxApproval[]
+  readonly usage?: InboxUsage
 }
 
 type TaskControl = { taskId: string; expectedVersion: number }
@@ -75,12 +108,14 @@ export type InboxRequest =
     sourceInstanceId: string; accountId: string; threadId: string; projectId: string; taskId: string;
     mode: 'context' | 'work'; enabled: boolean; expectedVersion?: number; expiresAt?: string;
   } }
+  | { type: 'set_attention_policy'; expectedVersion: number; policy: unknown }
 
 export type InboxResponse =
   | { ok: true; kind: 'snapshot'; snapshot: InboxSnapshot }
   | { ok: true; kind: 'updated'; taskId?: string; projectId?: string }
   | { ok: true; kind: 'artifact'; artifact: InboxArtifact & { text: string } }
   | { ok: true; kind: 'subscription'; version: number }
+  | { ok: true; kind: 'attention_policy'; version: number }
   | { ok: false; code: string }
 
 export type InboxPort = (request: InboxRequest, signal?: AbortSignal) => Promise<InboxResponse>

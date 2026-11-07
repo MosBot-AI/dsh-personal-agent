@@ -15,13 +15,15 @@ import { migration002 } from './migrations/002.js'
 import { migration003 } from './migrations/003.js'
 import { migration004 } from './migrations/004.js'
 import { migration005 } from './migrations/005.js'
+import { migration006 } from './migrations/006.js'
 
 export const APPLICATION_ID = 0x44534850 // DSHP
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 export const V1_BACKUP_SUFFIX = '.v1.bak'
 export const V2_BACKUP_SUFFIX = '.v2.bak'
 export const V3_BACKUP_SUFFIX = '.v3.bak'
 export const V4_BACKUP_SUFFIX = '.v4.bak'
+export const V5_BACKUP_SUFFIX = '.v5.bak'
 
 export type StorageErrorCode =
   | 'busy'
@@ -89,8 +91,14 @@ const schema4Tables = [
 const schema5Tables = [
   ...schema4Tables, 'routing_receipts', 'routing_subscriptions', 'routing_deliveries',
 ]
-const sourceTables = { 1: schema1Tables, 2: schema2Tables, 3: schema3Tables, 4: schema4Tables }
-const backupSuffixes = { 1: V1_BACKUP_SUFFIX, 2: V2_BACKUP_SUFFIX, 3: V3_BACKUP_SUFFIX, 4: V4_BACKUP_SUFFIX }
+const schema6Tables = [
+  ...schema5Tables, 'budget_reservations', 'attention_policies', 'attention_decisions', 'attention_progress',
+]
+const sourceTables = { 1: schema1Tables, 2: schema2Tables, 3: schema3Tables, 4: schema4Tables, 5: schema5Tables }
+const backupSuffixes = {
+  1: V1_BACKUP_SUFFIX, 2: V2_BACKUP_SUFFIX, 3: V3_BACKUP_SUFFIX, 4: V4_BACKUP_SUFFIX, 5: V5_BACKUP_SUFFIX,
+}
+const migrations = [migration001, migration002, migration003, migration004, migration005, migration006]
 
 function requireTables(db: DatabaseSync, required: readonly string[]): void {
   const tables = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name))
@@ -152,12 +160,13 @@ export function migrateSchema(db: DatabaseSync): void {
     const applicationId = db.prepare('PRAGMA application_id').get()?.application_id
     const version = db.prepare('PRAGMA user_version').get()?.user_version
     if (applicationId === APPLICATION_ID && version === SCHEMA_VERSION) {
-      requireTables(db, schema5Tables)
+      requireTables(db, schema6Tables)
       requireRecoveryAdmission(db)
       return
     }
 
-    const isUpgrade = applicationId === APPLICATION_ID && (version === 1 || version === 2 || version === 3 || version === 4)
+    const isUpgrade = applicationId === APPLICATION_ID
+      && (version === 1 || version === 2 || version === 3 || version === 4 || version === 5)
     const isEmpty = applicationId === 0 && version === 0
       && db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get() === undefined
     if (!isUpgrade && !isEmpty) {
@@ -165,7 +174,7 @@ export function migrateSchema(db: DatabaseSync): void {
     }
     if (isUpgrade) {
       requireTables(db, sourceTables[version])
-      if (version === 4) requireRecoveryAdmission(db)
+      if (version >= 4) requireRecoveryAdmission(db)
       if (db.prepare('PRAGMA foreign_key_check').get() !== undefined) {
         throw new StorageError('corrupt', 'SQLite foreign key check failed before migration')
       }
@@ -173,14 +182,8 @@ export function migrateSchema(db: DatabaseSync): void {
     }
 
     transaction(db, () => {
-      if (isEmpty) {
-        db.exec(migration001)
-        db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
-      }
-      if (version === 0 || version === 1) db.exec(migration002)
-      if (version === 0 || version === 1 || version === 2) db.exec(migration003)
-      if (version !== 4) db.exec(migration004)
-      db.exec(migration005)
+      for (const migration of migrations.slice(version)) db.exec(migration)
+      if (isEmpty) db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
       if (db.prepare('PRAGMA foreign_key_check').get() !== undefined) {
         throw new StorageError('migration_failed', 'SQLite foreign key check failed during migration')
       }

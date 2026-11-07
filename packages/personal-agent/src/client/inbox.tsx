@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, 
 import type { InboxArtifact, InboxPort, InboxRequest, InboxResponse, InboxSnapshot, InboxTask } from '../inbox/protocol.js'
 import type { MessageKey, Translate } from './copy.js'
 import { ApprovalCard, requestId, TaskDetail, TaskStatus } from './task.js'
+import { Usage } from './usage.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
 type ArtifactContent = Extract<InboxResponse, { kind: 'artifact' }>['artifact']
@@ -53,6 +54,10 @@ function noticeFor(code: string): MessageKey {
     case 'stale_attempt':
     case 'action_changed': return 'notice.conflict'
     case 'capacity': return 'notice.capacity'
+    case 'budget_exceeded':
+    case 'price_unknown':
+    case 'pricing_unavailable': return 'notice.budget'
+    case 'condition_unmet': return 'notice.waitCondition'
     case 'recovery_required': return 'notice.recovery'
     case 'outcome_uncertain':
     case 'host_unavailable': return 'notice.unknown'
@@ -445,6 +450,7 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
             <strong>{project.title}</strong><p className="dshpa-muted">{project.purpose}</p>
           </li>)}</ul>
         </details>}
+        {snapshot?.usage && <Usage usage={snapshot.usage} t={t} />}
         {task ? <TaskDetail task={task} project={snapshot?.projects.find(project => project.id === task.projectId)}
           workerConfigured={snapshot?.workerConfigured === true && !snapshot.recoveryMode} t={t} writable={writable}
           canOpenSession={writable && snapshot?.sessions.some(session => session.id === task.sessionId) === true}

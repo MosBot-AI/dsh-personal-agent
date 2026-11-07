@@ -107,6 +107,13 @@ describe('published DSH Web local inbox', () => {
     expect(initial.workerConfigured).toBe(true)
     expect(initial.projects).toContainEqual(expect.objectContaining({ id: fixtureProjectId, title: 'PA-008 fixture project' }))
     expect(initial.sessions).toContainEqual(expect.objectContaining({ id: nativeSessionId }))
+    expect(initial.usage).toMatchObject({ unknownCalls: 0, gpu: { active: 0, queued: 0, limit: 1 },
+      attention: { mode: 'off', version: 0, unsolicited: 0, limit: 3 } })
+    const policy = { mode: 'observe', timeZone: 'Asia/Shanghai', quietHours: { start: '22:00', end: '08:00' }, urgentRules: [] }
+    expect(await inbox({ type: 'set_attention_policy', expectedVersion: 0, policy }))
+      .toEqual({ ok: true, kind: 'attention_policy', version: 1 })
+    expect(await inbox({ type: 'set_attention_policy', expectedVersion: 0, policy }))
+      .toEqual({ ok: false, code: 'version_conflict' })
     const newProject = {
       type: 'create_project', commandId: 'pa008-project', title: 'Web-created project',
       purpose: 'Exercise authenticated project intake.',
@@ -216,9 +223,37 @@ describe('published DSH Web local inbox', () => {
     }))
     await waitForTask(() => readTask(heldId), task => task.status === 'cancelled' && task.runtime === 'inactive', 'cancelled worker release')
     expect(await readTask(resultId)).toMatchObject({ status: 'completed', artifacts: [artifact] })
+    const progressId = await createTask('progress', 'PA013_PROGRESS Record a workspace update.')
+    const queuedProgress = await readTask(progressId)
+    updated(await inbox({ type: 'start', taskId: progressId, expectedVersion: queuedProgress.version, cursor: 'pa013-progress' }))
+    const progressed = await waitForTask(() => readTask(progressId), task => Boolean(task.progress), 'coalesced progress', host.diagnostics)
+    expect(progressed.progress).toMatchObject({ summary: 'Recorded one scoped workspace update.' })
+    const usage = (await snapshot()).usage
+    expect(usage).toMatchObject({ currencies: [], attention: { mode: 'observe', version: 1, timeZone: 'Asia/Shanghai' } })
+    expect(usage?.unknownCalls).toBeGreaterThan(0)
+    updated(await inbox({ type: 'cancel', taskId: progressId, expectedVersion: progressed.version, commandId: 'pa013-cancel-progress' }))
+
+    const limitedId = await createTask('limited', 'PA013_RATE_LIMIT Exercise provider cooldown.')
+    const beforeLimit = await readTask(limitedId)
+    updated(await inbox({ type: 'start', taskId: limitedId, expectedVersion: beforeLimit.version, cursor: 'pa013-rate-limit' }))
+    const limited = await waitForTask(() => readTask(limitedId), task => task.status === 'waiting_resource' && task.canResumeCompute === true,
+      'released provider cooldown', host.diagnostics)
+    expect(limited.runtime).toBe('inactive')
+    assert.ok(limited.wait?.notBefore)
+    await delay(Math.max(0, Date.parse(limited.wait.notBefore) - Date.now() + 20))
+    updated(await inbox({ type: 'resume', taskId: limitedId, expectedVersion: limited.version, commandId: 'pa013-resume-rate' }))
+    const requeued = await readTask(limitedId)
+    expect(requeued.status).toBe('queued')
+    updated(await inbox({ type: 'start', taskId: limitedId, expectedVersion: requeued.version, cursor: 'pa013-retry-rate' }))
+    const retried = await waitForTask(() => readTask(limitedId), task => Boolean(task.progress), 'owner retry after cooldown', host.diagnostics)
+    expect(retried.progress?.summary).toBe('Owner retried after the cooldown.')
+    updated(await inbox({ type: 'cancel', taskId: limitedId, expectedVersion: retried.version, commandId: 'pa013-cancel-rate' }))
   }, 45_000)
 
-  it('activates the production inbox through named Web profile configuration', async () => {
+  it.each([
+    { label: 'unmetered assessment and Worker', worker: true, routing: 'configured' },
+    { label: 'unpriced optional assessment without a Worker', worker: false, routing: 'pricing_unavailable' },
+  ])('activates the configured inbox with $label', async ({ worker, routing }) => {
     const host = await openWebHost(probe, {
       configOnly: true,
       patch: [
@@ -231,21 +266,19 @@ describe('published DSH Web local inbox', () => {
         '        - sourceInstanceId: pa008-fixture-connector',
         '          accountId: pa008-fixture-account',
         '          verifiedAt: "2026-11-07T08:00:00.000Z"',
-        '      worker:',
-        '        provider: dshpa-web-fixture',
-        '        model: fixture-worker',
+        ...(worker ? ['      worker:', '        provider: dshpa-web-fixture', '        model: fixture-worker'] : []),
         '      routing:',
         '        provider: dshpa-web-fixture',
         '        model: fixture-routing',
         '        dataScope: [fixture-public]',
-        '        unmetered: true',
+        ...(worker ? ['        unmetered: true'] : []),
       ],
     })
     const cookie = await host.exchange()
     expect(await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, { type: 'snapshot' }, cookie), host.diagnostics()).toMatchObject({
       status: 200,
       result: { ok: true, value: { ok: true, kind: 'snapshot', snapshot: {
-        workerConfigured: true, projects: [], tasks: [], approvals: [],
+        workerConfigured: worker, projects: [], tasks: [], approvals: [], usage: { routing },
       } } },
     })
     const operator = await host.exchange(true)

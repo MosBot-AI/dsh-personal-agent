@@ -43,6 +43,7 @@ function* answer(text) {
   yield { type: 'block-start', index: 0, blockType: 'text' }
   yield { type: 'text-delta', index: 0, text }
   yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+  yield { type: 'usage', usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 } }
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
 
@@ -181,16 +182,25 @@ function fixture(ctx, phase) {
       originalDestination: { sourceInstanceId: 'fixture-source', externalDestinationId: 'fixture-thread' },
     })
   }
+  const budget = phase === 'controls' ? store.createBudget({
+    pricingVersion: 'worker-control-fixture',
+    routes: [{ provider, model, currency: null, pricing: { kind: 'known',
+      inputMicrosPerMillion: 0, outputMicrosPerMillion: 0, cacheReadMicrosPerMillion: 0,
+      cacheWriteMicrosPerMillion: 0, ceilingMicros: 0,
+    } }],
+    limits: [{ currency: null, ownerDayMicros: 0, taskMicros: 0, maxCallsPerDay: 20, maxCallsPerTask: 5, maxConcurrent: 4 }],
+  }) : undefined
   const executor = ctx.dshpa.host.createWorkerExecutor({
     store, concurrency: phase === 'controls' ? 4 : 1,
     presets: [
       { id: presetId, rootDirectory, provider, model, dataScope },
       { id: 'other-preset', rootDirectory, provider, model, dataScope },
     ],
+    ...(budget ? { compute: { budget } } : {}),
   })
   const script = attachModel(ctx)
   ctx.jobs.attachController('pa006-native-worker-test')
-  return { rootDirectory, store, executor, script }
+  return { rootDirectory, store, executor, script, budget }
 }
 
 function seed(fixture, label) {
@@ -305,6 +315,7 @@ async function controls(ctx, fixture) {
     }
     assert.equal(initial[0].requests.length, 0)
     const workers = await Promise.all(tasks.slice(0, 4).map((task, index) => launch(fixture, task, initial[index])))
+    assert.equal(fixture.budget.snapshot(scope).currencies[0]?.claimedCalls, 4)
     const owner = workers[1].attempt.sessionId
     ownedJob = startJob(ctx, owner, 'Job owned by the cancelled worker', () => {
       lateJob = startJob(ctx, owner, 'Late job from an owned cancellation callback')

@@ -45,12 +45,14 @@ function* answer(text) {
   yield { type: 'block-start', index: 0, blockType: 'text' }
   yield { type: 'text-delta', index: 0, text }
   yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+  yield { type: 'usage', usage: { inputTokens: 9, outputTokens: 5, cacheReadTokens: 3, cacheWriteTokens: 1, totalTokens: 18 } }
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
 
 function attachModel(ctx) {
   let finishHeldStream
   let pendingRedirect = false
+  let rateLimited = false
   ctx.on('agent/inbox/inserted', ({ message }) => {
     if (message.source.kind === 'dshpa-work-input' && message.source.cursor === 'pa008-redirect') {
       if (finishHeldStream) finishHeldStream()
@@ -94,6 +96,21 @@ function attachModel(ctx) {
       assert.ok(cursor, 'Worker input must include the exact report cursor')
       if (text.includes('PA008_RESULT')) {
         yield* answer(JSON.stringify({ kind: 'ready', cursor, summary: resultSummary, artifactIds: [] }))
+        return
+      }
+      if (text.includes('PA013_PROGRESS')) {
+        yield* answer(JSON.stringify({ kind: 'progress', cursor, summary: 'Recorded one scoped workspace update.' }))
+        return
+      }
+      if (text.includes('PA013_RATE_LIMIT')) {
+        if (!rateLimited) {
+          rateLimited = true
+          yield { type: 'finish', reason: { kind: 'error', failure: {
+            status: 429, code: 'rate_limit', message: 'Controlled rate limit', retryable: true, providerRetryAfterMs: 350,
+          } } }
+        } else {
+          yield* answer(JSON.stringify({ kind: 'progress', cursor, summary: 'Owner retried after the cooldown.' }))
+        }
         return
       }
       if (text.includes('PA008_REDIRECT')) {
@@ -188,6 +205,8 @@ async function initialize(ctx) {
     assert.ok(token)
     assert.equal(routing.bindSource({ ...account, accountId: 'unverified' }), undefined)
     routing.releaseSource(token)
+    assert.equal(typeof ctx.get('dshpaCompute')?.gpu.enqueue, 'function')
+    assert.equal(typeof ctx.get('dshpaAttention')?.consider, 'function')
     console.log('DSHPA_WEB_FLOW_READY')
     return
   }

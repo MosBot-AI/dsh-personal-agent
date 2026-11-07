@@ -4,6 +4,7 @@ import { artifactIdsSchema } from '../domain/transitions.js'
 
 const MAX_REPORT_BYTES = 16 * 1024
 const MAX_INPUT_BYTES = 64 * 1024
+const reportWaitSchema = waitReasonSchema.omit({ notBefore: true })
 
 const reportFields = {
   cursor: workerCursorSchema,
@@ -15,13 +16,13 @@ const workerReportSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('waiting'),
     ...reportFields,
-    wait: waitReasonSchema.extend({ reason: waitReasonSchema.shape.reason.exclude(['dependency']) }),
+    wait: reportWaitSchema.extend({ reason: reportWaitSchema.shape.reason.exclude(['dependency']) }),
   }),
   z.strictObject({ kind: z.literal('ready'), ...reportFields, artifactIds: artifactIdsSchema.max(64) }),
   z.strictObject({
     kind: z.literal('blocked'),
     ...reportFields,
-    wait: waitReasonSchema.extend({ reason: z.literal('dependency') }),
+    wait: reportWaitSchema.extend({ reason: z.literal('dependency') }),
   }),
   z.strictObject({ kind: z.literal('failed'), ...reportFields }),
   z.strictObject({ kind: z.literal('handback'), ...reportFields }),
