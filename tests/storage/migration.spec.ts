@@ -14,8 +14,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
-import { conversationSchema, deliverySchema, effectSchema, projectSchema } from '../../packages/personal-agent/src/domain/model.js'
+import {
+  approvalSchema,
+  conversationSchema,
+  deliverySchema,
+  effectSchema,
+  grantSchema,
+  projectSchema,
+} from '../../packages/personal-agent/src/domain/model.js'
 import { workStateSchema } from '../../packages/personal-agent/src/domain/transitions.js'
+import { canonicalizeAction } from '../../packages/personal-agent/src/policy/grants.js'
 import {
   DATABASE_FILENAME,
   openStorageDatabase,
@@ -23,6 +31,7 @@ import {
   WRITER_LOCK_FILENAME,
 } from '../../packages/personal-agent/src/storage/database.js'
 import { migration001 } from '../../packages/personal-agent/src/storage/migrations/001.js'
+import { migration002 } from '../../packages/personal-agent/src/storage/migrations/002.js'
 import {
   APPLICATION_ID,
   migrateSchema,
@@ -30,6 +39,7 @@ import {
   sqliteCode,
   transaction,
   V1_BACKUP_SUFFIX,
+  V2_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -44,11 +54,10 @@ function createPrivateFixture(path: string, content = ''): void {
   writeFileSync(path, content, { flag: 'wx', mode: 0o600 })
 }
 
-function createVersion1Fixture(wal = false) {
+function createVersionFixture(version: 1 | 2, wal = false) {
   const directory = fixtureDirectory()
   const path = join(directory, DATABASE_FILENAME)
   createPrivateFixture(path)
-  const db = new DatabaseSync(path, { enableForeignKeyConstraints: true })
   const at = '2026-11-07T09:00:00.000Z'
   const scope = { ownerId: 'owner-v1', profileId: 'profile-v1' }
   const destination = { sourceInstanceId: 'source-v1', externalDestinationId: 'thread-v1' }
@@ -64,27 +73,40 @@ function createVersion1Fixture(wal = false) {
       id: 'task-v1', ...scope, projectId: project.id, conversationId: conversation.id,
       requestedOutcome: 'Preserve existing work.', constraints: [],
       acceptance: { criteria: ['Retain work'], requiresArtifact: false, requiresReceipt: false },
-      provenance: { sourceEventIds: [] }, version: 1, generation: 1, status: 'queued',
+      provenance: { sourceEventIds: [] }, version, generation: 1, status: version === 2 ? 'running' : 'queued',
       attemptId: 'attempt-v1', createdAt: at, updatedAt: at,
     },
     attempt: {
-      id: 'attempt-v1', taskId: 'task-v1', generation: 1, status: 'queued', artifactIds: [],
+      id: 'attempt-v1', taskId: 'task-v1', generation: 1, status: version === 2 ? 'running' : 'queued', artifactIds: [],
       mandate: { id: 'mandate-v1', ...scope, policyVersion: 'policy-v1' },
+      ...(version === 2 ? { executor: 'native-dsh', startedAt: at } : {}),
     },
   })
+  const actionScope = {
+    kind: 'send-notice', resourceRef: 'fixture-notice', accountId: 'account-v2',
+    recipient: 'recipient-v2', dataScope: ['public'], limits: { maxUses: 1 },
+  }
+  const attempt = { taskId: work.task.id, attemptId: work.attempt.id, generation: work.attempt.generation }
+  const proposal = canonicalizeAction({
+    ...scope, ...attempt, ...actionScope, operationId: 'effect-v1', policyVersion: 'policy-v1',
+    sourceInstanceId: destination.sourceInstanceId, payload: { text: 'Retain the claimed dispatch.' },
+  })
+  if (!proposal) throw new Error('Invalid v2 action fixture')
   const effect = effectSchema.parse({
-    operationId: 'effect-v1', taskId: work.task.id, attemptId: work.attempt.id, generation: 1,
-    status: 'prepared', intent: 'Retain existing intent.', payloadDigest: '1'.repeat(64),
+    operationId: 'effect-v1', ...attempt, intent: 'Retain existing intent.', payloadDigest: proposal.digest,
+    ...(version === 2 ? { status: 'dispatching', grantId: 'grant-v2' } : { status: 'prepared' }),
   })
   const delivery = deliverySchema.parse({
     id: 'delivery-v1', ...scope, destination, payload: { text: 'Retain existing notice.', artifactIds: [] },
     dedupeKey: 'notice-v1', retries: 0, status: 'pending',
   })
 
+  const db = new DatabaseSync(path, { enableForeignKeyConstraints: true })
   try {
     transaction(db, () => {
       db.exec(migration001)
-      db.exec(`PRAGMA application_id = ${APPLICATION_ID}; PRAGMA user_version = 1`)
+      if (version === 2) db.exec(migration002)
+      db.exec(`PRAGMA application_id = ${APPLICATION_ID}; PRAGMA user_version = ${version}`)
     })
     if (wal) db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA wal_autocheckpoint = 0')
     transaction(db, () => {
@@ -95,6 +117,34 @@ function createVersion1Fixture(wal = false) {
       db.prepare('INSERT INTO effects (operation_id, record) VALUES (?, ?)').run(effect.operationId, JSON.stringify(effect))
       db.prepare('INSERT INTO outbox (id, task_id, attempt_id, generation, record) VALUES (?, ?, ?, ?, ?)')
         .run(delivery.id, work.task.id, work.attempt.id, work.attempt.generation, JSON.stringify(delivery))
+      if (version === 2) {
+        const principal = { ...scope, deviceId: 'device-v2' }
+        const expiresAt = '2026-11-07T10:00:00.000Z'
+        const approval = approvalSchema.parse({
+          kind: 'approval', id: 'request-v2', ...scope, ...attempt, displayText: 'Review the existing fixture action.',
+          action: { ...actionScope, payloadDigest: proposal.digest }, policyVersion: 'policy-v1', expiresAt,
+          status: 'approved', responseActor: principal,
+        })
+        const grant = grantSchema.parse({
+          id: 'grant-v2', ...scope, approvingPrincipal: principal, action: actionScope, expiresAt,
+          approvalEvidence: { requestId: approval.id, approvedAt: at }, policyVersion: 'policy-v1',
+        })
+        db.prepare(`
+          INSERT INTO action_proposals
+            (operation_id, owner_id, profile_id, task_id, attempt_id, generation, account_verified_at, canonical, digest)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(effect.operationId, scope.ownerId, scope.profileId, attempt.taskId, attempt.attemptId,
+          attempt.generation, at, proposal.canonical, proposal.digest)
+        db.prepare(`
+          INSERT INTO action_approvals
+            (request_id, operation_id, record, client_id, session_id, device_id, device_verified_at, status, version)
+          VALUES (?, ?, ?, 'client-v2', 'session-v2', ?, ?, 'approved', 1)
+        `).run(approval.id, effect.operationId, JSON.stringify(approval), principal.deviceId, at)
+        db.prepare('INSERT INTO action_grants (grant_id, request_id, operation_id, record) VALUES (?, ?, ?, ?)')
+          .run(grant.id, approval.id, effect.operationId, JSON.stringify(grant))
+        db.prepare('INSERT INTO action_dispatches (operation_id, grant_id, claimed_at) VALUES (?, ?, ?)')
+          .run(effect.operationId, grant.id, at)
+      }
     })
     return { directory, path, db }
   } catch (error) {
@@ -106,6 +156,14 @@ function createVersion1Fixture(wal = false) {
 function readVersion1Records(db: DatabaseSync) {
   return ['projects', 'conversations', 'tasks', 'attempts', 'effects', 'outbox']
     .map(table => db.prepare(`SELECT record FROM ${table}`).all())
+}
+
+function readVersion2Records(db: DatabaseSync) {
+  return {
+    work: readVersion1Records(db),
+    authorization: ['action_proposals', 'action_approvals', 'action_grants', 'action_dispatches']
+      .map(table => db.prepare(`SELECT * FROM ${table}`).all()),
+  }
 }
 
 afterEach(() => {
@@ -361,15 +419,15 @@ describe('SQLite failure recovery', () => {
   })
 })
 
-describe('SQLite v1 to v2 upgrade', () => {
+describe('SQLite v1 to v3 upgrade', () => {
   it('preserves original work and backs up a consistent v1 view including committed WAL rows', () => {
-    const v1 = createVersion1Fixture(true)
+    const v1 = createVersionFixture(1, true)
     try {
       const originals = readVersion1Records(v1.db)
       expect(statSync(v1.path + '-wal').size).toBeGreaterThan(0)
       const storage = openStorageDatabase(v1.directory)
       try {
-        expect(storage.db.prepare('PRAGMA user_version').get()?.user_version).toBe(2)
+        expect(storage.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
         expect(readVersion1Records(storage.db)).toEqual(originals)
         expect(storage.db.prepare('SELECT COUNT(*) AS count FROM action_dispatches').get()?.count).toBe(0)
         expect(storage.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
@@ -378,6 +436,7 @@ describe('SQLite v1 to v2 upgrade', () => {
       }
 
       const backupPath = v1.path + V1_BACKUP_SUFFIX
+      expect(existsSync(v1.path + V2_BACKUP_SUFFIX)).toBe(false)
       if (process.getuid) expect(statSync(backupPath).mode & 0o777).toBe(0o600)
       const backup = new DatabaseSync(backupPath, { readOnly: true })
       try {
@@ -399,7 +458,7 @@ describe('SQLite v1 to v2 upgrade', () => {
   })
 
   it('retains v1 and its backup when SQLite runs out of pages during the additive upgrade', () => {
-    const v1 = createVersion1Fixture()
+    const v1 = createVersionFixture(1)
     try {
       const originals = readVersion1Records(v1.db)
       const pages = v1.db.prepare('PRAGMA page_count').get()?.page_count
@@ -420,7 +479,7 @@ describe('SQLite v1 to v2 upgrade', () => {
       }
       v1.db.exec(`PRAGMA max_page_count = ${pages + 128}`)
       migrateSchema(v1.db)
-      expect(v1.db.prepare('PRAGMA user_version').get()?.user_version).toBe(2)
+      expect(v1.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
       expect(readVersion1Records(v1.db)).toEqual(originals)
     } finally {
       v1.db.close()
@@ -428,7 +487,7 @@ describe('SQLite v1 to v2 upgrade', () => {
   })
 
   it.skipIf(process.platform === 'win32')('refuses a symlink at the reserved backup path before migrating', () => {
-    const v1 = createVersion1Fixture()
+    const v1 = createVersionFixture(1)
     v1.db.close()
     const sentinel = join(fixtureDirectory(), 'sentinel')
     createPrivateFixture(sentinel, 'Keep original target')
@@ -442,6 +501,75 @@ describe('SQLite v1 to v2 upgrade', () => {
       expect(source.prepare('PRAGMA user_version').get()?.user_version).toBe(1)
     } finally {
       source.close()
+    }
+  })
+})
+
+describe('SQLite v2 to v3 upgrade', () => {
+  it('preserves committed WAL work and authorization claims in an owner-private v2 backup', () => {
+    const v2 = createVersionFixture(2, true)
+    try {
+      const originals = readVersion2Records(v2.db)
+      expect(statSync(v2.path + '-wal').size).toBeGreaterThan(0)
+      const storage = openStorageDatabase(v2.directory)
+      try {
+        expect(storage.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+        expect(readVersion2Records(storage.db)).toEqual(originals)
+        expect(storage.db.prepare('SELECT COUNT(*) AS count FROM artifacts').get()?.count).toBe(0)
+        expect(storage.db.prepare('SELECT COUNT(*) AS count FROM work_verifications').get()?.count).toBe(0)
+        expect(storage.db.prepare('SELECT COUNT(*) AS count FROM outbox_bindings').get()?.count).toBe(0)
+        expect(storage.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      } finally {
+        storage.close()
+      }
+      const backupPath = v2.path + V2_BACKUP_SUFFIX
+      expect(existsSync(v2.path + V1_BACKUP_SUFFIX)).toBe(false)
+      if (process.getuid) expect(statSync(backupPath).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(backupPath, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(2)
+        expect(backup.prepare('PRAGMA application_id').get()?.application_id).toBe(APPLICATION_ID)
+        expect(backup.prepare('PRAGMA quick_check').get()?.quick_check).toBe('ok')
+        expect(readVersion2Records(backup)).toEqual(originals)
+        expect(backup.prepare("SELECT name FROM sqlite_schema WHERE name = 'artifacts'").get()).toBeUndefined()
+      } finally {
+        backup.close()
+      }
+    } finally {
+      v2.db.close()
+    }
+  })
+
+  it('rolls back the entire v3 DDL under capacity exhaustion and can retry from v2', () => {
+    const v2 = createVersionFixture(2)
+    try {
+      const originals = readVersion2Records(v2.db)
+      const pages = v2.db.prepare('PRAGMA page_count').get()?.page_count
+      if (typeof pages !== 'number') throw new Error('Expected the v2 database page count')
+      v2.db.exec(`PRAGMA max_page_count = ${pages + 5}`)
+      expect(() => migrateSchema(v2.db)).toThrow(expect.objectContaining({ code: 'full' }))
+      expect(v2.db.isTransaction).toBe(false)
+      expect(v2.db.prepare('PRAGMA user_version').get()?.user_version).toBe(2)
+      expect(v2.db.prepare(`
+        SELECT name FROM sqlite_schema WHERE name IN (
+          'artifacts', 'work_verifications', 'outbox_bindings', 'work_events_exact_completion', 'outbox_by_task_channel'
+        )
+      `).all()).toEqual([])
+      expect(readVersion2Records(v2.db)).toEqual(originals)
+      const backup = new DatabaseSync(v2.path + V2_BACKUP_SUFFIX, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(2)
+        expect(readVersion2Records(backup)).toEqual(originals)
+      } finally {
+        backup.close()
+      }
+
+      v2.db.exec(`PRAGMA max_page_count = ${pages + 128}`)
+      migrateSchema(v2.db)
+      expect(v2.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+      expect(readVersion2Records(v2.db)).toEqual(originals)
+    } finally {
+      v2.db.close()
     }
   })
 })

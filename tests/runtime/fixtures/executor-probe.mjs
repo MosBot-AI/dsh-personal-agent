@@ -226,6 +226,20 @@ function current(fixture, ref) {
   return value
 }
 
+function seal(fixture, ref, id, text) {
+  const { state } = current(fixture, ref)
+  return fixture.store.artifacts.seal(ref, {
+    id,
+    attemptId: state.attempt.id,
+    generation: state.attempt.generation,
+    expectedVersion: state.task.version,
+    mediaType: 'text/plain',
+    sourceEventIds: [],
+    visibility: 'private',
+    bytes: new TextEncoder().encode(text),
+  })
+}
+
 function cancel(fixture, seeded) {
   const { state } = current(fixture, seeded.ref)
   return mustSucceed(fixture.executor.cancel({
@@ -240,6 +254,7 @@ async function controls(ctx, fixture) {
   const initial = tasks.map(task => script(`start-${task.label}`))
   const [one, two, three, four, five] = tasks
   const redirected = script('redirected-one')
+  const unsealed = script('unsealed-four')
   const progress = script('progress-four')
   const bare = script('bare-native-input')
   const failed = script('failed-four')
@@ -326,6 +341,8 @@ async function controls(ctx, fixture) {
     await launch(fixture, five, initial[4])
     for (const { job } of otherWorkerJobs) job.finish()
 
+    seal(fixture, one.ref, 'artifact-one', 'Evidence from the redirected worker.')
+    seal(fixture, five.ref, 'artifact-five', 'Evidence from the worker admitted after cancellation.')
     redirected.report('ready', { artifactIds: ['artifact-one'] })
     initial[2].report('blocked', {
       wait: { reason: 'dependency', referenceId: one.ref.taskId, resumeCondition: 'Dependency completes' },
@@ -337,7 +354,14 @@ async function controls(ctx, fixture) {
     assert.equal(afterStale.state.task.status, 'running')
     assert.deepEqual(afterStale.state.attempt.artifactIds, [])
     assert.equal(afterStale.active, true)
-    mustSucceed(executor.redirect(four.ref, afterStale.state.task.version, progress.input), 'resume after stale report')
+    mustSucceed(executor.redirect(four.ref, afterStale.state.task.version, unsealed.input), 'resume after stale report')
+    await eventually(() => unsealed.requests[0], 'unsealed artifact model request')
+    unsealed.report('ready', { artifactIds: ['missing-artifact'] })
+    await eventually(() => current(fixture, four.ref).issue === 'acceptance_unsatisfied', 'unsealed readiness rejection')
+    const afterUnsealed = current(fixture, four.ref)
+    assert.equal(afterUnsealed.state.task.status, 'running')
+    assert.equal(afterUnsealed.report, undefined)
+    mustSucceed(executor.redirect(four.ref, afterUnsealed.state.task.version, progress.input), 'resume after unsealed report')
     await eventually(() => progress.requests[0], 'progress model request')
     progress.report('progress')
     await eventually(() => current(fixture, four.ref).report?.kind === 'progress', 'valid progress')
@@ -477,10 +501,24 @@ async function resume(ctx, fixture) {
   assert.match(messages, /PA006_INPUT\[initial-wait\]/)
   assert.match(messages, /PA006_INPUT\[second-wait\]/)
   assert.match(messages, /PA006_INPUT\[resumed\]/)
+  seal(fixture, ref, 'artifact-resumed', 'Evidence from the resumed worker.')
   resumed.report('ready', { artifactIds: ['artifact-resumed'] })
   await eventually(() => current(fixture, ref).state.task.status === 'verifying', 'resumed report')
   assert.equal(await executor.waitForRelease(ref), true)
-  assert.equal(current(fixture, ref).state.attempt.outcome, undefined)
+  const released = current(fixture, ref).state
+  assert.equal(released.attempt.outcome, undefined)
+  assert.ok(released.attempt.worker.releasedAt)
+  const verifier = store.createVerifier({
+    check({ state, artifacts }) {
+      assert.equal(new TextDecoder().decode(artifacts[0].bytes), 'Evidence from the resumed worker.')
+      return state.task.acceptance.criteria.map(criterion => ({
+        criterion, satisfied: true, evidence: 'Read the sealed bytes after native release.',
+      }))
+    },
+  })
+  const verified = mustSucceed(await verifier.verify(ref, { expectedVersion: released.task.version }), 'verify released Worker')
+  assert.equal(verified.state.task.status, 'completed')
+  assert.equal(store.getVerification(ref, verified.state.task.version)?.artifacts[0]?.id, 'artifact-resumed')
 }
 
 async function checkPhase(ctx, phase) {

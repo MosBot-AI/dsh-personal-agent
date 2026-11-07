@@ -72,6 +72,7 @@ function matchesAttempt({ task, attempt }: { task: Task; attempt: Attempt }): bo
     && attemptStatuses[task.status] === attempt.status
     && generationMatches
     && hasRequiredEvidence
+    && (attempt.worker?.releasedAt === undefined || attempt.worker.releasedAt <= task.updatedAt)
     && waitMatchesExecution
 }
 
@@ -134,6 +135,7 @@ export const workEventSchema = z.discriminatedUnion('type', [
     referenceId: waitReasonSchema.shape.referenceId,
   }),
   z.strictObject({ type: z.literal('ready'), ...fenced, artifactIds: artifactIdsSchema }),
+  z.strictObject({ type: z.literal('release_worker'), ...fenced }),
   z.strictObject({ type: z.literal('verify'), ...fenced, evidence: verificationEvidenceSchema }),
   z.strictObject({
     type: z.literal('fail'),
@@ -344,7 +346,7 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
       const { worker } = event
       if (worker) {
         const history = attempt.worker?.inputHistory ?? []
-        if (event.sessionId === undefined || history.includes(worker.inputCursor)
+        if (event.sessionId === undefined || worker.releasedAt !== undefined || history.includes(worker.inputCursor)
           || worker.inputHistory.length !== history.length + 1
           || history.some((cursor, index) => worker.inputHistory[index] !== cursor)
           || worker.inputHistory.at(-1) !== worker.inputCursor) return reject('invalid_input')
@@ -393,6 +395,11 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
     case 'ready':
       if (task.status !== 'running') return reject('invalid_transition')
       return advance(state, 'verifying', { ...attempt, status: 'verifying', artifactIds: [...event.artifactIds] }, event.at)
+    case 'release_worker':
+      if (task.status !== 'verifying' || !attempt.worker || attempt.worker.releasedAt !== undefined) {
+        return reject('invalid_transition')
+      }
+      return advance(state, 'verifying', { ...attempt, worker: { ...attempt.worker, releasedAt: event.at } }, event.at)
     case 'verify':
       return task.status === 'verifying'
         ? complete(state, event.evidence, event.at, false)
