@@ -210,6 +210,15 @@ class WorkStore {
     })
   }
 
+  hasUnsettledEffects(ref: WorkRef, attemptId: AttemptId): boolean {
+    return this.access(db => db.prepare(`
+      SELECT 1 FROM effects e JOIN tasks t ON t.id = e.task_id
+      WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ? AND e.attempt_id = ?
+        AND coalesce(e.record ->> '$.status', '') NOT IN ('prepared', 'authorized', 'confirmed', 'failed')
+      LIMIT 1
+    `).get(ref.taskId, ref.ownerId, ref.profileId, attemptId) !== undefined)
+  }
+
   getDelivery(ref: WorkRef, deliveryId: DeliveryId) {
     return this.access(db => {
       const row = db.prepare(`
