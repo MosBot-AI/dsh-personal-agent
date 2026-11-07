@@ -120,6 +120,7 @@ export const workEventSchema = z.discriminatedUnion('type', [
     worker: workerExecutionSchema.optional(),
   }),
   z.strictObject({ type: z.literal('record_input'), ...fenced, cursor: workerCursorSchema }),
+  z.strictObject({ type: z.literal('recover_attempt'), ...fenced }),
   z.strictObject({
     type: z.literal('wait'),
     ...fenced,
@@ -299,7 +300,7 @@ function isFenced(
 function hasCurrentFence(state: WorkState, event: Extract<WorkEvent, { generation: number }>): boolean {
   return event.attemptId === state.attempt.id
     && event.generation === state.attempt.generation
-    && (event.type === 'confirm_cancel' || event.type === 'reconcile'
+    && (event.type === 'confirm_cancel' || event.type === 'reconcile' || event.type === 'recover_attempt'
       || event.generation === state.task.generation)
 }
 
@@ -379,6 +380,18 @@ export function transitionWork(state: WorkState, event: WorkEvent): WorkTransiti
         ...attempt,
         worker: { ...attempt.worker, inputCursor: event.cursor, inputHistory: [...attempt.worker.inputHistory, event.cursor] },
       }, event.at)
+    case 'recover_attempt': {
+      if (!attempt.worker || task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled'
+        || task.status === 'reconciliation_required'
+        || (attempt.worker.releasedAt !== undefined && task.status !== 'cancelling')) {
+        return reject('invalid_transition')
+      }
+      // Cold process absence is not a termination receipt. Retire the old
+      // generation while retaining its unresolved work and exact wait reference.
+      const generation = task.status === 'cancelling' ? task.generation : task.generation + 1
+      return advance(state, 'reconciliation_required', { ...attempt, status: 'cancelling' }, event.at,
+        { generation, wait: task.wait })
+    }
     case 'wait': {
       const dependencyWait = event.wait.reason === 'dependency'
       if (dependencyWait) {

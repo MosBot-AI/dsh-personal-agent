@@ -160,8 +160,10 @@ export function createInboxService(options: InboxServiceOptions) {
       dataScope: action.dataScope,
       preview: JSON.stringify(action.payload, null, 2),
     })) ?? []
+    const recoveryMode = store.recoveryMode()
     return { ok: true, kind: 'snapshot', snapshot: {
       workerConfigured: executor !== undefined && worker !== undefined,
+      ...(recoveryMode === 'normal' ? {} : { recoveryMode }),
       sessions,
       projects: store.listInboxProjects(owner).map(({ id, title, purpose }) => ({ id, title, purpose })),
       tasks: work.map(state => projectTask(owner, state)),
@@ -216,6 +218,8 @@ export function createInboxService(options: InboxServiceOptions) {
     const decoded = requestSchema.safeParse(input)
     if (!decoded.success) return failure('invalid_input')
     const request = decoded.data
+    if (store.recoveryMode() === 'restore' && request.type !== 'snapshot' && request.type !== 'artifact'
+      && request.type !== 'cancel') return failure('recovery_required')
 
     try {
       switch (request.type) {

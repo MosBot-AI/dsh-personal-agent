@@ -1,25 +1,29 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { freezeMessage, MessageId } from '@deepseek-ai/dsh-llm'
 import { SessionId as nativeSessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
-import type { SessionId } from '../domain/model.js'
+import { WORKER_INPUT_LIMIT, type SessionId } from '../domain/model.js'
 import { createPrivateWorkers } from '../policy/private-worker.js'
-import { workerReportInstructions } from './reports.js'
+import { workerMessageDigest } from './recovery-session.js'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'dshpa-work-input': { kind: 'dshpa-work-input'; cursor: string }
+    'dshpa-work-input': { kind: 'dshpa-work-input'; cursor: string; digest?: string }
   }
 }
 
 export interface NativeWorkerInput {
   readonly cursor: string
   readonly text: string
+  readonly messageId: string
+  readonly digest: string
+  /** Synchronous exact journal acknowledgement after the native flush. */
+  readonly acknowledge: () => boolean
 }
 
 export interface NativeWorker {
-  followup(input: NativeWorkerInput): void
-  steer(input: NativeWorkerInput): void
+  followup(input: NativeWorkerInput): Promise<void>
+  steer(input: NativeWorkerInput): Promise<void>
   flush(): Promise<void>
   whenIdle(): Promise<void>
   readReport(): string | undefined
@@ -43,6 +47,7 @@ type OpenInput = Parameters<NativeWorkerRuntime['open']>[0]
 interface Delivery {
   readonly cursor: string
   readonly messageId: string
+  readonly digest: string
   stepTurn?: number
   matchingTurn?: number
   text?: string
@@ -71,7 +76,25 @@ interface Subagents {
 }
 
 const STOP_TIMEOUT_MS = 10_000
-const MAX_DELIVERIES = 64
+
+interface MintedInput {
+  readonly cursor: string
+  readonly digest: string
+  readonly durable: Promise<boolean>
+}
+
+async function acknowledged(acks: readonly Promise<boolean>[], signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return false
+  if (acks.length === 0) return true
+  const cancelled = Promise.withResolvers<false>()
+  const abort = () => cancelled.resolve(false)
+  signal.addEventListener('abort', abort, { once: true })
+  try {
+    return await Promise.race([Promise.all(acks).then(results => results.every(Boolean)), cancelled.promise])
+  } finally {
+    signal.removeEventListener('abort', abort)
+  }
+}
 
 function observeDelivery(delivery: Delivery, event: SessionEvent): void {
   if (delivery.ended) return
@@ -81,7 +104,8 @@ function observeDelivery(delivery: Delivery, event: SessionEvent): void {
       break
     case 'user/message': {
       const { id, source } = event.data
-      if (id === delivery.messageId && source.kind === 'dshpa-work-input' && source.cursor === delivery.cursor) {
+      if (id === delivery.messageId && source.kind === 'dshpa-work-input' && source.cursor === delivery.cursor
+        && source.digest === delivery.digest) {
         delivery.matchingTurn = delivery.stepTurn
       }
       break
@@ -244,7 +268,9 @@ export function createNativeWorkerRuntime(
       let stopping: Promise<boolean> | undefined
       let delivery: Delivery | undefined
       let sends = 0
-      const minted = new Map<string, string>()
+      let admittedInput = false
+      const minted = new Map<string, MintedInput>()
+      const sent = new Set<string>()
       const active = () => stopping === undefined && !input.signal.aborted && input.isCurrent()
       const assertActive = () => {
         if (!active()) throw new Error('The private worker attempt is no longer current')
@@ -261,16 +287,26 @@ export function createNativeWorkerRuntime(
           }
         }
         checkLaunch()
-        agentCtx.on('agent/pre-step', async ({ messages, modelSelection }, next) => {
+        agentCtx.on('agent/pre-step', async ({ messages, modelSelection, signal }, next) => {
           let owned = true
+          const acks: Promise<boolean>[] = []
           for (const { id, source } of messages) {
-            const cursor = minted.get(id)
+            const message = minted.get(id)
             minted.delete(id)
-            if (cursor === undefined || source.kind !== 'dshpa-work-input' || source.cursor !== cursor) owned = false
+            if (!message || source.kind !== 'dshpa-work-input' || source.cursor !== message.cursor || source.digest !== message.digest) {
+              owned = false
+            } else {
+              acks.push(message.durable)
+            }
           }
-          if (!owned || delivery === undefined || !active() || !matchesRoute(input, modelSelection)) return { kind: 'reject' }
+          if (!owned || (acks.length === 0 && !admittedInput) || !active() || !matchesRoute(input, modelSelection)) {
+            return { kind: 'reject' }
+          }
+          if (!await acknowledged(acks, signal) || signal.aborted || !active()) return { kind: 'reject' }
           const decision = await next()
-          return active() ? decision : { kind: 'reject' }
+          if (!active() || signal.aborted) return { kind: 'reject' }
+          if (decision.kind === 'enter' && acks.length > 0) admittedInput = true
+          return decision
         }, { prepend: true })
         agentCtx.on('session/event', (session, event) => {
           if (session === agent.session && delivery !== undefined) observeDelivery(delivery, event)
@@ -284,21 +320,36 @@ export function createNativeWorkerRuntime(
         : await workers.create({ sessionId: id, meta: { cwd: input.cwd }, agentOptions, signal: input.signal })
       const { agent } = handle
 
-      function deliver(method: 'followup' | 'steer', { cursor, text }: NativeWorkerInput) {
+      async function deliver(method: 'followup' | 'steer', { cursor, text, messageId, digest, acknowledge }: NativeWorkerInput) {
         assertActive()
-        if (sends >= MAX_DELIVERIES) throw new Error('The private worker input limit was reached')
-        const message = createUserMessage({
-          content: [{ type: 'text', text: `${workerReportInstructions(cursor)}\n\n${text}` }],
-          source: { kind: 'dshpa-work-input', cursor },
+        if (sends >= WORKER_INPUT_LIMIT) throw new Error('The private worker input limit was reached')
+        if (sent.has(messageId) || workerMessageDigest(text) !== digest) {
+          throw new Error('The private worker input identity or digest does not match')
+        }
+        const message = freezeMessage({
+          id: MessageId(messageId),
+          role: 'user',
+          content: [{ type: 'text', text }],
+          source: { kind: 'dshpa-work-input', cursor, digest },
         })
+        const durable = Promise.withResolvers<boolean>()
         sends++
-        minted.set(message.id, cursor)
-        delivery = { cursor, messageId: message.id, ended: false }
+        sent.add(message.id)
+        minted.set(message.id, { cursor, digest, durable: durable.promise })
+        delivery = { cursor, messageId: message.id, digest, ended: false }
         try {
           agent[method](message)
+          // followup/steer wake natively. The pre-step gate waits on this
+          // barrier and the exact SQLite acknowledgement before inference.
+          await flushSession(agent.session)
+          assertActive()
+          if (acknowledge() !== true) throw new Error('The private worker input acknowledgement was rejected')
+          assertActive()
+          durable.resolve(true)
         } catch (error) {
           minted.delete(message.id)
-          delivery = undefined
+          if (delivery?.messageId === message.id) delivery = undefined
+          durable.resolve(false)
           throw error
         }
       }

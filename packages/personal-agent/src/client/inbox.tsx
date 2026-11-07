@@ -53,6 +53,7 @@ function noticeFor(code: string): MessageKey {
     case 'stale_attempt':
     case 'action_changed': return 'notice.conflict'
     case 'capacity': return 'notice.capacity'
+    case 'recovery_required': return 'notice.recovery'
     case 'outcome_uncertain':
     case 'host_unavailable': return 'notice.unknown'
     default: return 'notice.failed'
@@ -399,6 +400,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
       </div>
     </header>
     {!writable && snapshot && <p className="dshpa-banner">{t('connection.stale')}</p>}
+    {snapshot?.recoveryMode && <p className="dshpa-banner" role="status">
+      {t(snapshot.recoveryMode === 'restore' ? 'notice.restore' : 'notice.recovery')}
+    </p>}
     {memory.notice && <p className="dshpa-banner" role="status">{t(memory.notice)}</p>}
     <div className="dshpa-columns">
       <section className="dshpa-today">
@@ -406,7 +410,7 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           <h2 id="dshpa-attention">{t('today.attention')} <span>{approvals.length + questions.length}</span></h2>
           {approvals.map(approval => <ApprovalCard key={approval.id} approval={approval} t={t}
             task={snapshot?.tasks.find(task => task.id === approval.taskId)}
-            disabled={!writable || mutations.current.has(`approval:${approval.id}`)}
+            disabled={!writable || Boolean(snapshot?.recoveryMode) || mutations.current.has(`approval:${approval.id}`)}
             submit={request => { void mutate(`approval:${approval.id}`, request) }} viewTask={chooseTask} />)}
           {questions.map(question => <article className="dshpa-card dshpa-attention" key={question.id}>
             <h3>{t('today.question')}</h3>
@@ -442,7 +446,7 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           </li>)}</ul>
         </details>}
         {task ? <TaskDetail task={task} project={snapshot?.projects.find(project => project.id === task.projectId)}
-          workerConfigured={snapshot?.workerConfigured === true} t={t} writable={writable}
+          workerConfigured={snapshot?.workerConfigured === true && !snapshot.recoveryMode} t={t} writable={writable}
           canOpenSession={writable && snapshot?.sessions.some(session => session.id === task.sessionId) === true}
           busy={mutations.current.has(`task:${task.id}`)} headingRef={heading}
           redirectDraft={memory.redirect.get(task.id) ?? ''} answerDraft={memory.answer.get(task.id) ?? ''}

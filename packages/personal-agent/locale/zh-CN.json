@@ -73,6 +73,8 @@
   "notice.updated": "宿主已收到请求，正在刷新工作状态。",
   "notice.unknown": "请求结果未知，草稿已保留。请核对当前状态后再决定是否重试。",
   "notice.failed": "宿主拒绝了请求，草稿已保留。",
+  "notice.recovery": "宿主正在核对中断的工作，核对后才可发起新派发。",
+  "notice.restore": "恢复的快照处于仅对账模式，新任务与交付已禁用。",
   "notice.conflict": "任务状态已变化。请核对刷新后的状态，再次提交。",
   "notice.denied": "当前权限范围内无法执行此操作。",
   "notice.notFound": "这项内容已不可用。",

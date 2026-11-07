@@ -17,6 +17,7 @@ import {
   effectSchema,
   projectSchema,
   sourceEventSchema,
+  taskSchema,
   type ArtifactId,
   type AttemptId,
   type ConversationId,
@@ -41,8 +42,14 @@ import {
 } from '../domain/verification.js'
 import { createActionGate, type ActionGateOptions } from '../policy/dispatch.js'
 import { consumeWorkerReleaseProof } from '../runtime/executor.js'
+import {
+  acknowledgeWorkerInput, insertWorkerInput, readWorkerInputs, recordInputObservation,
+  type InputObservation, type JournaledWorkerInput, type WorkerInputIntent,
+} from '../runtime/input-journal.js'
+import { createEffectRecovery, type EffectRecoveryOptions } from '../runtime/recovery-effects.js'
 import { createOutbox, type OutboxOptions } from '../runtime/outbox.js'
 import { openStorageDatabase, type StorageDatabase } from './database.js'
+import { dispatchPermitted, markStartupRecovery, recoveryMode } from './recovery-state.js'
 import { sqliteCode, StorageError, transaction } from './schema.js'
 
 const MAX_BYTES = 1024 * 1024
@@ -79,7 +86,7 @@ type Receipt = z.infer<typeof receiptSchema>
 export type StoredWorkResult =
   | (Receipt & { replayed: boolean })
   | Extract<WorkCommandResult, { ok: false }>
-  | { ok: false; code: 'command_conflict' | 'source_duplicate' | 'conflict' }
+  | { ok: false; code: 'command_conflict' | 'source_duplicate' | 'conflict' | 'recovery_required' }
 
 function hasBoundedJson(value: unknown): boolean {
   try {
@@ -167,12 +174,14 @@ function commandFingerprint(
 class WorkStore {
   private closed = false
   private outbox?: ReturnType<typeof createOutbox>
+  private effectRecovery?: ReturnType<typeof createEffectRecovery>
   readonly artifacts = createArtifactStore(operation => this.access(operation))
 
   constructor(private readonly storage: StorageDatabase) {}
 
   close(): void {
     if (this.outbox?.isActive()) throw new StorageError('busy', 'The outbox still has provider operations in flight')
+    if (this.effectRecovery?.isActive()) throw new StorageError('busy', 'Effect readback is still in flight')
     this.closeDatabase()
   }
 
@@ -182,13 +191,77 @@ class WorkStore {
   }
 
   createActionGate(options: ActionGateOptions) {
-    return createActionGate(operation => this.access(operation), options)
+    return createActionGate(operation => this.access(operation), options, dispatchPermitted)
   }
 
   createOutbox(options: OutboxOptions) {
     if (this.outbox) throw new Error('An outbox is already open for this store')
-    this.outbox = createOutbox(operation => this.access(operation), options)
+    this.outbox = createOutbox(operation => this.access(operation), options, dispatchPermitted)
     return this.outbox
+  }
+
+  createEffectRecovery(options: EffectRecoveryOptions = {}) {
+    if (this.effectRecovery) throw new Error('Effect recovery is already open for this store')
+    this.effectRecovery = createEffectRecovery(operation => this.access(operation), options)
+    return this.effectRecovery
+  }
+
+  recoveryMode() {
+    return this.access(recoveryMode)
+  }
+
+  canDispatch(): boolean {
+    return this.access(dispatchPermitted)
+  }
+
+  listColdWork(after: string): WorkState[] {
+    return this.access(db => db.prepare(`
+      SELECT t.record AS task, a.record AS attempt FROM tasks t
+      LEFT JOIN attempts a ON a.task_id = t.id AND a.id = t.attempt_id
+      WHERE t.id > ? AND json_type(a.record, '$.worker') = 'object'
+        AND (t.record ->> '$.status') IN (
+          'queued', 'running', 'verifying', 'cancelling', 'paused', 'waiting_input',
+          'waiting_approval', 'waiting_event', 'waiting_environment', 'waiting_resource', 'blocked'
+        )
+      ORDER BY t.id LIMIT 128
+    `).all(after).map(row => this.decodeWork(row)))
+  }
+
+  listColdInputAttempts(after: string) {
+    return this.access(db => db.prepare(`
+      SELECT DISTINCT i.attempt_id AS attemptId, t.record AS task, a.record AS attempt
+      FROM worker_inputs i JOIN tasks t ON t.id = i.task_id
+      JOIN attempts a ON a.task_id = i.task_id AND a.id = i.attempt_id AND a.generation = i.generation
+      WHERE i.attempt_id > ? AND i.status IN ('intent', 'flushed')
+      ORDER BY i.attempt_id LIMIT 128
+    `).all(after).map(row => {
+      const task = decodeRecord(row.task, taskSchema)
+      const attempt = decodeRecord(row.attempt, attemptSchema)
+      if (attempt.id !== row.attemptId || attempt.taskId !== task.id || !sameScope(task, attempt.mandate)) {
+        throw new StorageError('corrupt', 'Worker journal attempt scope does not match its task')
+      }
+      return { ref: { ownerId: task.ownerId, profileId: task.profileId, taskId: task.id }, attempt }
+    }))
+  }
+
+  workerInputs(ref: WorkRef, attemptId: AttemptId) {
+    return this.access(db => readWorkerInputs(db, ref, attemptId))
+  }
+
+  observeWorkerInput(ref: WorkRef, input: JournaledWorkerInput, observation: InputObservation, at: UtcInstant): boolean {
+    return this.access(db => recordInputObservation(db, ref, input, observation, at))
+  }
+
+  applyWorkerEvent(ref: WorkRef, input: unknown, journal: WorkerInputIntent): StoredWorkResult {
+    const event = workEventSchema.safeParse(input)
+    if (!event.success || (event.data.type !== 'start' && event.data.type !== 'record_input')) {
+      return { ok: false, code: 'invalid_input' }
+    }
+    return this.applyRuntimeEvent(ref, event.data, {}, journal)
+  }
+
+  acknowledgeWorkerInput(ref: WorkRef, input: WorkerInputIntent, at: UtcInstant): boolean {
+    return this.access(db => recoveryMode(db) === 'normal' && acknowledgeWorkerInput(db, ref, input, at))
   }
 
   createVerifier(options: VerificationOptions & { readonly authorizeCommit?: () => boolean }) {
@@ -360,6 +433,9 @@ class WorkStore {
     const decoded = workCommandSchema.safeParse(input)
     if (!decoded.success) return { ok: false, code: 'invalid_command' }
     const command = decoded.data
+    if (command.type !== 'work.get' && command.type !== 'work.cancel' && this.recoveryMode() === 'restore') {
+      return { ok: false, code: 'recovery_required' }
+    }
     const intents = decodeIntents(intentInput)
     if (!intents) return { ok: false, code: 'invalid_input' }
     if (intents.sourceEvent && !sameScope(actor, intents.sourceEvent)) {
@@ -426,8 +502,12 @@ class WorkStore {
     return this.applyRuntimeEvent(release.ref, release.event, {})
   }
 
-  private applyRuntimeEvent(ref: WorkRef, event: WorkEvent, intents: ValidatedIntents): StoredWorkResult {
+  private applyRuntimeEvent(ref: WorkRef, event: WorkEvent, intents: ValidatedIntents, journal?: WorkerInputIntent): StoredWorkResult {
     return this.commit(db => {
+      if (journal && !dispatchPermitted(db)) return { ok: false, code: 'recovery_required' }
+      if (event.type === 'recover_attempt' && recoveryMode(db) !== 'reconciling') {
+        return { ok: false, code: 'invalid_transition' }
+      }
       const before = this.loadWork(db, ref)
       if (!before) return { ok: false, code: 'not_found' }
       const result = transitionWork(before, event)
@@ -438,6 +518,7 @@ class WorkStore {
       }
       if (this.sourceAlreadyStored(db, intents.sourceEvent)) return { ok: false, code: 'source_duplicate' }
       const receipt = this.persist(db, before, result, event.type, event.at, intents, recordEncoder())
+      if (journal) insertWorkerInput(db, result.state, journal)
       return { ...receipt, replayed: false }
     })
   }
@@ -446,6 +527,7 @@ class WorkStore {
     const intents = decodeIntents({ deliveries: evidence.deliveries })
     if (!intents) return { ok: false, code: 'invalid_input' }
     return this.commit(db => {
+      if (!dispatchPermitted(db)) return { ok: false, code: 'recovery_required' }
       const before = this.loadWork(db, ref)
       if (!before) return { ok: false, code: 'not_found' }
       if (before.task.version !== evidence.expectedVersion) return { ok: false, code: 'version_conflict' }
@@ -669,7 +751,15 @@ class WorkStore {
 }
 
 export function openWorkStore(directory: string): WorkStore {
-  return new WorkStore(openStorageDatabase(directory))
+  const storage = openStorageDatabase(directory)
+  try {
+    markStartupRecovery(storage.db)
+    return new WorkStore(storage)
+  } catch (error) {
+    if (error instanceof StorageError && error.code === 'corrupt') return storage.quarantine(error)
+    storage.close()
+    throw error
+  }
 }
 
 export type { WorkStore }
