@@ -20,6 +20,7 @@ import {
 } from '../domain/model.js'
 import { workStateSchema, type WorkState } from '../domain/transitions.js'
 import { verificationRecordSchema } from '../domain/verification.js'
+import { recoveryMode } from '../storage/recovery-state.js'
 import { StorageError, transaction } from '../storage/schema.js'
 import type { WorkRef } from '../storage/store.js'
 
@@ -87,7 +88,7 @@ export interface OutboxOptions {
 }
 
 type FailureCode = 'not_found' | 'permission_denied' | 'stale_attempt' | 'busy' | 'blocked' | 'not_due'
-  | 'reconciliation_required' | 'readback_unavailable' | 'outcome_uncertain' | 'conflict'
+  | 'reconciliation_required' | 'recovery_required' | 'readback_unavailable' | 'outcome_uncertain' | 'conflict'
 type Failure = { ok: false; code: FailureCode }
 export type OutboxResult = { ok: true; delivery: Delivery } | Failure
 
@@ -267,7 +268,7 @@ function bindResponse(raw: unknown, identity: ProviderRequest): ProviderResponse
 }
 
 /** Same-writer delivery controller. The caller authenticates the supplied WorkRef. */
-export function createOutbox(access: DatabaseAccess, options: OutboxOptions) {
+export function createOutbox(access: DatabaseAccess, options: OutboxOptions, permit = (_db: DatabaseSync) => true) {
   const active = new Set<DeliveryId>()
   const maxRetries = z.int().min(0).max(8).parse(options.maxRetries ?? 3)
   const retryDelayMs = z.int().min(1).max(300_000).parse(options.retryDelayMs ?? 5_000)
@@ -314,6 +315,7 @@ export function createOutbox(access: DatabaseAccess, options: OutboxOptions) {
     if (mode === 'send') {
       if (delivery.status === 'dispatching' || delivery.status === 'uncertain') return deny('reconciliation_required')
       if (delivery.status !== 'pending') return { ok: true, delivery }
+      if (!permit(db)) return deny('recovery_required')
       if (!canSend(row)) return deny('stale_attempt')
       if (delivery.nextAttemptAt !== undefined && delivery.nextAttemptAt > now()) return deny('not_due')
       if (blocksEarlier(db, ref, row)) return deny('blocked')
@@ -417,7 +419,7 @@ export function createOutbox(access: DatabaseAccess, options: OutboxOptions) {
           return accept(db, row, response)
         }
         if (response?.kind === 'not_sent' && !('receipt' in row.delivery)) {
-          return writeDelivery(db, row, retry(row, response.retryable))
+          return writeDelivery(db, row, retry(row, response.retryable && recoveryMode(db) !== 'restore'))
         }
         if ('receipt' in row.delivery) return deny('outcome_uncertain')
         return writeDelivery(db, row, {

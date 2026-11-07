@@ -6,7 +6,9 @@ import {
 } from '../domain/model.js'
 import type { WorkEvent, WorkState } from '../domain/transitions.js'
 import type { StoredCommandContext, StoredWorkResult, WorkRef, WorkStore } from '../storage/store.js'
-import type { NativeWorker, NativeWorkerRuntime } from './native-worker.js'
+import { confirmOwnedCancellation } from './cancel.js'
+import { makeWorkerInput, type WorkerInputIntent } from './input-journal.js'
+import type { NativeWorker, NativeWorkerInput, NativeWorkerRuntime } from './native-worker.js'
 import { allowsWorkerData, resolveWorkerDirectory, workerPresetSchema, type WorkerPreset } from './presets.js'
 import { decodeWorkerReport, workerInputSchema, type WorkerReport } from './reports.js'
 
@@ -121,6 +123,7 @@ class WorkerExecutor {
     if (!decoded.success) return { ok: false, code: 'invalid_input' }
     const requested = decoded.data
     const { store, runtime } = this.options
+    if (!store.canDispatch()) return { ok: false, code: 'recovery_required' }
     const state = store.getWork(ref)
     if (!state) return { ok: false, code: 'not_found' }
     if (state.task.version !== requested.expectedVersion) return { ok: false, code: 'version_conflict' }
@@ -139,6 +142,7 @@ class WorkerExecutor {
     if (saved) {
       if (saved.inputHistory.includes(requested.input.cursor)) return { ok: false, code: 'duplicate_input' }
       if (saved.inputHistory.length >= WORKER_INPUT_LIMIT) return { ok: false, code: 'capacity' }
+      if (saved.releasedAt === undefined) return { ok: false, code: 'runtime_not_quiescent' }
       if (savedSession !== sessionId || saved.cwd !== cwd || saved.presetId !== preset.id
         || saved.provider !== preset.provider || saved.model !== preset.model
         || !requested.dataScope.every(label => savedScope?.dataScope.includes(label))) {
@@ -146,6 +150,7 @@ class WorkerExecutor {
       }
     }
 
+    const journal = makeWorkerInput(state, sessionId, requested.input, 'followup')
     const entry: Entry = {
       ref: { ...ref },
       attemptId: state.attempt.id,
@@ -158,7 +163,7 @@ class WorkerExecutor {
     this.entries.set(ref.taskId, entry)
     let started: StoredWorkResult
     try {
-      started = store.applyEvent(ref, {
+      started = store.applyWorkerEvent(ref, {
         type: 'start',
         ...fence(state, this.now()),
         executor: 'native-dsh',
@@ -168,7 +173,7 @@ class WorkerExecutor {
           presetId: preset.id, cwd, provider: preset.provider, model: preset.model, inputCursor: requested.input.cursor,
           inputHistory: [...(saved?.inputHistory ?? []), requested.input.cursor],
         },
-      })
+      }, journal)
     } catch (error) {
       this.entries.delete(ref.taskId)
       throw error
@@ -189,7 +194,7 @@ class WorkerExecutor {
         void this.retire(entry)
         return { ok: false, code: 'stale_attempt' }
       }
-      worker.followup(requested.input)
+      await worker.followup(this.nativeInput(entry.ref, journal))
       void this.observe(entry, worker, requested.input)
       return started
     } catch {
@@ -217,15 +222,18 @@ class WorkerExecutor {
     if (history.includes(cursor)) return { ok: false, code: 'duplicate_input' }
     if (history.length >= WORKER_INPUT_LIMIT) return { ok: false, code: 'capacity' }
 
-    const result = this.options.store.applyEvent(ref, { type: 'record_input', ...fence(state, this.now()), cursor })
+    const sessionId = state.attempt.sessionId
+    if (!sessionId) return { ok: false, code: 'stale_attempt' }
+    const journal = makeWorkerInput(state, sessionId, decoded.data, 'steer')
+    const result = this.options.store.applyWorkerEvent(ref, { type: 'record_input', ...fence(state, this.now()), cursor }, journal)
     if (!result.ok) return result
     entry.version = result.state.task.version
     entry.cursor = cursor
     entry.report = undefined
     entry.issue = undefined
     try {
-      worker.steer(decoded.data)
-      void this.observe(entry, worker, decoded.data)
+      const delivery = worker.steer(this.nativeInput(entry.ref, journal))
+      void this.observe(entry, worker, decoded.data, delivery)
     } catch {
       entry.issue = 'host_unavailable'
       return { ok: false, code: 'host_unavailable' }
@@ -252,8 +260,7 @@ class WorkerExecutor {
           const current = store.getWork(ref)
           if (current?.task.status === 'cancelling' && current.attempt.id === attempt.id
             && current.attempt.worker?.releasedAt !== undefined) {
-            store.applyEvent(ref, { type: 'confirm_cancel', ...fence(current, this.now()),
-              runtimeQuiescent: true, uncertainEffects: store.hasUnsettledEffects(ref, attempt.id) })
+            confirmOwnedCancellation(store, ref, attempt.id, attempt.generation, this.now())
           }
         }
       }
@@ -307,9 +314,16 @@ class WorkerExecutor {
       && state.task.generation === entry.generation && state.attempt.id === entry.attemptId ? state : undefined
   }
 
-  private async observe(entry: Entry, worker: NativeWorker, input: WorkerInput): Promise<void> {
+  private nativeInput(ref: WorkRef, input: WorkerInputIntent): NativeWorkerInput {
+    return {
+      cursor: input.cursor, text: input.content, messageId: input.messageId, digest: input.digest,
+      acknowledge: () => this.options.store.acknowledgeWorkerInput(ref, input, this.now()),
+    }
+  }
+
+  private async observe(entry: Entry, worker: NativeWorker, input: WorkerInput, delivery?: Promise<void>): Promise<void> {
     try {
-      await worker.flush()
+      if (delivery) await delivery
       await worker.whenIdle()
       if (entry.cursor !== input.cursor) return
       if (!this.current(entry)) {
@@ -413,28 +427,23 @@ class WorkerExecutor {
     const state = store.getWork(entry.ref)
     if (state?.attempt.id === entry.attemptId) {
       const base = fence(state, this.now())
-      const uncertainEffects = () => store.hasUnsettledEffects(entry.ref, entry.attemptId)
-      const event: WorkEvent | undefined = state.task.status === 'cancelling'
-        ? { type: 'confirm_cancel', ...base, runtimeQuiescent: true, uncertainEffects: uncertainEffects() }
-        : entry.failure !== undefined && state.task.status === 'running' && state.task.generation === entry.generation
-          ? { type: 'fail', ...base, runtimeQuiescent: true, uncertainEffects: uncertainEffects(), reason: entry.failure }
-          : worker && (state.task.status === 'verifying' || state.task.status === 'paused' || state.attempt.status === 'waiting')
-            && state.attempt.worker && state.attempt.worker.releasedAt === undefined
-            ? { type: 'release_worker', ...base }
-            : undefined
-      if (event) {
-        let result: StoredWorkResult
-        if (event.type === 'release_worker') {
-          const proof = Object.freeze({})
-          releaseProofs.set(proof, { store, ref: entry.ref, event })
-          result = store.confirmWorkerRelease(proof)
-        } else {
-          result = store.applyEvent(entry.ref, event)
-        }
-        if (!result.ok) {
-          entry.issue = result.code
-          return false
-        }
+      let result: StoredWorkResult | undefined
+      if (state.task.status === 'cancelling') {
+        result = confirmOwnedCancellation(store, entry.ref, entry.attemptId, entry.generation, base.at)
+      } else if (entry.failure !== undefined && state.task.status === 'running' && state.task.generation === entry.generation) {
+        result = store.applyEvent(entry.ref, {
+          type: 'fail', ...base, runtimeQuiescent: true,
+          uncertainEffects: store.hasUnsettledEffects(entry.ref, entry.attemptId), reason: entry.failure,
+        })
+      } else if (worker && (state.task.status === 'verifying' || state.task.status === 'paused' || state.attempt.status === 'waiting')
+        && state.attempt.worker && state.attempt.worker.releasedAt === undefined) {
+        const proof = Object.freeze({})
+        releaseProofs.set(proof, { store, ref: entry.ref, event: { type: 'release_worker', ...base } })
+        result = store.confirmWorkerRelease(proof)
+      }
+      if (result && !result.ok) {
+        entry.issue = result.code
+        return false
       }
     }
     if (this.entries.get(entry.ref.taskId) === entry) this.entries.delete(entry.ref.taskId)

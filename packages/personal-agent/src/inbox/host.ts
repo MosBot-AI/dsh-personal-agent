@@ -13,6 +13,8 @@ import {
 import { createIdentityBoundary } from '../policy/identity.js'
 import type { ActionRoute } from '../policy/dispatch.js'
 import type { HostAdapter } from '../runtime/host-adapter.js'
+import { createRecovery } from '../runtime/recovery.js'
+import { createSessionReadback } from '../runtime/recovery-session.js'
 import { StorageError } from '../storage/schema.js'
 import { openWorkStore } from '../storage/store.js'
 import { INBOX_RPC_ENDPOINT, type InboxSession } from './protocol.js'
@@ -198,6 +200,8 @@ export function activateLocalInbox(
       captureResultSummary: true,
     }) : undefined
     const actionGate = store.createActionGate({ identity, routes: options.actionRoutes ?? [] })
+    const recovery = createRecovery(store, { readSession: createSessionReadback(ctx) })
+    const startupRecovery = recovery.reconcileStartup().catch(() => undefined)
     const service = createInboxService({
       store, executor, identity, actionGate, ...nativeSessions(ctx),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
@@ -234,7 +238,7 @@ export function activateLocalInbox(
     })
 
     return Object.freeze({
-      store, executor, identity, actionGate, ownerToken, owner,
+      store, executor, identity, actionGate, ownerToken, owner, recovery,
       async dispose() {
         identity.release(token)
         const detached = remove()
@@ -243,6 +247,7 @@ export function activateLocalInbox(
         } finally {
           await detached
         }
+        await startupRecovery
         store.close()
       },
     })

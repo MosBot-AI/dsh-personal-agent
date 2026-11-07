@@ -73,6 +73,8 @@
   "notice.updated": "Request acknowledged. Refreshing the work status.",
   "notice.unknown": "The request outcome is unknown. Your draft was retained. Check the current status before retrying.",
   "notice.failed": "The host declined the request. Your draft was retained.",
+  "notice.recovery": "The host is checking interrupted work before starting new dispatch.",
+  "notice.restore": "This restored snapshot is open for reconciliation. New work and delivery are disabled.",
   "notice.conflict": "The task changed. Review the refreshed status before submitting again.",
   "notice.denied": "This action is unavailable in the current scope.",
   "notice.notFound": "This item is no longer available.",

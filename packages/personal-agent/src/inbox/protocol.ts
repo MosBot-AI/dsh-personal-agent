@@ -50,6 +50,7 @@ export interface InboxApproval {
 
 export interface InboxSnapshot {
   readonly workerConfigured: boolean
+  readonly recoveryMode?: 'reconciling' | 'restore'
   readonly sessions: readonly InboxSession[]
   readonly projects: readonly InboxProject[]
   readonly tasks: readonly InboxTask[]

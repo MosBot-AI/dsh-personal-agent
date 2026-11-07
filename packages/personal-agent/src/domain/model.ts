@@ -193,7 +193,7 @@ export const taskSchema = z.strictObject({
 }).refine(task => {
   const reason = requiredWaitReason[task.status]
   if (reason !== undefined) return task.wait?.reason === reason
-  return task.wait === undefined || task.status === 'paused'
+  return task.wait === undefined || task.status === 'paused' || task.status === 'reconciliation_required'
 }, { path: ['wait'], error: 'Wait reason must match the task status' })
   .refine(task => task.updatedAt >= task.createdAt, { path: ['updatedAt'], error: 'Task update precedes creation' })
 

@@ -13,11 +13,13 @@ import type { DatabaseSync } from 'node:sqlite'
 import { migration001 } from './migrations/001.js'
 import { migration002 } from './migrations/002.js'
 import { migration003 } from './migrations/003.js'
+import { migration004 } from './migrations/004.js'
 
 export const APPLICATION_ID = 0x44534850 // DSHP
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 export const V1_BACKUP_SUFFIX = '.v1.bak'
 export const V2_BACKUP_SUFFIX = '.v2.bak'
+export const V3_BACKUP_SUFFIX = '.v3.bak'
 
 export type StorageErrorCode =
   | 'busy'
@@ -79,6 +81,11 @@ const schema2Tables = [
 const schema3Tables = [
   ...schema2Tables, 'artifacts', 'work_verifications', 'outbox_bindings',
 ]
+const schema4Tables = [
+  ...schema3Tables, 'runtime_recovery', 'worker_inputs',
+]
+const sourceTables = { 1: schema1Tables, 2: schema2Tables, 3: schema3Tables }
+const backupSuffixes = { 1: V1_BACKUP_SUFFIX, 2: V2_BACKUP_SUFFIX, 3: V3_BACKUP_SUFFIX }
 
 function requireTables(db: DatabaseSync, required: readonly string[]): void {
   const tables = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name))
@@ -97,11 +104,11 @@ function syncPath(path: string, flags: 'r' | 'r+'): void {
 }
 
 /** Snapshot the live connection before DDL, including committed WAL contents. */
-function backupBeforeUpgrade(db: DatabaseSync, version: 1 | 2): void {
+function backupBeforeUpgrade(db: DatabaseSync, version: 1 | 2 | 3): void {
   const path = db.location()
   if (!path) throw new StorageError('migration_failed', 'A schema upgrade requires an on-disk backup')
   const directory = dirname(path)
-  const backup = path + (version === 1 ? V1_BACKUP_SUFFIX : V2_BACKUP_SUFFIX)
+  const backup = path + backupSuffixes[version]
   const existing = lstatSync(backup, { throwIfNoEntry: false })
   const uid = process.getuid?.()
   if (existing && (!existing.isFile() || existing.nlink !== 1
@@ -133,18 +140,22 @@ export function migrateSchema(db: DatabaseSync): void {
     const applicationId = db.prepare('PRAGMA application_id').get()?.application_id
     const version = db.prepare('PRAGMA user_version').get()?.user_version
     if (applicationId === APPLICATION_ID && version === SCHEMA_VERSION) {
-      requireTables(db, schema3Tables)
+      requireTables(db, schema4Tables)
+      const mode = db.prepare('SELECT mode FROM runtime_recovery WHERE id = 1').get()?.mode
+      if (mode !== 'normal' && mode !== 'reconciling' && mode !== 'restore') {
+        throw new StorageError('corrupt', 'The storage recovery admission record is invalid')
+      }
       return
     }
 
-    const isUpgrade = applicationId === APPLICATION_ID && (version === 1 || version === 2)
+    const isUpgrade = applicationId === APPLICATION_ID && (version === 1 || version === 2 || version === 3)
     const isEmpty = applicationId === 0 && version === 0
       && db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get() === undefined
     if (!isUpgrade && !isEmpty) {
       throw new StorageError('unsupported_schema', 'The database has an unsupported application or schema version')
     }
     if (isUpgrade) {
-      requireTables(db, version === 1 ? schema1Tables : schema2Tables)
+      requireTables(db, sourceTables[version])
       if (db.prepare('PRAGMA foreign_key_check').get() !== undefined) {
         throw new StorageError('corrupt', 'SQLite foreign key check failed before migration')
       }
@@ -156,8 +167,9 @@ export function migrateSchema(db: DatabaseSync): void {
         db.exec(migration001)
         db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
       }
-      if (version !== 2) db.exec(migration002)
-      db.exec(migration003)
+      if (version === 0 || version === 1) db.exec(migration002)
+      if (version !== 3) db.exec(migration003)
+      db.exec(migration004)
       if (db.prepare('PRAGMA foreign_key_check').get() !== undefined) {
         throw new StorageError('migration_failed', 'SQLite foreign key check failed during migration')
       }

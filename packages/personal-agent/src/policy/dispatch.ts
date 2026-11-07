@@ -53,6 +53,7 @@ type DenialCode =
   | 'revoked'
   | 'already_decided'
   | 'already_claimed'
+  | 'recovery_required'
   | 'outcome_uncertain'
 
 type Failure = { ok: false; code: DenialCode }
@@ -218,7 +219,7 @@ function grantError(db: DatabaseSync, proposal: Proposal, entry: ApprovalEntry, 
 }
 
 /** The action gate shares the work store's synchronous writer and never exposes it to adapters. */
-export function createActionGate(access: DatabaseAccess, options: ActionGateOptions) {
+export function createActionGate(access: DatabaseAccess, options: ActionGateOptions, permit = (_db: DatabaseSync) => true) {
   const { identity } = options
   const now = options.now ?? (() => utcInstantSchema.parse(new Date().toISOString()))
   const routes = options.routes.map(({ binding, permitsPayload, handoff }) => Object.freeze({
@@ -284,6 +285,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
       || !routeFor(action)) return deny('permission_denied')
 
     return access(db => transaction(db, () => {
+      if (!permit(db)) return deny('recovery_required')
       const at = now()
       const current = currentPolicy(action)
       if (!current) return deny('permission_denied')
@@ -390,6 +392,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     if (!response.success) return fail('invalid_input')
     const { requestId, expectedVersion, decision, digest } = response.data
     return access(db => transaction(db, () => {
+      if (!permit(db)) return fail('recovery_required')
       const row = db.prepare(`
         SELECT operation_id FROM action_approvals WHERE request_id = ? AND owner_id = ? AND profile_id = ?
       `).get(requestId, owner.ownerId, owner.profileId)
@@ -490,6 +493,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
       const at = now()
       const error = grantError(db, saved, approval, grantEntry, at)
       if (error) return fail(error)
+      if (!permit(db)) return fail('recovery_required')
       const work = checkWork(db, saved, dispatchable)
       if (!work.ok) return work
       if (work.state.task.version !== expectedVersion.data) return fail('version_conflict')

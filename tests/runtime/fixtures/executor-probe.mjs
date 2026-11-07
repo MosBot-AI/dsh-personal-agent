@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { openWorkStore } from './node_modules/@mosbot-ai/dshpa/lib/storage/store.js'
+import { createRecovery } from './node_modules/@mosbot-ai/dshpa/lib/runtime/recovery.js'
+import { createSessionReadback } from './node_modules/@mosbot-ai/dshpa/lib/runtime/recovery-session.js'
 
 const cliRequire = createRequire(process.argv[1])
 const baseRequire = createRequire(cliRequire.resolve('@deepseek-ai/dsh-base/package.json'))
@@ -467,7 +469,12 @@ async function waitAndRelease(ctx, fixture) {
 async function resume(ctx, fixture) {
   const { store, executor, script } = fixture
   const ref = taskRef('resume')
+  assert.equal(store.recoveryMode(), 'reconciling')
+  const recovered = await createRecovery(store, { readSession: createSessionReadback(ctx) }).reconcileStartup()
+  assert.equal(recovered.mode, 'normal')
+  assert.equal(recovered.inputs, 2)
   const previous = current(fixture, ref).state
+  assert.deepEqual(store.workerInputs(ref, previous.attempt.id).map(input => input.status), ['admitted', 'admitted'])
   assert.equal(previous.task.status, 'waiting_input')
   assert.equal(previous.attempt.worker.inputCursor, 'cursor-second-wait')
   assert.deepEqual(previous.attempt.worker.inputHistory, ['cursor-initial-wait', 'cursor-second-wait'])
