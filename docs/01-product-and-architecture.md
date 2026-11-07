@@ -31,7 +31,6 @@ These are target behaviors, not claims of current functionality.
 
 ### Non-goals for the first release
 
-- Binding an existing Bot as the primary agent, or implementing a separate no-Bot workaround.
 - Porting Hermes code as if it were a DSH plugin without adaptation.
 - Multi-tenant SaaS, distributed execution fleets, autonomous payments, a plugin marketplace, or a general workflow language.
 - Promising perfect memory, exactly-once external effects, zero-cost proactivity, or compatibility with every MCP server.

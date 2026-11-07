@@ -99,7 +99,7 @@ Use fixture/local effects first. Do not connect a privileged real account to com
 | O9 | Planning/review templates; after tasks and scheduler | Templates create inspectable plans; no accidental external action or implicit recurring schedule |
 | O10 | Unified mobile/connector API and replayable changefeed; after M1–M3 | Auth scopes, versioned commands/events, replay cursor, snapshot recovery, duplicate commands, stale approvals, device isolation |
 
-The broad memory, voice, and mobile directions remain in the product vision. This table deliberately does not convert unselected Hermes refinements into mandatory implementation work. O6/O7 are excluded and must not reappear as milestones.
+The broad memory, voice, and mobile directions remain in the product vision. This table deliberately does not convert unselected Hermes refinements into mandatory implementation work.
 
 ## 7. M5: Release hardening
 

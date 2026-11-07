@@ -13,7 +13,6 @@ Audit date: 2026-11-07 UTC. Source inspection is not runtime verification. No DS
 | D3 | Confirmed direction | Coordinate projects, tasks, information, personal affairs, and reminders; support an open connector/MCP system. |
 | D4 | Design direction | Preserve continuous conversation through durable work state and bounded context/memory; do not equate the task database with complete personal memory. |
 | D5 | Design direction | Eventual remote/mobile and voice access use the same personal agent; exact product scope and provider/interface choices remain pending. |
-| D6 | Explicit exclusion | No existing-Bot binding, Bot selector, or no-binding workaround. The Personal Agent is already the primary coordinator. |
 | D7 | Engineering recommendation | Single owner/profile and single-host reliability first; minimal state/effect/authorization contracts before distributed execution. |
 | D8 | Publication scope | Add the implementation plan to this repository's `docs/`; do not claim implementation or change the existing license as part of this publication. |
 
@@ -21,7 +20,7 @@ This register reconciles the current direction with older proposals. The earlier
 
 ## 2. Hermes comparison options: no implicit selection
 
-The options retain their original numbering to avoid ambiguity. Excluding 6 and 7 does **not** mean accepting the other eight. Existing implementation status in Hermes is not DSH implementation status and is not evidence that code is directly portable.
+The options below remain pending selection, rather than accepted implementation scope. Existing implementation status in Hermes is not DSH implementation status and is not evidence that code is directly portable.
 
 | Option | Candidate refinement | Current DSH planning status | Selection question |
 | --- | --- | --- | --- |
@@ -30,8 +29,6 @@ The options retain their original numbering to avoid ambiguity. Excluding 6 and 
 | O3 | Automatic continuous memory extraction/recall and pre-compaction saving | Pending | Which facts may be auto-saved, with what review, privacy, and quality rules? |
 | O4 | User commands/conversation to remember, inspect, correct, and forget | Pending | Which explicit operations belong in the first release? |
 | O5 | Interchangeable local, hosted, and real-time voice providers | Pending | Text first, one speech path, or provider interchangeability now? |
-| O6 | Select an existing Bot as the primary assistant | Excluded | Do not implement. |
-| O7 | Separate mode for operating without binding a Bot | Excluded | Do not implement as a distinct feature; normal DSH-native use needs no such concept. |
 | O8 | Date-based task views, task detail, project statistics, task operation history | Pending | Which richer views/history are needed beyond baseline task CRUD? |
 | O9 | Daily/weekly planning and review templates | Pending | Which templates, and should schedules be explicitly created separately? |
 | O10 | Unified mobile/connector API, change log, and reconnect protocol | Pending | Which initial clients and replay/compatibility guarantees are required? |
@@ -140,7 +137,7 @@ Additional implementation references: [domain model](https://github.com/deepseek
 | Cancellation race | Effects continue after user stop | Generation/revocation fence, native cancel, provider reconciliation |
 | Context loss or false memory | Wrong decisions and repeated work | Canonical tasks, source-backed checkpoints, correction/deletion tests |
 | Proactivity overload/cost | Notification fatigue and wasted spend | Observe mode, quiet hours, dedupe, explicit budgets and measured usefulness |
-| Scope creep from Hermes | Unchosen features displace a reliable core | O1–O10 register; explicit feature selection before M4 |
+| Scope creep from Hermes | Unchosen features displace a reliable core | Pending-option register; explicit feature selection before M4 |
 | Premature mobile/voice platform | Multiple inconsistent state machines | One command/domain core; optional adapters; minimal first client |
 | License/third-party reuse mistakes | Distribution obligations missed | Preserve current license; review notices before copying upstream code |
 
