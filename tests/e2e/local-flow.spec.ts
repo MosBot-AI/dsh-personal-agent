@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { copyFileSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -14,10 +15,11 @@ import {
   type InboxTask,
 } from '../../packages/personal-agent/src/inbox/protocol.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
-import { openWebHost } from './fixtures/web-host.js'
+import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/local-flow-probe.mjs', import.meta.url))
 const contextProbe = fileURLToPath(new URL('./fixtures/context-flow-probe.mjs', import.meta.url))
+const memoryProbe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
 const nativeSessionId = 'pa008-native-chat'
 const fixtureProjectId = 'pa008-fixture-project'
 const questionReference = 'pa008-fixture-question'
@@ -45,6 +47,90 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('keeps owner corrections and forgetting across native restart and a stale memory provider', async () => {
+    const bundle = fileURLToPath(new URL('../../packages/memory-sqlite/', import.meta.url))
+    const prepared = prepareWebHost(memoryProbe, [
+      '- id: dshpa',
+      '  config:',
+      '    inbox:',
+      "      storageDirectory: !!js dshHomePath('memory-inbox')",
+      '      workRoot: !!js process.cwd()',
+      '      memory:',
+      '        provider:',
+      '          kind: memory',
+      '          instanceId: local-memory',
+      '          pluginId: "@mosbot-ai/dshpa-memory-sqlite"',
+      '          pluginVersion: "0.0.0"',
+      '          configRevision: 1',
+    ], [bundle])
+    const scope = { kind: 'profile' } as const
+    const remember = { type: 'memory_remember', commandId: 'pa012-web-remember', scope, text: 'Fixture memory. 旧版蓝海偏好。' } as const
+    const memoryFile = join(prepared.dshHome, 'dshpa-memory', 'memory.sqlite')
+    const olderCopy = join(prepared.root, 'provider-before-correction.sqlite')
+    let host: Awaited<ReturnType<typeof openWebHost>> | undefined
+    const start = async () => {
+      const live = await openWebHost(memoryProbe, { prepared })
+      host = live
+      const cookie = await live.exchange()
+      const inbox: InboxPort = async request => {
+        const response = await live.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+        assert.ok(response.status === 200 && response.result?.ok, live.diagnostics())
+        return response.result.value
+      }
+      return inbox
+    }
+    function completed(response: InboxResponse) {
+      assert.ok(response.ok && response.kind === 'memory_change' && response.state === 'completed', JSON.stringify(response))
+      return response
+    }
+    const empty = { ok: true, kind: 'memory_records', confirmed: [], inferred: [] }
+    try {
+      const first = await start()
+      expect(await first({ type: 'snapshot' })).toMatchObject({ ok: true, snapshot: { memoryConfigured: true } })
+      expect(await host!.rpc(INBOX_RPC_ENDPOINT, remember)).toMatchObject({ status: 401 })
+      expect(await host!.rpc(INBOX_RPC_ENDPOINT, remember, await host!.exchange(true))).toMatchObject({ status: 403 })
+      const original = completed(await first(remember))
+      expect(completed(await first(remember))).toEqual(original)
+      expect(await first({ ...remember, text: 'Changed replay' })).toMatchObject({ ok: false })
+      expect(await first({ type: 'memory_search', scope, query: '蓝海偏好' })).toMatchObject({
+        ok: true, kind: 'memory_records', confirmed: [{ id: original.recordId, origin: 'explicit', confidence: 1,
+          sourceEventIds: [expect.any(String)], value: { text: remember.text } }], inferred: [],
+      })
+      const project = updated(await first({ type: 'create_project', commandId: 'pa012-isolation-project', title: 'Memory scope', purpose: 'Scope test' }))
+      assert.ok(project.projectId)
+      expect(await first({ type: 'memory_inspect', scope: { kind: 'project', projectId: project.projectId }, recordId: original.recordId }))
+        .toEqual(empty)
+      await host!.close()
+      copyFileSync(memoryFile, olderCopy)
+
+      const second = await start()
+      const previous = { type: 'memory_inspect', scope, recordId: original.recordId } as const
+      expect(await second(previous)).toMatchObject({ confirmed: [{ id: original.recordId }] })
+      const corrected = completed(await second({ type: 'memory_correct', scope, commandId: 'pa012-web-correct',
+        recordId: original.recordId, expectedRevision: original.revision, text: 'Fixture memory. 修订后的绿色偏好。' }))
+      expect(corrected.recordId).not.toBe(original.recordId)
+      expect(await second(previous)).toEqual(empty)
+      expect(await second({ type: 'memory_search', scope, query: '绿色偏好' })).toMatchObject({ confirmed: [{ id: corrected.recordId }] })
+      const forget = { type: 'memory_forget', scope, commandId: 'pa012-web-forget', recordId: corrected.recordId,
+        expectedRevision: corrected.revision } as const
+      const forgotten = completed(await second(forget))
+      expect(completed(await second(forget))).toEqual(forgotten)
+      expect(await second({ ...previous, recordId: corrected.recordId })).toEqual(empty)
+      await host!.close()
+      copyFileSync(olderCopy, memoryFile)
+
+      const restarted = await start()
+      completed(await restarted({ ...remember, commandId: 'pa012-web-new-after-rollback', text: 'Fresh evidence.' }))
+      expect(await restarted(previous)).toEqual(empty)
+      expect(await restarted({ ...previous, recordId: corrected.recordId })).toEqual(empty)
+      expect(await restarted({ type: 'memory_search', scope, query: '蓝海偏好' })).toEqual(empty)
+      expect(await restarted({ type: 'memory_search', scope, query: '绿色偏好' })).toEqual(empty)
+    } finally {
+      await host?.close()
+      rmSync(prepared.root, { recursive: true, force: true })
+    }
+  }, 45_000)
+
   it('uses configured context recall, native compaction, Worker admission and exclusion through the Web owner carrier', async () => {
     const host = await openWebHost(contextProbe, { configOnly: true, patch: [
       '- id: compaction-basic',

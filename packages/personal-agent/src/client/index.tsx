@@ -63,6 +63,31 @@ function isSchedules(value: unknown): boolean {
   }) && value.reminders.every(row => isRecord(row) && hasText(row.id, row.title, row.text, row.intendedAt, row.deliveredAt))
 }
 
+function isMemoryId(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 256 && /^[^\x00-\x1f\x7f]+$/u.test(value)
+}
+
+function isMemoryInstant(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)
+    && Number.isFinite(Date.parse(value))
+}
+
+function isMemoryRecord(value: unknown, origin: 'explicit' | 'inferred'): boolean {
+  if (!isRecord(value) || value.state !== 'active' || value.origin !== origin || !isMemoryId(value.id)
+    || !isMemoryId(value.ownerId) || !isMemoryId(value.profileId) || !isRecord(value.scope) || !isRecord(value.value)
+    || typeof value.revision !== 'number' || !isCount(value.revision) || value.revision === 0
+    || typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1
+    || !isMemoryInstant(value.validFrom) || (value.validUntil !== undefined
+      && (!isMemoryInstant(value.validUntil) || value.validUntil < value.validFrom))
+    || !Array.isArray(value.sourceEventIds) || value.sourceEventIds.length === 0 || value.sourceEventIds.length > 64
+    || !value.sourceEventIds.every(isMemoryId) || new Set(value.sourceEventIds).size !== value.sourceEventIds.length) return false
+  const scope = value.scope
+  if (scope.kind !== 'profile' && !(scope.kind === 'project' && isMemoryId(scope.projectId))
+    && !(scope.kind === 'task' && isMemoryId(scope.taskId))) return false
+  return value.value.kind === 'fact' ? typeof value.value.text === 'string' && value.value.text.length <= 16_384
+    && value.value.text.trim().length > 0 : value.value.kind === 'reference' && isMemoryId(value.value.ref)
+}
+
 function isInboxResponse(value: unknown): value is InboxResponse {
   if (!isRecord(value)) return false
   if (value.ok === false) return typeof value.code === 'string'
@@ -76,6 +101,15 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   }
   if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'context') return value.value === null || Array.isArray(value.value) || isRecord(value.value)
+  if (value.kind === 'memory_records') {
+    return Array.isArray(value.confirmed) && Array.isArray(value.inferred)
+      && value.confirmed.length + value.inferred.length <= 25
+      && value.confirmed.every(record => isMemoryRecord(record, 'explicit')) && value.inferred.every(record => isMemoryRecord(record, 'inferred'))
+  }
+  if (value.kind === 'memory_change') {
+    return (value.state === 'completed' || value.state === 'pending') && isMemoryId(value.recordId)
+      && typeof value.revision === 'number' && isCount(value.revision) && value.revision > 0
+  }
   if (value.kind === 'artifact' && isRecord(value.artifact)) {
     return typeof value.artifact.id === 'string' && typeof value.artifact.mediaType === 'string'
       && Number.isSafeInteger(value.artifact.version) && typeof value.artifact.text === 'string'
@@ -84,6 +118,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     const snapshot = value.snapshot
     return typeof snapshot.workerConfigured === 'boolean' && Array.isArray(snapshot.sessions)
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
+      && (snapshot.memoryConfigured === undefined || typeof snapshot.memoryConfigured === 'boolean')
       && (snapshot.usage === undefined || isUsage(snapshot.usage))
       && (snapshot.schedules === undefined || isSchedules(snapshot.schedules))
   }

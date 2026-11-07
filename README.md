@@ -4,7 +4,7 @@
 
 dshpa is a personal-agent project built on DeepSeek Harness. It is designed to run persistently on an owner's computer, coordinate ongoing work and deliver inspectable results through native, replaceable plugins.
 
-**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-011, PA-013, PA-018, PA-021, and PA-038).**
+**The native bundle, work and security foundations, bounded Workers, verifiable delivery, local Web inbox, guarded recovery, event routing, context checkpoints and recall, personal memory, compute and attention controls, durable schedules, resident host operations, and capability plugin contracts are implemented (PA-001 through PA-013, PA-018, PA-021, and PA-038).**
 
 The [host compatibility record](docs/evidence/host-compatibility.md) describes the verified native controls and the boundaries that later tasks must handle.
 The [work domain evidence](docs/evidence/PA-003.md) covers record validation, command admission, and task transitions.
@@ -16,6 +16,7 @@ The [local Web inbox evidence](docs/evidence/PA-008.md) covers native conversati
 The [recovery evidence](docs/evidence/PA-009.md) covers input acknowledgments, cancellation fences, and backup restore.
 The [routing evidence](docs/evidence/PA-010.md) covers source intake, subscriptions, Worker handbacks, and responsive controls.
 The [context evidence](docs/evidence/PA-011.md) covers native checkpoint capture, reference recall, exclusions, and input budgets.
+The [personal memory evidence](docs/evidence/PA-012.md) covers owner controls, provider snapshots, and exclusions that survive stale provider data.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
@@ -150,6 +151,33 @@ A `ref` is `{kind: 'task', taskId}`, `{kind: 'event', eventId}` or `{kind: 'arti
 Search checks the task and up to 12 recent eligible candidates of each evidence type. It searches up to 8 KiB per candidate and returns up to 10 excerpts. It supports normalized Chinese and English text. Use an exact reference to retrieve older evidence or the rest of a large artifact. An exclusion is a durable recall rule for that task and filters old checkpoint material derived from the excluded evidence.
 
 Before a Worker sends its actual model request, dshpa checks the sources recorded for its retained inputs against current authorization and exclusions. If a source is revoked or a relevant event is excluded, the old Worker Session is fenced from the provider. Start a fresh task with the evidence still authorized. SQLite source records, DSH Session logs and backup copies have separate retention rules. DSH keeps the original events in its Session log when it compacts the active context.
+
+### Manage personal memory
+
+Build and install the independent local memory bundle in the existing Web profile.
+
+```sh
+pnpm build
+pnpm exec dsh plugin --profile dshpa-web add "link:$PWD/packages/memory-sqlite"
+```
+
+Add this `memory` block under `config.inbox` on the `dshpa` row. The exact provider pin includes the plugin and configuration versions.
+
+```yaml
+memory:
+  provider:
+    kind: memory
+    instanceId: local-memory
+    pluginId: '@mosbot-ai/dshpa-memory-sqlite'
+    pluginVersion: '0.0.0'
+    configRevision: 1
+```
+
+Open **Personal memory** in **Today**. Select a profile, project or task scope, then save a fact explicitly. Search checks validity and the exact selected scope. Inspect shows the source receipt, confidence, validity and revision. Correction creates a replacement and hides the old record. Forgetting hides the record immediately, then asks the provider to remove its value and retain a tombstone. Use **Retry** when the provider change is pending. The authenticated `dshpa/inbox` RPC supports the same operations. For `memory_remember`, `memory_correct` and `memory_forget`, resend the identical payload and `commandId` to retry an interrupted change after a restart.
+
+Automatic extraction is off. The explicit controls record owner-confirmed facts, while the provider contract preserves inferred records separately. Memory content carries no action authority. The external `llmwiki` knowledge base remains read-only.
+
+The memory provider stores fact values in its own database. The core work database stores scope, revisions, digests, source receipts and exclusions. Keep both when backing up a profile. A stale provider copy cannot override core exclusions. Existing provider snapshots or backup files can still contain earlier values and follow their own retention rules. [SQLite memory provider](packages/memory-sqlite/README.md)
 
 ### Set compute and attention limits
 

@@ -36,7 +36,7 @@ async function stop(child: ChildProcessWithoutNullStreams): Promise<void> {
   }
 }
 
-export function prepareWebHost(probe?: string, patch: readonly string[] = []) {
+export function prepareWebHost(probe?: string, patch: readonly string[] = [], localBundles: readonly string[] = []) {
   const root = mkdtempSync(join(tmpdir(), 'dshpa-web-flow-'))
   const dshHome = join(root, 'home')
   const profile = join(dshHome, 'profiles', profileName)
@@ -51,11 +51,23 @@ export function prepareWebHost(probe?: string, patch: readonly string[] = []) {
   }
   symlinkSync(join(bundleSource, 'node_modules'), join(installed, 'node_modules'), 'junction')
   if (probe) copyFileSync(probe, join(profile, 'web-flow-probe.mjs'))
+  const dependencies = { [bundleName]: manifest.version } as Record<string, string>
+  const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', bundleName]
+  for (const source of localBundles) {
+    const metadata = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name: string; version: string }
+    const target = join(profile, 'node_modules', metadata.name)
+    mkdirSync(target, { recursive: true })
+    for (const file of ['package.json', 'cordis.patch.yml']) copyFileSync(join(source, file), join(target, file))
+    cpSync(join(source, 'lib'), join(target, 'lib'), { recursive: true })
+    symlinkSync(join(source, 'node_modules'), join(target, 'node_modules'), 'junction')
+    dependencies[metadata.name] = metadata.version
+    bundles.push(metadata.name)
+  }
   writeFileSync(join(profile, 'package.json'), JSON.stringify({
     name: profileName,
     private: true,
-    dependencies: { [bundleName]: manifest.version },
-    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', bundleName] } },
+    dependencies,
+    dsh: { profile: { bundles } },
   }))
   const rows = [...patch]
   if (probe) rows.push('- insert:', '    - id: web-flow-probe', '      name: ./web-flow-probe.mjs')
@@ -63,14 +75,16 @@ export function prepareWebHost(probe?: string, patch: readonly string[] = []) {
   return { root, dshHome, profileName }
 }
 
-export async function openWebHost(probe: string, options: { patch?: readonly string[]; configOnly?: boolean } = {}) {
-  const { root, dshHome } = prepareWebHost(probe, options.patch)
+export async function openWebHost(probe: string, options: { patch?: readonly string[]; configOnly?: boolean;
+  prepared?: ReturnType<typeof prepareWebHost> } = {}) {
+  const { root, dshHome } = options.prepared ?? prepareWebHost(probe, options.patch)
   let child: ChildProcessWithoutNullStreams | undefined
+  const close = async () => { if (child) await stop(child) }
   onTestFinished(async () => {
     try {
-      if (child) await stop(child)
+      await close()
     } finally {
-      rmSync(root, { recursive: true, force: true })
+      if (!options.prepared) rmSync(root, { recursive: true, force: true })
     }
   })
 
@@ -170,5 +184,5 @@ export async function openWebHost(probe: string, options: { patch?: readonly str
     return { status: response.status, result: message.result }
   }
 
-  return { root, get, exchange, rpc, diagnostics: () => recentDiagnostics }
+  return { root, close, get, exchange, rpc, diagnostics: () => recentDiagnostics }
 }

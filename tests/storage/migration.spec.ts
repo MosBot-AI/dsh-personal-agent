@@ -42,6 +42,7 @@ import { migration004 } from '../../packages/personal-agent/src/storage/migratio
 import { migration005 } from '../../packages/personal-agent/src/storage/migrations/005.js'
 import { migration006 } from '../../packages/personal-agent/src/storage/migrations/006.js'
 import { migration007 } from '../../packages/personal-agent/src/storage/migrations/007.js'
+import { migration008 } from '../../packages/personal-agent/src/storage/migrations/008.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -56,6 +57,7 @@ import {
   V5_BACKUP_SUFFIX,
   V6_BACKUP_SUFFIX,
   V7_BACKUP_SUFFIX,
+  V8_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -475,7 +477,7 @@ describe('SQLite failure recovery', () => {
       expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(0)
       expect(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all()).toEqual([])
 
-      db.exec('PRAGMA max_page_count = 128')
+      db.exec('PRAGMA max_page_count = 256')
       migrateSchema(db)
       expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
     } finally {
@@ -904,6 +906,42 @@ describe('SQLite v7 to v8 upgrade', () => {
     } finally {
       v7.db.close()
     }
+  })
+})
+
+describe('SQLite v8 to v9 upgrade', () => {
+  it('preserves the prior database and restore fence, and installs the empty content-free ledger atomically', () => {
+    const v8 = createVersionFixture(4, true)
+    try {
+      transaction(v8.db, () => {
+        for (const migration of [migration005, migration006, migration007, migration008]) v8.db.exec(migration)
+        v8.db.exec("PRAGMA user_version = 8; UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1")
+      })
+      const work = v8.db.prepare('SELECT * FROM tasks').all()
+      const pages = Number(v8.db.prepare('PRAGMA page_count').get()?.page_count)
+      v8.db.exec(`PRAGMA max_page_count = ${pages + 2}`)
+      expect(() => migrateSchema(v8.db)).toThrow(expect.objectContaining({ code: 'full' }))
+      expect(v8.db.prepare('PRAGMA user_version').get()?.user_version).toBe(8)
+      expect(v8.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'memory_%'").all()).toEqual([])
+      expect(v8.db.prepare('SELECT * FROM tasks').all()).toEqual(work)
+
+      v8.db.exec(`PRAGMA max_page_count = ${pages + 128}`)
+      migrateSchema(v8.db)
+      expect(v8.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+      expect(v8.db.prepare('SELECT mode FROM runtime_recovery WHERE id = 1').get()?.mode).toBe('restore')
+      for (const table of ['memory_ledger', 'memory_commands', 'memory_sources']) {
+        expect(v8.db.prepare(`SELECT count(*) AS count FROM ${table}`).get()?.count).toBe(0)
+      }
+      expect(v8.db.prepare('SELECT * FROM tasks').all()).toEqual(work)
+      expect(v8.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      const path = v8.path + V8_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(path).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(path, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(8)
+        expect(backup.prepare('SELECT * FROM tasks').all()).toEqual(work)
+      } finally { backup.close() }
+    } finally { v8.db.close() }
   })
 })
 

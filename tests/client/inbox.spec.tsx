@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import type { MemoryActiveRecord, MemoryScope } from '@mosbot-ai/dshpa-plugin-api'
 import { beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { dictionaries, type Translate } from '../../packages/personal-agent/src/client/copy.js'
 import { Inbox, type ConnectionSnapshot, type InboxConnection } from '../../packages/personal-agent/src/client/inbox.js'
@@ -13,6 +14,11 @@ const t: Translate = key => dictionaries.en[key]
 const project = { id: 'project', title: 'Workbench', purpose: 'Inspect requested outcomes.' }
 const session = { id: 'primary-session', label: 'Primary conversation' }
 const verifiedAt = '2026-11-07T08:00:00.000Z'
+
+function memoryRecord(scope: MemoryScope, id: string, text: string, overrides: Partial<MemoryActiveRecord> = {}): MemoryActiveRecord {
+  return { id, ownerId: 'owner', profileId: 'profile', scope, value: { kind: 'fact', text }, state: 'active',
+    revision: 1, validFrom: verifiedAt, sourceEventIds: [`source-${id}`], origin: 'explicit', confidence: 1, ...overrides }
+}
 
 function task(id: string, overrides: Partial<InboxTask> = {}): InboxTask {
   return {
@@ -101,6 +107,126 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('reviews scoped memory and retries a pending forget with its exact command', async () => {
+    const scope = { kind: 'project', projectId: project.id } as const
+    const confirmed = memoryRecord(scope, 'memory-one', '<img src=x onerror=alert(1)>', { revision: 2 })
+    const inferred = memoryRecord(scope, 'memory-two', 'Unconfirmed suggestion', { origin: 'inferred', confidence: 0.4 })
+    const replacement = memoryRecord(scope, 'memory-new', 'Owner-corrected preference')
+    let records = [confirmed]
+    let pendingForget: Extract<InboxRequest, { type: 'memory_forget' }> | undefined
+    const requests: InboxRequest[] = []
+    const { node } = await mount(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot({ memoryConfigured: true }) }
+      requests.push(request)
+      if (request.type === 'memory_search') return { ok: true, kind: 'memory_records', confirmed: records, inferred: [inferred] }
+      if (request.type === 'memory_inspect') return { ok: true, kind: 'memory_records', confirmed: [confirmed], inferred: [] }
+      if (request.type === 'memory_remember') return { ok: true, kind: 'memory_change', state: 'completed', recordId: 'created', revision: 1 }
+      if (request.type === 'memory_correct') {
+        records = [replacement]
+        return { ok: true, kind: 'memory_change', state: 'completed', recordId: replacement.id, revision: 1 }
+      }
+      if (request.type === 'memory_forget') {
+        if (pendingForget) {
+          expect(request).toEqual(pendingForget)
+          return { ok: true, kind: 'memory_change', state: 'completed', recordId: replacement.id, revision: 2 }
+        }
+        pendingForget = request
+        records = []
+        return { ok: true, kind: 'memory_change', state: 'pending', recordId: replacement.id, revision: 2 }
+      }
+      throw new Error(`Unexpected memory operation ${request.type}`)
+    })
+    const panel = node.querySelector<HTMLDetailsElement>('.dshpa-memory')!
+    panel.open = true
+    await fill(field(panel, 'Memory scope'), 'project')
+    await fill(field(panel, 'Project'), project.id)
+    await click(button(panel, 'List recent memories'))
+    expect(requests[0]).toEqual({ type: 'memory_search', scope, query: '' })
+    expect(panel.textContent).toContain('Confirmed memories')
+    expect(panel.textContent).toContain('Inferred candidates')
+    expect(panel.textContent).toContain('40%')
+    expect(panel.textContent).toContain('source-memory-one')
+    expect(panel.textContent).toContain('<img src=x onerror=alert(1)>')
+    expect(panel.querySelector('img')).toBeNull()
+    expect(panel.textContent).toContain('Older backups can retain it')
+    await fill(field(panel, 'Search text'), 'scope keyword')
+    await click(button(panel, 'Search memory'))
+    expect(requests.at(-1)).toEqual({ type: 'memory_search', scope, query: 'scope keyword' })
+    await fill(field(panel, 'Search text'), '')
+
+    await click(button(panel, 'Remember a fact'))
+    await fill(field(panel, 'Memory text'), 'Keep a user-entered fact')
+    await fill(field(panel, 'Expires at (UTC, optional)'), '2031-01-02T13:05')
+    await click(button(panel, 'Save memory'))
+    expect(requests.at(-1)).toEqual({ type: 'memory_remember', scope, commandId: expect.any(String),
+      text: 'Keep a user-entered fact', validUntil: '2031-01-02T13:05:00.000Z' })
+    expect(panel.textContent).toContain('Memory change saved.')
+    expect(panel.textContent).not.toContain('source-memory-one')
+
+    await click(button(panel, 'List recent memories'))
+    await click(button(panel, 'Inspect memory'))
+    expect(requests.at(-1)).toEqual({ type: 'memory_inspect', scope, recordId: confirmed.id })
+    expect(panel.textContent).not.toContain('Unconfirmed suggestion')
+    await click(button(panel, 'Correct memory'))
+    await fill(field(panel, 'Memory text'), 'Owner-corrected preference')
+    await click(button(panel, 'Save memory'))
+    expect(requests.at(-1)).toEqual({ type: 'memory_correct', scope, commandId: expect.any(String),
+      text: 'Owner-corrected preference', recordId: confirmed.id, expectedRevision: 2 })
+
+    await click(button(panel, 'List recent memories'))
+    await click(button(panel, 'Forget memory'))
+    expect(requests.at(-1)?.type).toBe('memory_search')
+    await click(button(panel, 'Confirm forget'))
+    expect(pendingForget).toEqual({ type: 'memory_forget', scope, commandId: expect.any(String),
+      recordId: replacement.id, expectedRevision: replacement.revision })
+    expect(panel.textContent).toContain('Provider sync is pending.')
+    expect(panel.textContent).not.toContain(replacement.value.kind === 'fact' ? replacement.value.text : '')
+    await fill(field(panel, 'Memory scope'), 'profile')
+    expect(panel.textContent).not.toContain('Provider sync is pending.')
+    await fill(field(panel, 'Memory scope'), 'project')
+    await fill(field(panel, 'Project'), project.id)
+    expect(panel.textContent).toContain('Provider sync is pending.')
+    await click(button(panel, 'Retry provider sync'))
+    expect(panel.textContent).toContain('Memory change saved.')
+    expect(panel.textContent).not.toContain('Provider sync is pending.')
+  })
+
+  it('discards delayed memory replies on scope changes and disconnect', async () => {
+    const work = task('memory-task')
+    const held = Promise.withResolvers<InboxResponse>()
+    let heldSignal: AbortSignal | undefined
+    let forged = true
+    const old = memoryRecord({ kind: 'profile' }, 'stale-profile-memory', 'Profile memory from an earlier request')
+    const current = memoryRecord({ kind: 'task', taskId: work.id }, 'current-task-memory', 'Task-scoped fact')
+    const { node, carrier } = await mount(async (request, signal) => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot({ memoryConfigured: true, tasks: [work] }) }
+      if (request.type !== 'memory_search') throw new Error('Unexpected memory operation')
+      if (request.scope.kind === 'profile') {
+        heldSignal = signal
+        return held.promise
+      }
+      return { ok: true, kind: 'memory_records', confirmed: [forged ? old : current], inferred: [] }
+    })
+    const panel = node.querySelector<HTMLDetailsElement>('.dshpa-memory')!
+    panel.open = true
+    await click(button(panel, 'List recent memories'))
+    expect(heldSignal?.aborted).toBe(false)
+    await fill(field(panel, 'Memory scope'), 'task')
+    await fill(field(panel, 'Task'), work.id)
+    expect(heldSignal?.aborted).toBe(true)
+    await act(async () => held.resolve({ ok: true, kind: 'memory_records', confirmed: [old], inferred: [] }))
+    expect(panel.textContent).not.toContain('Profile memory from an earlier request')
+    await click(button(panel, 'List recent memories'))
+    expect(panel.textContent).not.toContain('Profile memory from an earlier request')
+    forged = false
+    await click(button(panel, 'List recent memories'))
+    expect(panel.textContent).toContain('Task-scoped fact')
+    await act(async () => carrier.change('disconnected:1'))
+    expect(panel.textContent).not.toContain('Task-scoped fact')
+    await act(async () => carrier.change('connected:2'))
+    expect(panel.textContent).not.toContain('Task-scoped fact')
+  })
+
   it('saves a routine draft separately from arming and displays a committed reminder', async () => {
     const requests: InboxRequest[] = []
     let routines: NonNullable<InboxSnapshot['schedules']>['routines'] = []
@@ -323,6 +449,20 @@ describe('native Inbox client', () => {
     expect(Object.keys(dictionaries.zh).sort()).toEqual(Object.keys(dictionaries.en).sort())
     const { node } = await mount(port, key => dictionaries.zh[key])
     expect(node.querySelector('h1')?.textContent).toBe('待办')
+  })
+
+  it('rejects malformed active memory records at the native transport boundary', async () => {
+    const scope = { kind: 'profile' } as const
+    const record = memoryRecord(scope, 'transport-memory', 'Scoped preference')
+    const reply = { ok: true, kind: 'memory_records', confirmed: [record], inferred: [] } as const
+    const call = vi.fn(async () => ({ ok: true as const, value: reply }))
+    call.mockResolvedValueOnce({ ok: true, value: { ...reply, confirmed: [{ ...record, origin: 'inferred' }] } })
+    call.mockResolvedValueOnce({ ok: true, value: { ...reply, confirmed: [{ ...record, validUntil: 'invalid-time' }] } })
+    const port = createInboxPort({ rpc: { call } })
+    const request = { type: 'memory_search', scope, query: '' } as const
+    await expect(port(request)).rejects.toThrow('Inbox transport unavailable')
+    await expect(port(request)).rejects.toThrow('Inbox transport unavailable')
+    await expect(port(request)).resolves.toEqual(reply)
   })
 
   it('contributes the native main and sidebar entries without installing a chat replacement', () => {

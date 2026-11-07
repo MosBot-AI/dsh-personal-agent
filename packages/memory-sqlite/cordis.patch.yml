@@ -1,0 +1,5 @@
+- insert:
+    - id: dshpa-memory-sqlite
+      name: '@mosbot-ai/dshpa-memory-sqlite'
+      config:
+        directory: !!js dshHomePath('dshpa-memory')
