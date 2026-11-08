@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import type { MobileDeviceLedger } from '../api/devices.js'
 import { knowledgeRequestSchemas, type LocalKnowledge } from '../connectors/local-knowledge.js'
 import { connectorRequestSchemas, type ReadConnector } from '../connectors/registry.js'
 import { proactiveRequests, type ProactiveService } from '../runtime/proactive.js'
@@ -19,6 +20,7 @@ import {
   computeWaitPrefix,
   conversationIdSchema,
   conversationSchema,
+  deviceIdSchema,
   indefiniteWait,
   mandateRefSchema,
   nonEmptyTextSchema,
@@ -65,6 +67,9 @@ const answerBodySchema = z.strictObject({ kind: z.literal('inbox-answer'), ...an
 
 const requestSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('snapshot') }),
+  z.strictObject({ type: z.literal('mobile_devices') }),
+  z.strictObject({ type: z.literal('mobile_pair'), label: nonEmptyTextSchema.max(80) }),
+  z.strictObject({ type: z.literal('mobile_revoke'), deviceId: deviceIdSchema }),
   z.strictObject({ type: z.literal('create_project'), commandId: command, title: nonEmptyTextSchema.max(256), purpose: nonEmptyTextSchema.max(4_096) }),
   z.strictObject({
     type: z.literal('create_task'), commandId: command, projectId: projectIdSchema,
@@ -123,6 +128,7 @@ export interface InboxServiceOptions {
   readonly invalidateResources?: (ref: WorkRef) => void
   readonly routines?: RoutineInbox
   readonly resident?: ResidentOperations
+  readonly mobile?: { readonly devices: MobileDeviceLedger; readonly origin: string; readonly available: () => boolean }
   readonly context?: LocalContext
   readonly memory?: LocalMemory
   readonly knowledge?: LocalKnowledge
@@ -245,6 +251,7 @@ export function createInboxService(options: InboxServiceOptions) {
     const progress = new Map(usage?.progress.map(item => [item.taskId, item]))
     return { ok: true, kind: 'snapshot', snapshot: {
       workerConfigured: executor !== undefined && worker !== undefined,
+      ...(options.mobile ? { mobileConfigured: true } : {}),
       ...(options.memory ? { memoryConfigured: true } : {}),
       ...(options.knowledge ? { knowledgeConfigured: true } : {}),
       ...(options.githubRead ? { githubRead: { projectId: options.githubRead.projectId } } : {}),
@@ -353,6 +360,19 @@ export function createInboxService(options: InboxServiceOptions) {
     try {
       switch (request.type) {
         case 'snapshot': return await snapshot(ownerToken)
+        case 'mobile_devices':
+          return options.mobile ? {
+            ok: true, kind: 'mobile_devices', devices: options.mobile.devices.list(), available: options.mobile.available(),
+          } : failure('resource_unavailable')
+        case 'mobile_pair': {
+          const mobile = options.mobile
+          if (!mobile?.available()) return failure('resource_unavailable')
+          const result = mobile.devices.begin(request.label)
+          return result.ok ? { ok: true, kind: 'mobile_pair', pairingCode: result.pairingCode,
+            expiresAt: result.expiresAt, origin: mobile.origin } : failure(result.code)
+        }
+        case 'mobile_revoke':
+          return options.mobile?.devices.revoke(request.deviceId) ? { ok: true, kind: 'updated' } : failure('not_found')
         case 'skill_list':
         case 'skill_inspect':
         case 'skill_propose':

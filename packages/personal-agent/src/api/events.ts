@@ -55,19 +55,23 @@ export function createMobileFeed(dbAccess: DatabaseAccess, scope: MobileDeviceSc
     replay(credential: unknown, input: unknown) {
       if (!devices.authenticate(credential)) return fail('unauthorized')
       const cursor = decodeCursor(input)
-      if (!cursor) return fail('snapshot_required')
+      if (!cursor && input !== null) return fail('snapshot_required')
       return dbAccess(db => {
-        const anchor = db.prepare(`SELECT e.sequence ${scopedEvents} AND e.task_id = ? AND e.version = ?`).get(...key, ...cursor.key)
-        if (!anchor || typeof anchor.sequence !== 'number') return fail('snapshot_required')
+        const anchor = cursor
+          ? db.prepare(`SELECT e.sequence ${scopedEvents} AND e.task_id = ? AND e.version = ?`).get(...key, ...cursor.key)?.sequence
+          : 0
+        if (typeof anchor !== 'number') return fail('snapshot_required')
         const rows = db.prepare(`SELECT ${eventFields} ${scopedEvents} AND e.sequence > ?
-          ORDER BY e.sequence LIMIT ?`).all(...key, anchor.sequence, replayWindow + 1)
+          ORDER BY e.sequence LIMIT ?`).all(...key, anchor, replayWindow + 1)
         if (rows.length > replayWindow) return fail('snapshot_required')
         const events = rows.map(row => {
           const event = eventSchema.parse(row)
           return { type: 'task.updated', ...event, cursor: encodeCursor(event) } as const
         })
-        return { ok: true, cursor: events.at(-1)?.cursor ?? cursor.encoded, events } as const
+        return { ok: true, cursor: events.at(-1)?.cursor ?? cursor?.encoded ?? null, events } as const
       })
     },
   })
 }
+
+export type MobileFeed = ReturnType<typeof createMobileFeed>

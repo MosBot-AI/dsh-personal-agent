@@ -97,6 +97,20 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 
 打开或新建一条原生对话，然后选择 DSH 侧栏中的 **待办**。创建项目并将任务关联到该对话。明确启动任务，在 Worker 释放后查看候选产物，并在收件箱接受结果。可通过对话链接回到原生记录和输入框。
 
+### 启用移动任务视图
+
+在现有本地 Web profile 的 `config.inbox` 下设置 `mobile`。
+
+```yaml
+mobile:
+  origin: https://mobile.example.com
+  port: 18472
+```
+
+在反向代理上使用独立的 HTTPS 源地址，并将其转发到 `http://127.0.0.1:18472`。保留配置的 Host 和浏览器 Origin 请求头，关闭 `/v1/events` 的代理缓冲。DSH 原生所有者监听服务继续绑定回环地址并保持在代理之外。移动上游绑定回环地址，只提供自身的页面、配对、快照及事件路由，TLS 由反向代理提供。
+
+在已认证的本机 **待办** 面板中打开 **移动访问**，给设备命名并生成配对码。在手机上打开配置的 HTTPS 源地址，五分钟内输入配对码。配对的浏览器可以查看已关联会话的任务，断线后可以重新获取更新。在本机面板选择 **撤销** 可终止对应设备的访问。配对会生成有效期三十天的安全浏览器凭据，恢复 WorkStore 备份会清除旧移动凭据。审批移交由 PA-022 后续阶段实现。 [验证证据](docs/evidence/PA-022-zh.md)
+
 ### 路由可信适配器的事件
 
 本地 Web 宿主为进程内适配器提供 `dshpaRouting` 服务。所有者可以在 `inbox.sourceAccounts` 中声明已经验证的账户，填写 `sourceInstanceId`、`accountId` 和 UTC 时间 `verifiedAt`。适配器须独立于消息内容验证账户，再绑定来源令牌，并提交原始发生时间、稳定的外部事件 ID 和修订。所有者通过已认证收件箱的 `set_subscription` 操作管理带版本的 `work` 或 `context` 订阅。工作事件按来源、账户、线程、项目和任务精确送达。`routed` 回执包含当前的原生输入日志状态。上下文订阅只记录关联，不向 Worker 投递输入或唤醒 Worker。

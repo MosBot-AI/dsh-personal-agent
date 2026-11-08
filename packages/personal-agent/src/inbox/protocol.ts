@@ -8,6 +8,14 @@ import type { ProactiveService } from '../runtime/proactive.js'
 
 export const INBOX_RPC_ENDPOINT = 'dshpa/inbox'
 
+export interface MobileDeviceSummary {
+  readonly deviceId: string
+  readonly label: string
+  readonly state: 'pending' | 'active' | 'revoked'
+  readonly expiresAt: string
+  readonly enrolledAt: string | null
+}
+
 export interface InboxSession {
   readonly id: string
   readonly label: string
@@ -151,6 +159,7 @@ type RoutineDraft = {
 
 export interface InboxSnapshot {
   readonly workerConfigured: boolean
+  readonly mobileConfigured?: boolean
   readonly memoryConfigured?: boolean
   readonly knowledgeConfigured?: boolean
   readonly githubRead?: { readonly projectId?: string }
@@ -173,6 +182,9 @@ type MemoryRevision = { recordId: string; expectedRevision: number }
 export type InboxRequest =
   | SkillRequestInput
   | { type: 'snapshot' }
+  | { type: 'mobile_devices' }
+  | { type: 'mobile_pair'; label: string }
+  | { type: 'mobile_revoke'; deviceId: string }
   | { type: 'knowledge_status' }
   | { type: 'knowledge_search'; rootId?: string; query: string; limit?: number }
   | { type: 'knowledge_read'; ref: KnowledgeSource['ref']; revision: string; offset?: number; maxBytes?: number }
@@ -223,6 +235,8 @@ export type InboxRequest =
 export type InboxResponse =
   | SkillResponse
   | { ok: true; kind: 'snapshot'; snapshot: InboxSnapshot }
+  | { ok: true; kind: 'mobile_devices'; available: boolean; devices: readonly MobileDeviceSummary[] }
+  | { ok: true; kind: 'mobile_pair'; pairingCode: string; expiresAt: string; origin: string }
   | { ok: true; kind: 'updated'; taskId?: string; projectId?: string }
   | { ok: true; kind: 'artifact'; artifact: InboxArtifact & { text: string } }
   | { ok: true; kind: 'subscription'; version: number }

@@ -168,6 +168,19 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   if (value.kind === 'subscription' || value.kind === 'attention_policy') {
     return typeof value.version === 'number' && Number.isSafeInteger(value.version) && value.version > 0
   }
+  if (value.kind === 'mobile_devices') {
+    return typeof value.available === 'boolean' && Array.isArray(value.devices) && value.devices.length <= 16
+      && value.devices.every(device => isRecord(device) && typeof device.deviceId === 'string'
+        && typeof device.label === 'string' && device.label.length <= 80
+        && ['pending', 'active', 'revoked'].some(state => state === device.state)
+        && isMemoryInstant(device.expiresAt) && (device.enrolledAt === null || isMemoryInstant(device.enrolledAt)))
+  }
+  if (value.kind === 'mobile_pair') {
+    if (typeof value.origin !== 'string' || typeof value.pairingCode !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(value.pairingCode)
+      || !isMemoryInstant(value.expiresAt)) return false
+    try { return new URL(value.origin).protocol === 'https:' && new URL(value.origin).origin === value.origin }
+    catch { return false }
+  }
   if (value.kind === 'resident') return isRecord(value.value)
   if (value.kind === 'context') return value.value === null || Array.isArray(value.value) || isRecord(value.value)
   if (typeof value.kind === 'string' && value.kind.startsWith('skill_')) return skillResponseSchema.safeParse(value).success
@@ -222,6 +235,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     const snapshot = value.snapshot
     return typeof snapshot.workerConfigured === 'boolean' && Array.isArray(snapshot.sessions)
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
+      && (snapshot.mobileConfigured === undefined || typeof snapshot.mobileConfigured === 'boolean')
       && (snapshot.memoryConfigured === undefined || typeof snapshot.memoryConfigured === 'boolean')
       && (snapshot.knowledgeConfigured === undefined || typeof snapshot.knowledgeConfigured === 'boolean')
       && (snapshot.proactiveConfigured === undefined || typeof snapshot.proactiveConfigured === 'boolean')
