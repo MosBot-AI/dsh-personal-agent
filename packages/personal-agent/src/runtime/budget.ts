@@ -108,6 +108,14 @@ type Failure = {
     | 'stale_attempt' | 'recovery_required' | 'not_found' | 'invalid_transition'
 }
 type ReservationResult = { ok: true; reservation: BudgetReservation } | Failure
+type ClaimParticipant = (db: DatabaseSync, reservation: Readonly<BudgetReservation>) => boolean
+const routedClaims = new WeakMap<object, (input: unknown, participant: ClaimParticipant) => ReservationResult>()
+
+/** Internal handoff for a routed claim that shares Core's exact budget transaction. */
+export function claimRoutedBudget(budget: BudgetService, input: unknown, participant: ClaimParticipant): ReservationResult {
+  return routedClaims.get(budget)?.(input, participant) ?? fail('invalid_transition')
+}
+
 type Admission = { ok: true; route: Route; limit: Limit } | Failure
 type Access = <T>(fn: (db: DatabaseSync) => T) => T
 type Permit = (db: DatabaseSync) => boolean
@@ -353,7 +361,7 @@ export function createBudget(access: Access, options: BudgetOptions, permit: Per
     return withinLimits(db, input, dayOf(at), route, limit, except)
   }
 
-  function reserve(raw: unknown, next: 'reserved' | 'claimed'): ReservationResult {
+  function reserve(raw: unknown, next: 'reserved' | 'claimed', participant?: ClaimParticipant): ReservationResult {
     const parsed = requestSchema.safeParse(raw)
     if (!parsed.success) return fail('invalid_input')
     const input = parsed.data
@@ -367,6 +375,7 @@ export function createBudget(access: Access, options: BudgetOptions, permit: Per
         day: dayOf(at), createdAt: at, updatedAt: at, status: next,
         estimateMicros: route.pricing.kind === 'known' ? route.pricing.ceilingMicros : null, actualMicros: null,
       }
+      if (participant && !participant(db, reservation)) return fail('invalid_transition')
       db.prepare(`
         INSERT INTO budget_reservations (
           id, owner_id, profile_id, task_id, attempt_id, generation, task_version, provider, model, currency,
@@ -431,7 +440,7 @@ export function createBudget(access: Access, options: BudgetOptions, permit: Per
     `).run(next, now(), ref.data.id, ref.data.ownerId, ref.data.profileId, expected).changes === 1)
   }
 
-  return Object.freeze({
+  const service = Object.freeze({
     canBegin(raw: unknown): boolean {
       const parsed = requestSchema.safeParse(raw)
       return parsed.success && access(db => admission(db, parsed.data, now(), null, true).ok)
@@ -462,6 +471,8 @@ export function createBudget(access: Access, options: BudgetOptions, permit: Per
     },
     snapshot: ({ ownerId, profileId }: Scope) => access(db => usageSnapshot(db, scopeSchema.parse({ ownerId, profileId }), dayOf(now()))),
   })
+  routedClaims.set(service, (input, participant) => reserve(input, 'claimed', participant))
+  return service
 }
 
 export type BudgetService = ReturnType<typeof createBudget>
