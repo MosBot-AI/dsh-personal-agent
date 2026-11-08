@@ -44,6 +44,7 @@
 
 ### 变更
 
+- 新增限定范围的移动设备凭据 WorkStore 迁移。恢复旧备份时会清除移动配对码和凭据。
 - 将已有 DSH 原生方案细化为按依赖推进的发布阶段，以本机运行作为核心，明确插件迁移和恢复要求。
 
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main

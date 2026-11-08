@@ -44,6 +44,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Changed
 
+- Add WorkStore migration support for scoped mobile device credentials. Restoring an older backup clears mobile pairing codes and credentials.
 - Refine the existing DSH-native plan into dependency-driven release stages, keeping local operation central and defining explicit plugin migration and recovery requirements.
 
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main
