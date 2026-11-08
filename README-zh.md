@@ -27,6 +27,8 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 [常驻宿主证据](docs/evidence/PA-021-zh.md)覆盖生命周期、诊断、在线备份和恢复。
 [能力插件证据](docs/evidence/PA-038-zh.md)覆盖带版本注册、限定范围的消费者和独立免密钥示例。
 
+原生路由边界证据覆盖固定请求选择、重试保持选择及经预算准入的推理 Session。[PA-040 证据](docs/evidence/PA-040-zh.md)
+
 [实施 Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent 协作流程](docs/11-github-project-workflow-zh.md)
 
 ## 规划能力
