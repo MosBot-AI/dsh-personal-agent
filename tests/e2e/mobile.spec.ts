@@ -364,6 +364,24 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
     digest: outstanding.digest, deviceId: phone.deviceId })).toMatchObject({ ok: true })
   await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
 
+  await chrome.evaluate(`globalThis.visibilitySamples = [];
+    document.addEventListener('visibilitychange', () => globalThis.visibilitySamples.push({
+      state: document.visibilityState,
+      tasks: document.querySelector('#tasks').children.length,
+      reviews: document.querySelector('#review-items').children.length,
+    }))`)
+  const returnToMobileTab = await chrome.switchToAnotherTab()
+  await chrome.waitFor("document.visibilityState === 'hidden'")
+  expect(await inbox({ type: 'create_task', commandId: 'create-while-browser-hidden', projectId: 'mobile-review-project',
+    sessionId: 'mobile-fixture-chat', outcome: 'Task created while Chrome was hidden' })).toMatchObject({ ok: true })
+  await returnToMobileTab()
+  await chrome.waitFor("globalThis.visibilitySamples.some(sample => sample.state === 'visible')")
+  expect(await chrome.evaluate('globalThis.visibilitySamples')).toEqual([
+    { state: 'hidden', tasks: 0, reviews: 0 },
+    { state: 'visible', tasks: 0, reviews: 0 },
+  ])
+  await chrome.waitFor("document.querySelector('#tasks')?.textContent.includes('Task created while Chrome was hidden') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+
   proxy.setAvailable(false)
   await chrome.waitFor("document.querySelector('#work')?.hidden === true && document.querySelector('#tasks')?.children.length === 0 && document.querySelector('#review-items')?.children.length === 0")
   expect(await inbox({ type: 'create_task', commandId: 'create-during-browser-disconnect', projectId: 'mobile-review-project',
