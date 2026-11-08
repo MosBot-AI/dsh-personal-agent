@@ -6,6 +6,8 @@
   "license": "Apache-2.0",
   "exports": {
     ".": { "types": "./lib/host.d.ts", "default": "./lib/host.js" },
+    "./policy": { "types": "./lib/policy.d.ts", "default": "./lib/policy.js" },
+    "./difficulty": { "types": "./lib/difficulty.d.ts", "default": "./lib/difficulty.js" },
     "./package.json": "./package.json"
   },
   "files": ["lib", "README.md", "README-zh.md"],

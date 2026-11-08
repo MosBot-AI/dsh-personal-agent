@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { prepareDshRouting } from '@mosbot-ai/dshpa-model-routing'
+import { decideRouting } from '@mosbot-ai/dshpa-model-routing/policy'
 import { inferenceAttemptSchema, quotaObservationSchema } from '@mosbot-ai/dshpa-plugin-api/model-routing'
 
 const cli = createRequire(process.argv[1])
@@ -121,7 +122,17 @@ async function exercise(ctx) {
     bucket: { id: 'bucket', revision: 1 }, observedAt: at, status: 'unknown', provenance: 'unknown', remainingTokens: 500,
   }).success, false)
 
-  const chosen = await prepareDshRouting(ctx, first, core)
+  const selected = await decideRouting({
+    id: first.decision.id, ...task, acceptanceDigest: 'a'.repeat(64), decidedAt: at,
+    readiness: 'ready', requirements: first.decision.requirements, policy,
+    signals: { kind: 'extract', phase: 'execute', dependencyCount: 0, sourceCount: 1,
+      constraintCount: 1, scope: 'single', verification: 'direct', conflictingEvidence: false, multimodal: false },
+    deployments: [first.deployment, next.deployment],
+  }, { inspect: () => 'ready' })
+  assert.ok(selected.ok && selected.decision.kind === 'dispatch')
+  assert.deepEqual(selected.decision.deployment, a)
+  assert.equal(selected.decision.effort, 'low')
+  const chosen = await prepareDshRouting(ctx, { ...first, decision: selected.decision }, core)
   assert.ok(chosen.ok, JSON.stringify(chosen))
   const captured = []
   const assembled = []
@@ -158,7 +169,8 @@ async function exercise(ctx) {
     assert.deepEqual(modelA.requests.map(requestSelection), [expectedA, expectedA])
     assert.equal(modelB.requests.length, 0)
     assert.deepEqual(admitted.map(row => row.route), [expectedA, expectedA])
-    assert.ok(admitted.every(row => row.fence.accountId === 'account-a' && row.fence.quotaBucketId === 'quota-a'))
+    assert.ok(admitted.every(row => row.fence.accountId === 'account-a' && row.fence.quotaBucketId === 'quota-a'
+      && row.fence.acceptanceDigest === 'a'.repeat(64)))
     assert.deepEqual(headers(prior.agent).map(row => [row.reason, row.startsSeries, row.header.config.reasoningEffort]),
       [['initial', true, 'basic']])
   } finally { dropAssembly(); await prior.dispose() }

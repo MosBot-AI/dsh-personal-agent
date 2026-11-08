@@ -22,6 +22,7 @@ export interface NativeRoutingFence {
   readonly taskAttemptId: string
   readonly generation: number
   readonly decisionId: string
+  readonly acceptanceDigest?: string
   readonly attemptId: string
   readonly previousAttemptId?: string
   readonly requestSeriesId: string
@@ -73,6 +74,7 @@ export async function prepareDshRouting(ctx: Context, input: unknown, core: Rout
     || decision.taskAttemptId !== attempt.taskAttemptId || decision.generation !== attempt.generation
     || ((decision.basis === 'escalation' || decision.basis === 'fallback') && !attempt.previousAttemptId)) return failure('invalid_plan')
   if (policy.mode === 'fixed' ? !samePin(policy.deployment, deployment) || decision.basis === 'fallback' || decision.basis === 'escalation'
+      || (policy.effort !== undefined && decision.basis !== 'override' && decision.effort !== policy.effort)
     : !Object.values(policy.pools).some(pool => pool.some(pin => samePin(pin, deployment)))) return failure('permission_denied')
 
   const { requirements } = decision
@@ -86,7 +88,7 @@ export async function prepareDshRouting(ctx: Context, input: unknown, core: Rout
   const { provider, model } = deployment
   const fence: NativeRoutingFence = Object.freeze({
     taskId: attempt.taskId, taskAttemptId: attempt.taskAttemptId, generation: attempt.generation,
-    decisionId: decision.id, attemptId: attempt.id, previousAttemptId: attempt.previousAttemptId, requestSeriesId: attempt.requestSeriesId,
+    decisionId: decision.id, acceptanceDigest: decision.acceptanceDigest, attemptId: attempt.id, previousAttemptId: attempt.previousAttemptId, requestSeriesId: attempt.requestSeriesId,
     policyId: policy.id, policyRevision: policy.revision, deploymentId: deployment.id, deploymentRevision: deployment.revision,
     pricingRevision: attempt.pricingRevision, accountId: bucket.accountId, quotaBucketId: bucket.id, quotaBucketRevision: bucket.revision, provider, model,
   })
