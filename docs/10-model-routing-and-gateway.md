@@ -64,6 +64,8 @@ Initial mappings: extraction/formatting → fast/low; multi-source summary or or
 
 Low confidence uses a configured conservative tier or asks about material ambiguity. Verification failures allow bounded effort/model escalation; missing permissions/data require waiting. Reassess at task/phase boundaries and meaningful failure, not every token. Fixed mode does not auto-upgrade by default. Acceptance criteria remain unchanged after fallback.
 
+PA-041 implements deterministic difficulty and configured pool and effort rules. Optional semantic estimation passes through the separate Core budget port, and quality escalation retains the acceptance digest. [Verification evidence](evidence/PA-041.md)
+
 ## 5. Quotas and exhaustion
 
 | Condition | Response |
