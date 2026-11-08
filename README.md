@@ -97,6 +97,20 @@ pnpm exec dsh --profile dshpa-web --patch "$PWD/.dshpa/inbox.patch.yml" --host 1
 
 Open or create a native conversation, then select **Today** in the DSH sidebar. Create a project and attach tasks to the conversation. Start work explicitly, review the candidate artifact after the Worker releases, and accept the result in the inbox. Use the conversation link to return to the native transcript and composer.
 
+### Opt in to the mobile work view
+
+Set `mobile` under `config.inbox` on the existing local Web profile.
+
+```yaml
+mobile:
+  origin: https://mobile.example.com
+  port: 18472
+```
+
+Use a dedicated HTTPS origin on your reverse proxy and forward it to `http://127.0.0.1:18472`. Preserve the configured Host and browser Origin headers and disable buffering for `/v1/events`. Keep the native DSH owner listener on loopback, outside the proxy. The mobile upstream binds to loopback and serves only its own page, pairing, snapshot and event routes. It relies on the reverse proxy for TLS.
+
+In the authenticated local **Today** panel, open **Mobile access**, name the device, and create a pairing code. Open the configured HTTPS origin on the phone and enter the code within five minutes. The paired browser can view conversation-linked tasks and reconnect to their updates. Use **Revoke** in the local panel to terminate that device's access. Pairing creates a 30-day secure browser credential, and restoring a WorkStore backup clears previous mobile credentials. Approval handoff is a later PA-022 checkpoint. [Verification evidence](docs/evidence/PA-022.md)
+
 ### Route events from trusted adapters
 
 The local Web host publishes the `dshpaRouting` service for in-process adapters. The owner can declare previously verified accounts in `inbox.sourceAccounts` with `sourceInstanceId`, `accountId` and the UTC `verifiedAt` instant. An adapter authenticates the account independently of message content before binding its source token. It submits the original occurrence time and a stable external event ID and revision. The owner manages versioned `work` or `context` subscriptions through the authenticated inbox `set_subscription` operation. Work delivery uses the exact source, account, thread, project and task. A `routed` receipt includes the current native input journal status. Context subscriptions record the association without feeding or waking a Worker.

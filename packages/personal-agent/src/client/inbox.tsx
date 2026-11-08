@@ -3,6 +3,7 @@ import type { InboxArtifact, InboxPort, InboxRequest, InboxResponse, InboxSnapsh
 import type { MessageKey, Translate } from './copy.js'
 import { ApprovalCard, requestId, TaskDetail, TaskStatus } from './task.js'
 import { Usage } from './usage.js'
+import { MobileDevices } from './mobile-devices.js'
 import { Reminders, Routines } from './routines.js'
 import { PersonalMemory } from './memory.js'
 import { LocalKnowledge } from './knowledge.js'
@@ -463,6 +464,8 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
           chooseTask={chooseTask} current={() => connection.getSnapshot() === connectionKey}
           writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('goal-plan')} t={t} />}
         {snapshot?.usage && <Usage usage={snapshot.usage} t={t} />}
+        {snapshot?.mobileConfigured && writable && !snapshot.recoveryMode
+          && <MobileDevices key={connectionKey} port={port} t={t} />}
         {snapshot?.memoryConfigured && <PersonalMemory t={t} port={port} projects={snapshot.projects} tasks={snapshot.tasks}
           connectionKey={connectionKey} currentConnection={() => connection.getSnapshot()} readable={writable}
           writable={writable && !snapshot.recoveryMode} />}

@@ -7,6 +7,7 @@ import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import { SessionId as nativeSessionId, type SessionHeader } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { z } from 'zod'
+import { mobileHttpConfigSchema, startMobileHttp } from '../api/mobile-http.js'
 import { createLocalKnowledge, localKnowledgeConfigSchema } from '../connectors/local-knowledge.js'
 import { createGitHubReadTransport } from '../connectors/github.js'
 import { createMcpReadTransport, mcpLoopbackUrlSchema } from '../connectors/mcp.js'
@@ -60,6 +61,7 @@ export const localInboxConfigSchema = z.strictObject({
   routines: z.boolean().default(false),
   proactive: z.boolean().default(false),
   resident: residentConfigSchema.optional(),
+  mobile: mobileHttpConfigSchema.optional(),
   sourceAccounts: profileSchema.shape.verifiedAccounts.max(64).optional(),
   budget: budgetConfigSchema.optional(),
   computeLimits: computeLimitsSchema.optional(),
@@ -267,6 +269,7 @@ export function activateLocalInbox(
   let proactive: ProactiveService | undefined
   let executor: WorkerExecutor | undefined
   let resident: ResidentOperations | undefined
+  let mobileHttp: ReturnType<typeof startMobileHttp> | undefined
   let detachResident: (() => void) | undefined
   let detachInbox: (() => Promise<void>) | undefined
   let startup: Promise<void> | undefined
@@ -407,11 +410,17 @@ export function activateLocalInbox(
       resident?.recoverySettled(scheduleError)
     }, () => resident?.recoveryUnavailable())
     startup = startupRecovery
+    const mobile = config.mobile
+    const mobileDevices = mobile && store.mobileDevices(scope)
+    if (mobile && mobileDevices) mobileHttp = startMobileHttp(mobile, mobileDevices, store.mobileFeed(scope))
     const service = createInboxService({
       store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
       resident, context, memory, knowledge, proactive,
+      mobile: mobile && mobileDevices && mobileHttp ? {
+        devices: mobileDevices, origin: mobile.origin, available: mobileHttp.available,
+      } : undefined,
       githubRead: connector && { connector, scope, projectId: github?.projectId },
       configureAttention: (_owner, policy, expectedVersion) => {
         const result = attention.configure(scope, policy, expectedVersion)
@@ -495,13 +504,14 @@ export function activateLocalInbox(
       compute: Object.freeze({ budget, gpu }),
       async dispose() {
         const operations = resident?.close()
+        const mobileClosed = mobileHttp?.close()
         identity.release(token)
         knowledge?.close()
         connector?.close()
         const detached = remove()
         try {
           eventRouter.close()
-          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close()])
+          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close(), mobileClosed])
           if (!workersReleased || !gpuReleased) throw new Error('Inbox compute cleanup remains unverified')
         } finally {
           try { detachResident?.() } finally { await detached }
@@ -515,8 +525,8 @@ export function activateLocalInbox(
       router?.close()
     } finally {
       detachResident?.()
-      if (startup || schedules || resident || detachInbox || proactive) {
-        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.(), proactive?.close()])
+      if (startup || schedules || resident || detachInbox || proactive || mobileHttp) {
+        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.(), proactive?.close(), mobileHttp?.close()])
           .then(() => store.close()).catch(() => undefined)
       }
       else store.close()
