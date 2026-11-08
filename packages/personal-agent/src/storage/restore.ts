@@ -98,6 +98,8 @@ function prepareRestoredDatabase(directory: string, path: string): void {
     transaction(storage.db, () => {
       const updated = storage.db.prepare("UPDATE runtime_recovery SET mode = 'restore' WHERE id = 1").run()
       if (updated.changes !== 1) throw new StorageError('corrupt', 'Restore snapshot has no recovery admission record')
+      // Older snapshots must never reactivate a revoked device or pairing code.
+      storage.db.exec('DELETE FROM mobile_devices')
     })
     // Publish one standalone file. The normal opener will restore WAL mode.
     if (storage.db.prepare('PRAGMA journal_mode = DELETE').get()?.journal_mode !== 'delete') {
