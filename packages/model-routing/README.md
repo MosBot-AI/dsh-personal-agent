@@ -18,7 +18,7 @@ if (prepared.ok) {
 
 A reroute uses a new inference attempt and request-series ID while retaining the business Task identity. Build the new input from authorized evidence. The fresh Session has its own request header and no inherited transcript or adapter replay state. The coordinator retains confirmed effects and unresolved spend reservations across attempts.
 
-DSH supports native reasoning effort IDs and verified adapter defaults. The contract also records thinking-budget mappings for transports that support them. The native adapter rejects those mappings at preparation because its DSH request contract exposes a reasoning effort ID. Quota-driven fallback and durable attempt reconciliation are tracked in PA-042. [Routing design](../../docs/10-model-routing-and-gateway.md)
+DSH supports native reasoning effort IDs and verified adapter defaults. The contract also records thinking-budget mappings for transports that support them. The native adapter rejects those mappings at preparation because its DSH request contract exposes a reasoning effort ID. [Routing design](../../docs/10-model-routing-and-gateway.md)
 
 ## Select a route by task difficulty
 
@@ -29,3 +29,11 @@ Automatic policy maps simple, standard and complex work to configurable pool and
 A semantic estimator is optional. Its policy declares separate input, output, spend and time ceilings. Core claims that budget and deduplicates the Task and phase key before the estimator receives structured signals. The policy rechecks live admission after the estimate. Verified quality failures may select a higher configured tier while retaining the same Task fence and acceptance digest. A same-deployment escalation requires an increase in the provider's declared effort order. Core records and bounds the switch count.
 
 Pass an admitted routing decision to the native inference preparation above. The coordinator owns the authoritative policy, verification receipts and budget state.
+
+## Shared quota and routed inference
+
+Core's `dshpa.host.createInferenceExecutor` creates a trusted compute-only executor for a scoped Task running under `routed-inference`. Supply its existing WorkStore and BudgetService, exact model and quota pins, the configured fallback order, and live authorization and evidence-assembly callbacks. A fresh inference Session accepts one exact approved input. The coordinator can disclose authorized confirmed effect receipts to a replacement route.
+
+Core claims quota and spend in one SQLite transaction. Deployments in the same WorkStore share an owner, account and quota bucket. Bounded admission under unknown or stale telemetry requires explicit configuration and both local request and token limits. Hard quota exhaustion remains until an authenticated reset. A provider failure can choose an authorized, compatible replacement within the chain limits. A hard spend denial permits only a configured zero-incremental-cost route that also passes Core admission.
+
+A resource wait records the exact plan and condition on the existing Task. Continue with the same approved plan and the current Task version after its time and authority conditions are met. A same-route retry after a wait uses a new inference Session and counts against the attempt limit. The executor admits a single provider dispatch per attempt and requires zero gateway retries at this boundary. PA-043 covers gateway and UI wiring.

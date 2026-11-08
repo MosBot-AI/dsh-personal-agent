@@ -115,7 +115,7 @@ const decision = {
 export const routingDecisionSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...decision, kind: z.literal('dispatch'),
     deployment: deploymentPinSchema, effort: logicalEffortSchema.optional(),
-    basis: z.enum(['fixed', 'override', 'rule', 'escalation', 'fallback']) }),
+    basis: z.enum(['fixed', 'override', 'rule', 'escalation', 'fallback', 'retry']) }),
   z.strictObject({ ...decision, kind: z.literal('wait'),
     reason: z.enum(['policy', 'permission', 'missing-input', 'budget', 'quota', 'unavailable']), nextCheckAt: capabilityInstantSchema.optional() }),
 ])

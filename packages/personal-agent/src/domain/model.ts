@@ -142,6 +142,11 @@ export const projectSchema = z.strictObject({
 })
 
 export const computeWaitPrefix = 'dshpa:compute:'
+export const inferenceWaitPrefix = 'dshpa:inference:'
+export const inferenceExecutor = 'routed-inference'
+export function isPrivateWorkSessionId(id: string): boolean {
+  return /^dshpa-(?:inference-)?[a-f0-9]{64}$/u.test(id)
+}
 export const indefiniteWait = utcInstantSchema.parse('9999-12-31T23:59:59.999Z')
 
 export const waitReasonSchema = z.strictObject({

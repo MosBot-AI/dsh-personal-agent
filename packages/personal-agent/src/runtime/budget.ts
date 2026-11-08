@@ -441,6 +441,11 @@ export function createBudget(access: Access, options: BudgetOptions, permit: Per
   }
 
   const service = Object.freeze({
+    incrementalCost(provider: string, model: string): 'zero' | 'paid' | 'unknown' {
+      const pricing = routes.get(key(provider, model))?.pricing
+      if (!pricing || pricing.kind === 'unknown') return 'unknown'
+      return Object.values(pricing).some(value => typeof value === 'number' && value > 0) ? 'paid' : 'zero'
+    },
     canBegin(raw: unknown): boolean {
       const parsed = requestSchema.safeParse(raw)
       return parsed.success && access(db => admission(db, parsed.data, now(), null, true).ok)

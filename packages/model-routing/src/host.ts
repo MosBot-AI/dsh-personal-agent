@@ -9,7 +9,7 @@ import {
 } from '@mosbot-ai/dshpa-plugin-api/model-routing'
 import { z } from 'zod'
 
-const planSchema = z.strictObject({
+export const nativeRoutingPlanSchema = z.strictObject({
   deployment: modelDeploymentSchema,
   bucket: quotaBucketSchema,
   policy: routingPolicyRevisionSchema,
@@ -62,7 +62,7 @@ function denied(): AsyncIterable<StreamChunk> {
 
 /** Prepare a new native inference Session. The Task and its completed effects stay with the core. */
 export async function prepareDshRouting(ctx: Context, input: unknown, core: RoutingCore, signal?: AbortSignal): Promise<Prepared> {
-  const parsed = planSchema.safeParse(input)
+  const parsed = nativeRoutingPlanSchema.safeParse(input)
   if (!parsed.success) return failure('invalid_plan')
   const { deployment, bucket, policy, decision, attempt } = parsed.data
   if (decision.kind !== 'dispatch' || attempt.status !== 'planned' || !samePin(policy, decision.policy)
@@ -72,7 +72,7 @@ export async function prepareDshRouting(ctx: Context, input: unknown, core: Rout
     || deployment.accountId !== attempt.accountId || deployment.quotaBucketId !== attempt.quotaBucketId
     || decision.id !== attempt.decisionId || decision.taskId !== attempt.taskId
     || decision.taskAttemptId !== attempt.taskAttemptId || decision.generation !== attempt.generation
-    || ((decision.basis === 'escalation' || decision.basis === 'fallback') && !attempt.previousAttemptId)) return failure('invalid_plan')
+    || ((decision.basis === 'escalation' || decision.basis === 'fallback' || decision.basis === 'retry') && !attempt.previousAttemptId)) return failure('invalid_plan')
   if (policy.mode === 'fixed' ? !samePin(policy.deployment, deployment) || decision.basis === 'fallback' || decision.basis === 'escalation'
       || (policy.effort !== undefined && decision.basis !== 'override' && decision.effort !== policy.effort)
     : !Object.values(policy.pools).some(pool => pool.some(pin => samePin(pin, deployment)))) return failure('permission_denied')

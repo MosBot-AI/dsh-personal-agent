@@ -81,7 +81,8 @@ export function chooseFallback(input: {
   if (fallback.owner !== 'core' || policy.mode !== 'automatic' || prior.basis === 'override' || prior.basis === 'fixed'
     || key(prior.policy) !== key(policy) || key(prior.deployment) !== key(previous)
     || !visited.some(pin => key(pin) === key(previous)) || prior.id === input.decisionId) return wait()
-  if (visited.length >= fallback.maxAttempts || visited.length > policy.maxSwitches) return wait('attempt-limit')
+  const switches = visited.slice(1).filter((value, index) => key(value) !== key(visited[index]!)).length
+  if (visited.length >= fallback.maxAttempts || switches >= policy.maxSwitches) return wait('attempt-limit')
 
   const configured = new Set(Object.values(policy.pools).flat().map(key))
   const seen = new Set(visited.map(pin => pin.id))
