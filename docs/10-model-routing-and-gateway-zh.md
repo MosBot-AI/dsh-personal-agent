@@ -85,7 +85,9 @@ maxSwitchesPerTask: 2
 
 固定宿主的 [LlmCallConfig](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/call-config.ts) 已有 reasoningEffort；[模型解析](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/index.ts) 校验模型支持的档位。宿主在 step 前快照模型选择，原生 retry 保留快照，不能在旧 `agent/request` 钩子中随意换模型。[架构](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/docs/architecture.md)。
 
-PA-040 先验证安全请求边界的配置方式；缺少保证才补最小宿主扩展点。每次重路由创建新 inference attempt/request series，不直接重新执行整个业务 Task。重建符合新模型工具/图像/上下文约束的请求，不能跨提供商转发不兼容的隐藏 reasoning 或加密状态。网关若隐藏实际部署且无法证明能力一致，禁止自动跨模型回退。
+PA-040 在已发布的 DSH 0.2.2-rc.1 上使用现有选择及请求序列 API 验证请求边界。[验证证据](evidence/PA-040-zh.md)
+
+每次重路由创建新 inference attempt/request series，不直接重新执行整个业务 Task。重建符合新模型工具/图像/上下文约束的请求，不能跨提供商转发不兼容的隐藏 reasoning 或加密状态。网关若隐藏实际部署且无法证明能力一致，禁止自动跨模型回退。
 
 流式结果已部分展示时标为中断并开始独立重试，不拼接不同模型文本；只提交完整、验证过的工具调用，不重复已经执行的工具效果。请求超时不证明供应商未计费，保留费用不确定记录。
 

@@ -42,6 +42,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Reviewed skill evidence](evidence/PA-020.md) | Accepted examples, held-out evaluation, explicit activation, and rollback |
 | [Resident host evidence](evidence/PA-021.md) | Startup and shutdown, health, provider waits, backup and restore |
 | [Capability plugin evidence](evidence/PA-038.md) | Public API, lifecycle registry, policy consumers and local examples |
+| [Native routing boundary evidence](evidence/PA-040.md) | Versioned contracts, DSH selection, retries, and new request series |
 
 Each document has a Chinese counterpart. [implementation-tasks.json](implementation-tasks.json) owns dependencies, target paths, sources, steps, tests, acceptance IDs and evidence paths. Task statuses are initial `planned` snapshots; GitHub Project owns live progress. The default target is **desktop alpha: PA-035 and its dependency closure**, starting at PA-001.
 

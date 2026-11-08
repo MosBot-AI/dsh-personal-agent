@@ -85,7 +85,9 @@ Recheck capabilities, effort, destinations and budgets on every fallback. Config
 
 Pinned [LlmCallConfig](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/call-config.ts) carries reasoningEffort; [model resolution](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/index.ts) validates support. The host snapshots selection before a step and retains it on retry; the old agent/request hook cannot freely change it. [Architecture](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/docs/architecture.md).
 
-PA-040 proves a safe request-boundary integration, adding a minimal host seam only if needed. Rerouting creates a new inference attempt/request series, not a replay of the business task. Reassemble for the new model's capabilities; never transfer incompatible hidden reasoning or encrypted state. A gateway hiding the actual deployment cannot perform cross-model fallback unless capability equivalence is established.
+PA-040 verifies the request boundary on published DSH 0.2.2-rc.1 using the existing selection and request-series APIs. [Verification evidence](evidence/PA-040.md)
+
+Rerouting creates a new inference attempt/request series, not a replay of the business task. Reassemble for the new model's capabilities; never transfer incompatible hidden reasoning or encrypted state. A gateway hiding the actual deployment cannot perform cross-model fallback unless capability equivalence is established.
 
 Mark partial streams interrupted and start a separate attempt, never splice models' output. Dispatch only complete validated tool calls; preserve completed effects. A timed-out inference may still be billed.
 
