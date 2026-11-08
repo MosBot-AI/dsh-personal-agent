@@ -340,6 +340,8 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   expect(await chrome.evaluate<boolean>("innerWidth === 390 && document.documentElement.scrollWidth === innerWidth")).toBe(true)
   const manifest = await chrome.send<{ url: string; errors: unknown[] }>('Page.getAppManifest')
   expect(manifest).toMatchObject({ url: origin + '/mobile.webmanifest', errors: [] })
+  const eligibility = await chrome.send<{ installabilityErrors: { errorId: string }[] }>('Page.getInstallabilityErrors')
+  expect(eligibility.installabilityErrors).toEqual([])
   await chrome.send('Page.reload')
   await chrome.waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#pair')?.hidden === true")
 

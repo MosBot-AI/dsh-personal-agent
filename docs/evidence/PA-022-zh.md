@@ -31,6 +31,8 @@
 - 现有原生 Web 流程套件通过 10 个用例，常驻宿主套件通过两个用例。这些检查覆盖存储变更后的宿主回归。
 - `python3 scripts/check_plan.py`、12 个协调测试及 `git diff --check` 通过。
 
+2026-11-09，同一桌面 Chrome 移动视口用例在隔离 TLS 源地址上运行 `Page.getInstallabilityErrors`，返回零项安装条件错误。这项检查覆盖 Chrome 的安装条件。添加到主屏幕及启动仍待验收。
+
 ## 待验收
 
 E05 有委派动作门禁及本地 HTTPS 审批证据。E07 和 E13 有限定范围的回环网络证据，以及桌面 Chrome 移动模拟下的浏览器证据。复测浏览器用例时，先运行 `pnpm build`，再运行 `DSHPA_CHROME_PATH=/absolute/path/to/chrome pnpm test:mobile`。CI 在已安装时选择 `google-chrome`。实际部署的 HTTPS 源地址、实体手机浏览器、添加到主屏幕及手机断线重连仍待验收。
