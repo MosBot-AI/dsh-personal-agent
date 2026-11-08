@@ -44,6 +44,7 @@
 | [能力插件证据](evidence/PA-038-zh.md) | 公开 API、生命周期注册表、策略消费者和本地示例 |
 | [原生路由边界证据](evidence/PA-040-zh.md) | 版本化契约、DSH 选择、重试和新请求序列 |
 | [难度路由证据](evidence/PA-041-zh.md) | 能力筛选、配置档位、有限估计和质量升级 |
+| [配额与推理恢复证据](evidence/PA-042-zh.md) | 共享账户限额、有限回退、资源等待和中断恢复 |
 
 每份文档有对应英文版本。任务定义在 [implementation-tasks.json](implementation-tasks.json)，含依赖、目标文件、源码参考、步骤、测试路径、验收场景和证据路径。任务状态字段是初始 `planned` 快照，实时进度以 GitHub Project 为准；默认实施目标是 **桌面 alpha（PA-035 及其依赖）**，第一项是 PA-001。
 
