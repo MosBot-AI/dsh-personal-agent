@@ -7,6 +7,7 @@ import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import { SessionId as nativeSessionId, type SessionHeader } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { z } from 'zod'
+import { createMobileApprovals } from '../api/approvals.js'
 import { mobileHttpConfigSchema, startMobileHttp } from '../api/mobile-http.js'
 import { createLocalKnowledge, localKnowledgeConfigSchema } from '../connectors/local-knowledge.js'
 import { createGitHubReadTransport } from '../connectors/github.js'
@@ -275,6 +276,9 @@ export function activateLocalInbox(
   let startup: Promise<void> | undefined
   try {
     const local = readLocalIdentity(config.storageDirectory)
+    const mobile = config.mobile
+    const mobileScope = { ownerId: local.ownerId, profileId: local.profileId }
+    const mobileDevices = mobile && store.mobileDevices(mobileScope)
     const profile = profileSchema.parse({
       id: local.profileId,
       ownerId: local.ownerId,
@@ -282,7 +286,10 @@ export function activateLocalInbox(
       verifiedDevices: [{ deviceId: local.deviceId, verifiedAt: local.verifiedAt }],
       policyVersion: 'local-web-1',
     })
-    const identity = createIdentityBoundary(id => id === profile.id ? profile : undefined)
+    const identity = createIdentityBoundary(id => {
+      if (id !== profile.id) return undefined
+      return mobileDevices ? { ...profile, verifiedDevices: [...profile.verifiedDevices, ...mobileDevices.verifiedDevices()] } : profile
+    })
     const ownerToken = () => identity.bindOwner({
       ownerId: local.ownerId,
       profileId: local.profileId,
@@ -410,16 +417,17 @@ export function activateLocalInbox(
       resident?.recoverySettled(scheduleError)
     }, () => resident?.recoveryUnavailable())
     startup = startupRecovery
-    const mobile = config.mobile
-    const mobileDevices = mobile && store.mobileDevices(scope)
-    if (mobile && mobileDevices) mobileHttp = startMobileHttp(mobile, mobileDevices, store.mobileFeed(scope))
+    const mobileApprovals = mobileDevices && createMobileApprovals(scope, mobileDevices, identity, store, actionGate)
+    if (mobile && mobileDevices && mobileApprovals) {
+      mobileHttp = startMobileHttp(mobile, mobileDevices, store.mobileFeed(scope), mobileApprovals)
+    }
     const service = createInboxService({
       store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
       resident, context, memory, knowledge, proactive,
-      mobile: mobile && mobileDevices && mobileHttp ? {
-        devices: mobileDevices, origin: mobile.origin, available: mobileHttp.available,
+      mobile: mobile && mobileDevices && mobileHttp && mobileApprovals ? {
+        devices: mobileDevices, approvals: mobileApprovals, origin: mobile.origin, available: mobileHttp.available,
       } : undefined,
       githubRead: connector && { connector, scope, projectId: github?.projectId },
       configureAttention: (_owner, policy, expectedVersion) => {

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { projectApproval, type MobileApprovals } from '../api/approvals.js'
 import type { MobileDeviceLedger } from '../api/devices.js'
 import { knowledgeRequestSchemas, type LocalKnowledge } from '../connectors/local-knowledge.js'
 import { connectorRequestSchemas, type ReadConnector } from '../connectors/registry.js'
@@ -70,6 +71,8 @@ const requestSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('mobile_devices') }),
   z.strictObject({ type: z.literal('mobile_pair'), label: nonEmptyTextSchema.max(80) }),
   z.strictObject({ type: z.literal('mobile_revoke'), deviceId: deviceIdSchema }),
+  z.strictObject({ type: z.literal('mobile_review'), requestId: requestIdSchema, expectedVersion: versionSchema,
+    digest: sha256DigestSchema, deviceId: deviceIdSchema.nullable() }),
   z.strictObject({ type: z.literal('create_project'), commandId: command, title: nonEmptyTextSchema.max(256), purpose: nonEmptyTextSchema.max(4_096) }),
   z.strictObject({
     type: z.literal('create_task'), commandId: command, projectId: projectIdSchema,
@@ -128,7 +131,7 @@ export interface InboxServiceOptions {
   readonly invalidateResources?: (ref: WorkRef) => void
   readonly routines?: RoutineInbox
   readonly resident?: ResidentOperations
-  readonly mobile?: { readonly devices: MobileDeviceLedger; readonly origin: string; readonly available: () => boolean }
+  readonly mobile?: { readonly devices: MobileDeviceLedger; readonly approvals: MobileApprovals; readonly origin: string; readonly available: () => boolean }
   readonly context?: LocalContext
   readonly memory?: LocalMemory
   readonly knowledge?: LocalKnowledge
@@ -238,13 +241,9 @@ export function createInboxService(options: InboxServiceOptions) {
       return parsed.success ? [parsed.data] : []
     })
     const work = store.listInboxWork(owner)
-    const approvals = actionGate?.pending(ownerToken, work.map(({ task }) => task.id)).map(({ approval, action, version }) => ({
-      id: approval.id, taskId: approval.taskId, version, digest: approval.action.payloadDigest,
-      expiresAt: approval.expiresAt, kind: action.kind, accountId: action.accountId, resourceRef: action.resourceRef,
-      ...(action.recipient === undefined ? {} : { recipient: action.recipient }),
-      dataScope: action.dataScope,
-      preview: JSON.stringify(action.payload, null, 2),
-    })) ?? []
+    const approvals = actionGate?.pending(ownerToken, work.map(({ task }) => task.id)).map(projectApproval) ?? []
+    const mobileReviewers = options.mobile?.available() ? options.mobile.devices.list()
+      .filter(device => device.state === 'active').map(({ deviceId, label }) => ({ deviceId, label })) : undefined
     const recoveryMode = store.recoveryMode()
     const usage = options.inspectUsage?.(owner)
     const schedules = options.routines?.snapshot(owner)
@@ -252,6 +251,7 @@ export function createInboxService(options: InboxServiceOptions) {
     return { ok: true, kind: 'snapshot', snapshot: {
       workerConfigured: executor !== undefined && worker !== undefined,
       ...(options.mobile ? { mobileConfigured: true } : {}),
+      ...(mobileReviewers ? { mobileReviewers } : {}),
       ...(options.memory ? { memoryConfigured: true } : {}),
       ...(options.knowledge ? { knowledgeConfigured: true } : {}),
       ...(options.githubRead ? { githubRead: { projectId: options.githubRead.projectId } } : {}),
@@ -370,6 +370,15 @@ export function createInboxService(options: InboxServiceOptions) {
           const result = mobile.devices.begin(request.label)
           return result.ok ? { ok: true, kind: 'mobile_pair', pairingCode: result.pairingCode,
             expiresAt: result.expiresAt, origin: mobile.origin } : failure(result.code)
+        }
+        case 'mobile_review': {
+          const mobile = options.mobile
+          const { type: _type, deviceId, ...fence } = request
+          if (deviceId !== null && !mobile?.available()) return failure('resource_unavailable')
+          const result = deviceId === null
+            ? actionGate?.assignMobileReview(fence, ownerToken, null)
+            : mobile?.approvals.assign(fence, ownerToken, deviceId)
+          return result?.ok ? { ok: true, kind: 'updated' } : failure(result?.code ?? 'resource_unavailable')
         }
         case 'mobile_revoke':
           return options.mobile?.devices.revoke(request.deviceId) ? { ok: true, kind: 'updated' } : failure('not_found')

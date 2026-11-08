@@ -1,15 +1,26 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { mobilePage, mobileScript, mobileStyles } from '../client/mobile-page.js'
+import { requestIdSchema, sha256DigestSchema, versionSchema } from '../domain/model.js'
+import type { MobileApprovals } from './approvals.js'
+import { mobileIcon, mobileManifest, mobilePage, mobileScript, mobileStyles } from '../client/mobile-page.js'
 import type { MobileDeviceLedger } from './devices.js'
 import type { MobileFeed } from './events.js'
 
 const cookieName = '__Host-dshpa-mobile'
 const cookieAttributes = 'Path=/; Secure; HttpOnly; SameSite=Strict'
 const pairSchema = z.strictObject({ code: z.string().regex(/^[a-zA-Z0-9_-]{43}$/u) })
+const responseSchema = z.strictObject({
+  expectedVersion: versionSchema, digest: sha256DigestSchema, decision: z.enum(['approve', 'deny']),
+})
 const bodyLimit = 2_048
 const pollMs = 1_000
 const maximumStreams = 24
+const assets = new Map<string, readonly [string, string]>([
+  ['/mobile.js', ['text/javascript', mobileScript]],
+  ['/mobile.css', ['text/css', mobileStyles]],
+  ['/mobile.webmanifest', ['application/manifest+json', mobileManifest]],
+  ['/mobile.svg', ['image/svg+xml', mobileIcon]],
+])
 
 export const mobileHttpConfigSchema = z.strictObject({
   origin: z.string().max(512).refine(value => {
@@ -28,7 +39,11 @@ function credentialOf(request: IncomingMessage): string | undefined {
   return values.length === 1 ? values[0]!.slice(cookieName.length + 1) : undefined
 }
 
-async function readPairing(request: IncomingMessage): Promise<{ code: string } | { error: 400 | 413 }> {
+async function readJson<S extends z.ZodType>(request: IncomingMessage, schema: S):
+Promise<{ input: z.output<S> } | { error: 400 | 413 | 415 }> {
+  if (request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
+    return { error: 415 }
+  }
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request.iterator({ destroyOnReturn: false })) {
@@ -39,8 +54,8 @@ async function readPairing(request: IncomingMessage): Promise<{ code: string } |
   }
   try {
     const input = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, size))
-    const parsed = pairSchema.safeParse(JSON.parse(input))
-    return parsed.success ? { code: parsed.data.code } : { error: 400 } as const
+    const parsed = schema.safeParse(JSON.parse(input))
+    return parsed.success ? { input: parsed.data } : { error: 400 }
   } catch {
     return { error: 400 } as const
   }
@@ -48,7 +63,7 @@ async function readPairing(request: IncomingMessage): Promise<{ code: string } |
 
 function secureHeaders(response: ServerResponse) {
   response.setHeader('Cache-Control', 'no-store')
-  response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+  response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; manifest-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
   response.setHeader('Referrer-Policy', 'no-referrer')
   response.setHeader('X-Content-Type-Options', 'nosniff')
 }
@@ -61,7 +76,7 @@ function json(response: ServerResponse, status: number, value: object) {
 const failure = (response: ServerResponse, status: number, code: string) => json(response, status, { ok: false, code })
 
 /** A narrow loopback upstream for the operator's HTTPS reverse proxy. */
-export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceLedger, feed: MobileFeed) {
+export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceLedger, feed: MobileFeed, approvals: MobileApprovals) {
   const origin = new URL(config.origin)
   const active = new Map<string, number>()
   let streamCount = 0
@@ -77,8 +92,9 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
     active.set(id, (active.get(id) ?? 0) + 1)
     let position = cursor
     let ticks = 0
+    let approvalRevision: string | undefined
     const write = (text: string) => {
-      if (!response.write(text)) response.end()
+      if (!response.writableEnded && !response.write(text)) response.end()
     }
     const poll = () => {
       try {
@@ -91,7 +107,15 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
         position = replay.cursor
         if (replay.events.length) {
           write(replay.events.map(event => 'id: ' + event.cursor + '\nevent: work\ndata: ' + JSON.stringify(event) + '\n\n').join(''))
-        } else if (++ticks % 10 === 0) write(': heartbeat\n\n')
+        } else if (ticks % 10 === 0) write(': heartbeat\n\n')
+        if (ticks++ % 4 === 0 && !response.writableEnded) {
+          const revision = approvals.revision(credential)
+          if (!revision.ok) { response.end('event: session-ended\ndata: {}\n\n'); return }
+          if (revision.value !== approvalRevision) {
+            approvalRevision = revision.value
+            write('event: approvals\ndata: {}\n\n')
+          }
+        }
       } catch {
         response.end()
       }
@@ -116,27 +140,27 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
       || (method === 'POST' && request.headers.origin !== origin.origin)) return failure(response, 403, 'forbidden_origin')
     if (!request.url?.startsWith('/') || request.url.startsWith('//') || request.url.includes('\\')) return failure(response, 400, 'invalid_path')
     const url = new URL(request.url, origin)
-    if (method === 'GET' && !url.search && (url.pathname === '/' || url.pathname === '/mobile.js' || url.pathname === '/mobile.css')) {
-      const asset = url.pathname === '/mobile.js' ? ['text/javascript', mobileScript] : url.pathname === '/mobile.css'
-        ? ['text/css', mobileStyles] : ['text/html', mobilePage(/^zh(?:[-,;]|$)/i.test(request.headers['accept-language'] ?? ''))]
-      response.writeHead(200, { 'Content-Type': asset[0] + '; charset=utf-8' })
-      response.end(asset[1])
-      return
+    if (method === 'GET' && !url.search) {
+      const asset = url.pathname === '/'
+        ? ['text/html', mobilePage(/^zh(?:[-,;]|$)/i.test(request.headers['accept-language'] ?? ''))]
+        : assets.get(url.pathname)
+      if (asset) {
+        response.writeHead(200, { 'Content-Type': asset[0] + '; charset=utf-8' })
+        response.end(asset[1])
+        return
+      }
     }
     if (method === 'POST' && url.pathname === '/v1/pair' && !url.search) {
       const now = Date.now()
       if (now - pairWindow >= 10_000) { pairWindow = now; pairCount = 0 }
       if (++pairCount > 12) return failure(response, 429, 'pairing_rate_limited')
-      if (request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
-        return failure(response, 415, 'json_required')
-      }
-      const body = await readPairing(request)
+      const body = await readJson(request, pairSchema)
       if ('error' in body) {
         if (body.error === 413) response.setHeader('Connection', 'close')
         return failure(response, body.error, 'invalid_pairing_request')
       }
       if (response.destroyed || !request.complete) return
-      const result = devices.enroll(body.code)
+      const result = devices.enroll(body.input.code)
       if (!result.ok) return failure(response, 401, result.code)
       response.setHeader('Set-Cookie', `${cookieName}=${result.credential}; ${cookieAttributes}; Expires=${new Date(result.device.expiresAt).toUTCString()}`)
       return json(response, 200, { ok: true })
@@ -145,6 +169,26 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
     if (method === 'GET' && url.pathname === '/v1/snapshot' && !url.search) {
       const snapshot = feed.snapshot(credential)
       return json(response, snapshot.ok ? 200 : 401, snapshot)
+    }
+    if (method === 'GET' && url.pathname === '/v1/approvals' && !url.search) {
+      const result = approvals.list(credential)
+      return json(response, result.ok ? 200 : 401, result)
+    }
+    const approvalPath = /^\/v1\/approvals\/([^/]+)\/responses$/u.exec(url.pathname)
+    if (method === 'POST' && approvalPath && !url.search) {
+      if (!devices.authenticate(credential)) return failure(response, 401, 'unauthorized')
+      let requestId
+      try { requestId = requestIdSchema.parse(decodeURIComponent(approvalPath[1]!)) }
+      catch { return failure(response, 400, 'invalid_input') }
+      const body = await readJson(request, responseSchema)
+      if ('error' in body) {
+        if (body.error === 413) response.setHeader('Connection', 'close')
+        return failure(response, body.error, 'invalid_input')
+      }
+      if (response.destroyed || !request.complete) return
+      const result = approvals.respond(credential, { requestId, ...body.input })
+      const status = result.ok ? 200 : result.code === 'unauthorized' ? 401 : result.code === 'not_found' ? 404 : 409
+      return json(response, status, result)
     }
     if (method === 'GET' && url.pathname === '/v1/events') {
       const device = devices.authenticate(credential)

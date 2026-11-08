@@ -235,6 +235,8 @@ function isInboxResponse(value: unknown): value is InboxResponse {
     const snapshot = value.snapshot
     return typeof snapshot.workerConfigured === 'boolean' && Array.isArray(snapshot.sessions)
       && Array.isArray(snapshot.projects) && Array.isArray(snapshot.tasks) && Array.isArray(snapshot.approvals)
+      && (snapshot.mobileReviewers === undefined || (Array.isArray(snapshot.mobileReviewers) && snapshot.mobileReviewers.length <= 16
+        && snapshot.mobileReviewers.every(device => isRecord(device) && typeof device.deviceId === 'string' && typeof device.label === 'string')))
       && (snapshot.mobileConfigured === undefined || typeof snapshot.mobileConfigured === 'boolean')
       && (snapshot.memoryConfigured === undefined || typeof snapshot.memoryConfigured === 'boolean')
       && (snapshot.knowledgeConfigured === undefined || typeof snapshot.knowledgeConfigured === 'boolean')

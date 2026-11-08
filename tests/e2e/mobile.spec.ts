@@ -1,16 +1,20 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
+import { createServer as createHttpsServer, request as httpsRequest } from 'node:https'
 import { createServer } from 'node:net'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { Script } from 'node:vm'
-import { expect, it, vi } from 'vitest'
-import { INBOX_RPC_ENDPOINT, type InboxRequest, type InboxResponse } from '../../packages/personal-agent/src/inbox/protocol.js'
-import { openWebHost } from './fixtures/web-host.js'
+import { expect, it, onTestFinished, vi } from 'vitest'
+import { INBOX_RPC_ENDPOINT, type InboxApproval, type InboxRequest, type InboxResponse } from '../../packages/personal-agent/src/inbox/protocol.js'
+import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
+import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/mobile-flow-probe.mjs', import.meta.url))
-const origin = 'https://mobile.test'
-const mobileHost = new URL(origin).host
 
 async function availablePort(): Promise<number> {
   const server = createServer()
@@ -44,15 +48,58 @@ async function frame(response: Response, match: string) {
   }
 }
 
-it('pairs through the native owner inbox and reconnects and revokes through the actual mobile HTTP listener', async () => {
+async function tlsProxy(root: string, upstreamPort: number) {
+  const keyPath = join(root, 'fixture-proxy-key.pem')
+  const certPath = join(root, 'fixture-proxy-cert.pem')
+  const configPath = join(root, 'fixture-proxy-openssl.conf')
+  writeFileSync(configPath, [
+    '[req]', 'distinguished_name = dn', 'prompt = no', 'x509_extensions = extensions',
+    '[dn]', 'CN = 127.0.0.1', '[extensions]', 'subjectAltName = IP:127.0.0.1', '',
+  ].join('\n'), { mode: 0o600 })
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+    '-config', configPath, '-keyout', keyPath, '-out', certPath], { stdio: 'ignore', timeout: 10_000 })
+  const cert = readFileSync(certPath)
+  const server = createHttpsServer({ key: readFileSync(keyPath), cert }, (request, response) => {
+    const upstream = httpRequest({ hostname: '127.0.0.1', port: upstreamPort, path: request.url,
+      method: request.method, headers: request.headers }, incoming => {
+      response.writeHead(incoming.statusCode ?? 502, incoming.headers)
+      incoming.pipe(response)
+    })
+    upstream.once('error', () => {
+      if (!response.headersSent) response.writeHead(502)
+      response.end()
+    })
+    response.once('close', () => upstream.destroy())
+    request.pipe(upstream)
+  })
+  onTestFinished(async () => {
+    const closed = new Promise<void>(resolve => server.close(() => resolve()))
+    server.closeAllConnections()
+    await closed
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const address = server.address()
+  assert.ok(address && typeof address !== 'string')
+  return { cert, port: address.port, origin: `https://127.0.0.1:${address.port}` }
+}
+
+async function openMobile(approvals = false) {
   const port = await availablePort()
-  const host = await openWebHost(probe, { patch: [
+  const prepared = approvals ? prepareWebHost(probe) : undefined
+  if (prepared) onTestFinished(() => rmSync(prepared.root, { recursive: true, force: true }))
+  const proxy = prepared && await tlsProxy(prepared.root, port)
+  const origin = proxy?.origin ?? 'https://mobile.test'
+  const mobileHost = new URL(origin).host
+  if (prepared) writeFileSync(join(prepared.root, 'mobile-review.json'), JSON.stringify({ origin, port }), { mode: 0o600 })
+  const host = await openWebHost(probe, prepared ? { prepared } : { patch: [
     '- id: dshpa', '  config:', '    inbox:',
     "      storageDirectory: !!js dshHomePath('mobile-inbox')", '      workRoot: !!js process.cwd()',
     '      mobile:', `        origin: ${origin}`, `        port: ${port}`,
   ] })
   const owner = await host.exchange()
-  const operator = await host.exchange(true)
   const inbox = async (request: InboxRequest) => {
     const response = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, owner)
     assert.ok(response.status === 200 && response.result?.ok, host.diagnostics())
@@ -61,8 +108,10 @@ it('pairs through the native owner inbox and reconnects and revokes through the 
   type MobileRequest = { method?: string; headers?: Record<string, string>; body?: string }
   function mobile(path: string, request?: MobileRequest): Promise<Response> {
     return new Promise((resolve, reject) => {
-      const call = httpRequest({
-        hostname: '127.0.0.1', port, path, method: request?.method ?? 'GET',
+      const transport = proxy ? httpsRequest : httpRequest
+      const call = transport({
+        hostname: '127.0.0.1', port: proxy?.port ?? port, path, method: request?.method ?? 'GET',
+        ...(proxy ? { ca: proxy.cert } : {}),
         headers: { host: mobileHost, ...request?.headers }, signal: AbortSignal.timeout(8_000),
       }, incoming => {
         const headers = new Headers()
@@ -82,17 +131,39 @@ it('pairs through the native owner inbox and reconnects and revokes through the 
     expect(response.status).toBe(expected)
     await response.body?.cancel()
   }
+  async function pairDevice(label: string) {
+    const response = await inbox({ type: 'mobile_pair', label })
+    assert.ok(response.ok && response.kind === 'mobile_pair')
+    const paired = await mobile('/v1/pair', { method: 'POST', headers: { origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ code: response.pairingCode }) })
+    expect(paired.status).toBe(200)
+    const cookie = paired.headers.get('set-cookie')?.split(';', 1)[0]
+    assert.ok(cookie)
+    expect(await paired.json()).toEqual({ ok: true })
+    const devices = await inbox({ type: 'mobile_devices' })
+    assert.ok(devices.ok && devices.kind === 'mobile_devices')
+    const device = devices.devices.find(item => item.label === label)
+    assert.ok(device?.state === 'active')
+    return { cookie, deviceId: device.deviceId }
+  }
+  await vi.waitFor(async () => expect(await inbox({ type: 'mobile_devices' })).toMatchObject({ available: true }))
+  return { host, owner, inbox, mobile, status, pairDevice, origin }
+}
 
+it('pairs through the native owner inbox and reconnects and revokes through the actual mobile HTTP listener', async () => {
+  const { host, owner, inbox, mobile, status, origin } = await openMobile()
+  const operator = await host.exchange(true)
   expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'mobile_pair', label: 'Phone' })).toMatchObject({ status: 401 })
   expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'mobile_pair', label: 'Phone' }, operator)).toMatchObject({ status: 403 })
   expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'mobile_pair', label: 'Phone' }, owner, 'https://elsewhere.test'))
     .toMatchObject({ status: 403 })
-  await vi.waitFor(async () => expect(await inbox({ type: 'mobile_devices' })).toMatchObject({ available: true }))
-
   const page = await mobile('/', { headers: { 'accept-language': 'zh-CN' } })
   expect(page.status).toBe(200)
   expect(page.headers.get('content-security-policy')).toContain("frame-ancestors 'none'")
   expect(await page.text()).toContain('dshpa 移动工作台')
+  const manifest = await mobile('/mobile.webmanifest')
+  expect(manifest.headers.get('content-type')).toContain('application/manifest+json')
+  expect(await manifest.json()).toMatchObject({ display: 'standalone', start_url: '/', icons: [{ src: '/mobile.svg' }] })
   const script = await mobile('/mobile.js')
   expect(script.status).toBe(200)
   const scriptText = await script.text()
@@ -150,4 +221,84 @@ it('pairs through the native owner inbox and reconnects and revokes through the 
   expect(await inbox({ type: 'mobile_revoke', deviceId: device.deviceId })).toMatchObject({ ok: true })
   expect(await frame(subscribed, 'session-ended')).toContain('event: session-ended')
   await status('/v1/snapshot', 401, { headers: { cookie } })
+}, 25_000)
+
+
+it('moves exact reviews through a local TLS proxy and fences other devices, stale responses and revoked reviews', async () => {
+  const { host, inbox, mobile, status, pairDevice, origin } = await openMobile(true)
+  const phone = await pairDevice('Primary phone')
+  const other = await pairDevice('Second phone')
+  const list = async (cookie: string): Promise<InboxApproval[]> => {
+    const response = await mobile('/v1/approvals', { headers: { cookie } })
+    expect(response.status).toBe(200)
+    return (await response.json()).approvals
+  }
+  const localReview = async (id: string) => {
+    const result = await inbox({ type: 'snapshot' })
+    assert.ok(result.ok && result.kind === 'snapshot')
+    const approval = result.snapshot.approvals.find(entry => entry.id === id)
+    assert.ok(approval)
+    return approval
+  }
+  const fence = (approval: InboxApproval) => ({ requestId: approval.id, expectedVersion: approval.version, digest: approval.digest })
+  const respond = (approval: InboxApproval, cookie: string, changes: Record<string, unknown> = {}, requestOrigin = origin) =>
+    mobile('/v1/approvals/' + encodeURIComponent(approval.id) + '/responses', {
+      method: 'POST', headers: { origin: requestOrigin, 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ expectedVersion: approval.version, digest: approval.digest, decision: 'approve', ...changes }),
+    })
+  const first = await localReview('mobile-review-approve')
+  expect(await list(phone.cookie)).toEqual([])
+  await status('/v1/approvals', 401)
+  expect(await inbox({ type: 'mobile_review', ...fence(first), deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  const assigned = await localReview(first.id)
+  expect(assigned).toMatchObject({ version: first.version + 1, digest: first.digest, mobileDeviceId: phone.deviceId })
+  const cards = await list(phone.cookie)
+  expect(cards).toEqual([assigned])
+  expect(cards[0]?.preview).toContain('Exact fixture payload approve')
+  expect(await list(other.cookie)).toEqual([])
+  expect(await inbox({ type: 'approval', ...fence(assigned), decision: 'approve' }))
+    .toEqual({ ok: false, code: 'permission_denied' })
+  const hint = await frame(await mobile('/v1/events', { headers: { cookie: phone.cookie } }), 'event: approvals')
+  expect(hint).toContain('event: approvals\ndata: {}')
+  expect(hint).not.toContain('Exact fixture payload')
+  expect(hint).not.toContain(first.id)
+  for (const [response, expected, code] of [
+    [await respond(assigned, other.cookie), 404, 'not_found'],
+    [await respond(assigned, phone.cookie, {}, 'https://elsewhere.test'), 403, 'forbidden_origin'],
+    [await respond(first, phone.cookie), 409, 'version_conflict'],
+    [await respond(assigned, phone.cookie, { digest: '0'.repeat(64) }), 409, 'action_changed'],
+  ] as const) {
+    expect(response.status).toBe(expected)
+    expect(await response.json()).toMatchObject({ ok: false, code })
+  }
+  const answers = await Promise.all([respond(assigned, phone.cookie), respond(assigned, phone.cookie)])
+  expect(answers.map(response => response.status).sort()).toEqual([200, 409])
+  expect(await answers.find(response => response.ok)?.json()).toEqual({ ok: true, status: 'approved' })
+  expect(await answers.find(response => !response.ok)?.json()).toEqual({ ok: false, code: 'already_decided' })
+  expect(await list(phone.cookie)).toEqual([])
+
+  const second = await localReview('mobile-review-recall')
+  expect(await inbox({ type: 'mobile_review', ...fence(second), deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  const delegated = await localReview(second.id)
+  expect(await inbox({ type: 'mobile_revoke', deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  const revoked = await respond(delegated, phone.cookie)
+  expect(revoked.status).toBe(401)
+  await revoked.body?.cancel()
+  expect(await inbox({ type: 'mobile_review', ...fence(delegated), deviceId: null })).toMatchObject({ ok: true })
+  const recalled = await localReview(second.id)
+  expect(recalled.version).toBe(delegated.version + 1)
+  expect(recalled.mobileDeviceId).toBeUndefined()
+  expect(await inbox({ type: 'approval', ...fence(recalled), decision: 'deny' })).toMatchObject({ ok: true })
+  const database = new DatabaseSync(join(host.root, 'home', 'mobile-approval-inbox', DATABASE_FILENAME), { readOnly: true })
+  try {
+    const grants = database.prepare('SELECT record FROM action_grants').all()
+    expect(grants).toHaveLength(1)
+    expect(JSON.parse(String(grants[0]?.record))).toMatchObject({ approvingPrincipal: { deviceId: phone.deviceId },
+      approvalEvidence: { requestId: first.id }, action: { kind: first.kind, recipient: first.recipient, resourceRef: first.resourceRef } })
+    const conversation = database.prepare('SELECT record FROM conversations WHERE id = ?').get('mobile-review-conversation')
+    expect(JSON.parse(String(conversation?.record))).toMatchObject({ originalDestination: {
+      sourceInstanceId: 'fixture-original-source', externalDestinationId: 'fixture-original-thread',
+    } })
+    expect(database.prepare('SELECT count(*) AS count FROM action_dispatches').get()?.count).toBe(0)
+  } finally { database.close() }
 }, 25_000)
