@@ -51,6 +51,7 @@ import {
 } from '../domain/verification.js'
 import { createActionGate, type ActionGateOptions } from '../policy/dispatch.js'
 import { createAttention, type AttentionOptions } from '../runtime/attention.js'
+import { createInferenceLedger, markColdInferenceAttempts } from './inference.js'
 import { createBudget, markColdBudgetReservations, type BudgetOptions, type BudgetService } from '../runtime/budget.js'
 import { consumeWorkerReleaseProof } from '../runtime/executor.js'
 import {
@@ -298,6 +299,11 @@ class WorkStore {
 
   createActionGate(options: ActionGateOptions) {
     return createActionGate(operation => this.access(operation), options, dispatchPermitted)
+  }
+
+  createInferenceLedger(options?: Parameters<typeof createInferenceLedger>[2]) {
+    if (!this.budget) throw new StorageError('invalid_input', 'Inference routing requires the Core budget')
+    return createInferenceLedger(operation => this.access(operation), this.budget, options)
   }
 
   createBudget(options: BudgetOptions): BudgetService {
@@ -1220,6 +1226,7 @@ export function openWorkStore(directory: string): WorkStore {
   try {
     transaction(storage.db, () => {
       markColdBudgetReservations(storage.db)
+      markColdInferenceAttempts(storage.db)
       markStartupRecovery(storage.db)
     })
     return new WorkStore(storage)

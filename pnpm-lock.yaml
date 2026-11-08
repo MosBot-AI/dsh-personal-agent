@@ -150,6 +150,9 @@ importers:
       '@deepseek-ai/dsh-util-time':
         specifier: 0.2.2-rc.1
         version: 0.2.2-rc.1(@deepseek-ai/cordis@4.1.0)
+      '@mosbot-ai/dshpa-model-routing':
+        specifier: workspace:*
+        version: link:../model-routing
       '@mosbot-ai/dshpa-plugin-api':
         specifier: workspace:*
         version: link:../plugin-api

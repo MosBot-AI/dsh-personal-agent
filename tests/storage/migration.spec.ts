@@ -46,6 +46,7 @@ import { migration008 } from '../../packages/personal-agent/src/storage/migratio
 import { migration009 } from '../../packages/personal-agent/src/storage/migrations/009.js'
 import { migration010 } from '../../packages/personal-agent/src/storage/migrations/010.js'
 import { migration011 } from '../../packages/personal-agent/src/storage/migrations/011.js'
+import { migration012 } from '../../packages/personal-agent/src/storage/migrations/012.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import {
   APPLICATION_ID,
@@ -64,6 +65,7 @@ import {
   V9_BACKUP_SUFFIX,
   V10_BACKUP_SUFFIX,
   V11_BACKUP_SUFFIX,
+  V12_BACKUP_SUFFIX,
 } from '../../packages/personal-agent/src/storage/schema.js'
 
 const directories: string[] = []
@@ -1024,6 +1026,32 @@ describe('SQLite v11 to v12 upgrade', () => {
       const backup = new DatabaseSync(path, { readOnly: true })
       try { expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(11) }
       finally { backup.close() }
+    } finally { source.db.close() }
+  })
+})
+
+describe('SQLite v12 to v13 upgrade', () => {
+  it('preserves work and publishes a private backup before installing inference claims', () => {
+    const source = createVersionFixture(4, true)
+    try {
+      transaction(source.db, () => {
+        for (const migration of [migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012]) {
+          source.db.exec(migration)
+        }
+        source.db.exec('PRAGMA user_version = 12')
+      })
+      const tasks = source.db.prepare('SELECT * FROM tasks').all()
+      migrateSchema(source.db)
+      expect(source.db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
+      expect(source.db.prepare('SELECT * FROM tasks').all()).toEqual(tasks)
+      expect(source.db.prepare('SELECT count(*) AS total FROM inference_attempts').get()?.total).toBe(0)
+      const path = source.path + V12_BACKUP_SUFFIX
+      if (process.getuid) expect(statSync(path).mode & 0o777).toBe(0o600)
+      const backup = new DatabaseSync(path, { readOnly: true })
+      try {
+        expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(12)
+        expect(backup.prepare('SELECT * FROM tasks').all()).toEqual(tasks)
+      } finally { backup.close() }
     } finally { source.db.close() }
   })
 })

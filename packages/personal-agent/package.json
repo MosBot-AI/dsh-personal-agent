@@ -44,6 +44,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-util-time": "0.2.2-rc.1",
     "@mosbot-ai/dshpa-plugin-api": "workspace:*",
+    "@mosbot-ai/dshpa-model-routing": "workspace:*",
     "koffi": "3.1.1",
     "zod": "4.6.7"
   },

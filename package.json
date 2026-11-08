@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter './packages/**' --filter './examples/plugins/**' run build",
-    "typecheck": "pnpm --filter '@mosbot-ai/dshpa-plugin-testkit...' run build && tsc --noEmit",
+    "typecheck": "pnpm --filter '@mosbot-ai/dshpa-plugin-testkit...' --filter '@mosbot-ai/dshpa-model-routing...' run build && tsc --noEmit",
     "test": "vitest run --exclude \"tests/e2e/**\"",
     "test:contracts": "pnpm build && vitest run tests/contracts",
     "test:recovery": "vitest run tests/recovery",
