@@ -36,6 +36,7 @@ export const modelDeploymentSchema = z.strictObject({
   capabilities: features,
   contextTokens: tokens,
   outputTokens: tokens,
+  /** Provider-declared order from least to greatest selectable effort. */
   nativeEfforts: ids,
   effort: z.partialRecord(logicalEffortSchema, effortMappingSchema),
 }).refine(value => value.outputTokens <= value.contextTokens && Object.values(value.effort).every(mapping =>
@@ -60,11 +61,33 @@ export const quotaObservationSchema = z.strictObject({
   || (value.status === 'unknown' && value.remainingRequests === undefined && value.remainingTokens === undefined))
   && (value.resetAt === undefined || value.resetAt >= value.observedAt))
 
+export const difficultyTierSchema = z.enum(['simple', 'standard', 'complex'])
+export const routingPoolSchema = z.enum(['fast', 'balanced', 'deep'])
 const pool = z.array(deploymentPinSchema).min(1).max(32).refine(values => new Set(values.map(value => value.id)).size === values.length)
+const rule = z.strictObject({ pool: routingPoolSchema, effort: logicalEffortSchema.optional() })
+const defaultRules = {
+  simple: { pool: 'fast', effort: 'low' },
+  standard: { pool: 'balanced', effort: 'medium' },
+  complex: { pool: 'deep', effort: 'high' },
+} as const
+export const semanticBudgetSchema = z.strictObject({
+  maxInputTokens: tokens.max(4096),
+  maxOutputTokens: tokens.max(128),
+  ceilingMicros: z.int().positive(),
+  currency: z.string().regex(/^[A-Z]{3}$/u),
+  timeoutMs: z.int().min(10).max(5000),
+})
+const confidence = z.number().min(0).max(1)
 export const routingPolicyRevisionSchema = z.discriminatedUnion('mode', [
-  z.strictObject({ ...stamp, mode: z.literal('fixed'), deployment: deploymentPinSchema }),
+  z.strictObject({ ...stamp, mode: z.literal('fixed'), deployment: deploymentPinSchema, effort: logicalEffortSchema.optional() }),
   z.strictObject({ ...stamp, mode: z.literal('automatic'),
-    pools: z.strictObject({ fast: pool, balanced: pool, deep: pool }), maxSwitches: z.int().min(0).max(8) }),
+    pools: z.strictObject({ fast: pool, balanced: pool, deep: pool }), maxSwitches: z.int().min(0).max(8),
+    rules: z.strictObject({ simple: rule, standard: rule, complex: rule }).default(defaultRules),
+    lowConfidence: z.strictObject({ threshold: confidence, minimumTier: z.enum(['standard', 'complex']) })
+      .default({ threshold: 0.65, minimumTier: 'standard' }),
+    unsupportedEffort: z.enum(['exclude', 'omit']).default('exclude'),
+    semantic: semanticBudgetSchema.optional(),
+  }),
 ])
 
 export const routingRequirementsSchema = z.strictObject({
@@ -84,7 +107,9 @@ const decision = {
   policy: z.strictObject(stamp),
   decidedAt: capabilityInstantSchema,
   requirements: routingRequirementsSchema,
-  difficulty: z.strictObject({ tier: z.enum(['simple', 'standard', 'complex']), confidence: z.number().min(0).max(1) }).optional(),
+  acceptanceDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  difficulty: z.strictObject({ tier: difficultyTierSchema, confidence,
+    basis: z.enum(['deterministic', 'semantic', 'conservative']).optional() }).optional(),
   excluded: z.array(candidateExclusion).max(64),
 }
 export const routingDecisionSchema = z.discriminatedUnion('kind', [
@@ -92,7 +117,7 @@ export const routingDecisionSchema = z.discriminatedUnion('kind', [
     deployment: deploymentPinSchema, effort: logicalEffortSchema.optional(),
     basis: z.enum(['fixed', 'override', 'rule', 'escalation', 'fallback']) }),
   z.strictObject({ ...decision, kind: z.literal('wait'),
-    reason: z.enum(['policy', 'permission', 'budget', 'quota', 'unavailable']), nextCheckAt: capabilityInstantSchema.optional() }),
+    reason: z.enum(['policy', 'permission', 'missing-input', 'budget', 'quota', 'unavailable']), nextCheckAt: capabilityInstantSchema.optional() }),
 ])
 
 const usage = z.strictObject({
@@ -116,6 +141,8 @@ export const inferenceAttemptSchema = z.strictObject({
   && (value.status !== 'planned' || (value.usage === undefined && value.budgetReservationIds.length === 0)))
 
 export type DeploymentPin = z.infer<typeof deploymentPinSchema>
+export type DifficultyTier = z.infer<typeof difficultyTierSchema>
+export type SemanticBudget = z.infer<typeof semanticBudgetSchema>
 export type LogicalEffort = z.infer<typeof logicalEffortSchema>
 export type EffortMapping = z.infer<typeof effortMappingSchema>
 export type ModelDeployment = z.infer<typeof modelDeploymentSchema>
