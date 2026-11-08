@@ -44,6 +44,10 @@ jobs:
       - name: Verify keyless native Web flow
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:local-flow
       - name: Verify mobile loopback Web flow
-        run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:mobile
+        run: |
+          if command -v google-chrome >/dev/null; then
+            export DSHPA_CHROME_PATH="$(command -v google-chrome)"
+          fi
+          npm exec --yes --package=pnpm@11.28.5 -- pnpm test:mobile
       - name: Verify Linux headless resident profile
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:resident

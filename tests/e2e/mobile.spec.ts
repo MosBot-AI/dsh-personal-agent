@@ -12,6 +12,7 @@ import { Script } from 'node:vm'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { INBOX_RPC_ENDPOINT, type InboxApproval, type InboxRequest, type InboxResponse } from '../../packages/personal-agent/src/inbox/protocol.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
+import { openHeadlessChrome } from './fixtures/headless-chrome.js'
 import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/mobile-flow-probe.mjs', import.meta.url))
@@ -59,7 +60,9 @@ async function tlsProxy(root: string, upstreamPort: number) {
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-config', configPath, '-keyout', keyPath, '-out', certPath], { stdio: 'ignore', timeout: 10_000 })
   const cert = readFileSync(certPath)
+  let available = true
   const server = createHttpsServer({ key: readFileSync(keyPath), cert }, (request, response) => {
+    if (!available) { request.socket.destroy(); return }
     const upstream = httpRequest({ hostname: '127.0.0.1', port: upstreamPort, path: request.url,
       method: request.method, headers: request.headers }, incoming => {
       response.writeHead(incoming.statusCode ?? 502, incoming.headers)
@@ -83,7 +86,13 @@ async function tlsProxy(root: string, upstreamPort: number) {
   })
   const address = server.address()
   assert.ok(address && typeof address !== 'string')
-  return { cert, port: address.port, origin: `https://127.0.0.1:${address.port}` }
+  return {
+    cert, port: address.port, origin: `https://127.0.0.1:${address.port}`,
+    setAvailable(value: boolean) {
+      available = value
+      if (!available) server.closeAllConnections()
+    },
+  }
 }
 
 async function openMobile(approvals = false) {
@@ -147,7 +156,7 @@ async function openMobile(approvals = false) {
     return { cookie, deviceId: device.deviceId }
   }
   await vi.waitFor(async () => expect(await inbox({ type: 'mobile_devices' })).toMatchObject({ available: true }))
-  return { host, owner, inbox, mobile, status, pairDevice, origin }
+  return { host, owner, inbox, mobile, status, pairDevice, origin, proxy }
 }
 
 it('pairs through the native owner inbox and reconnects and revokes through the actual mobile HTTP listener', async () => {
@@ -302,3 +311,63 @@ it('moves exact reviews through a local TLS proxy and fences other devices, stal
     expect(database.prepare('SELECT count(*) AS count FROM action_dispatches').get()?.count).toBe(0)
   } finally { database.close() }
 }, 25_000)
+
+
+const chromePath = process.env.DSHPA_CHROME_PATH
+it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome browser with a mobile viewport', async () => {
+  const { host, inbox, origin, proxy } = await openMobile(true)
+  assert.ok(proxy && chromePath)
+  const chrome = await openHeadlessChrome(chromePath, join(host.root, 'chrome-profile'), proxy.cert)
+  await chrome.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true })
+  await chrome.send('Emulation.setTouchEmulationEnabled', { enabled: true })
+  await chrome.send('Network.enable')
+  await chrome.send('Network.setExtraHTTPHeaders', { headers: { 'Accept-Language': 'en-US' } })
+  const navigation = await chrome.send<{ errorText?: string }>('Page.navigate', { url: origin + '/' })
+  expect(navigation.errorText).toBeUndefined()
+  await chrome.waitFor("document.querySelector('#pair')?.hidden === false")
+  const pairing = await inbox({ type: 'mobile_pair', label: 'Headless Chrome' })
+  assert.ok(pairing.ok && pairing.kind === 'mobile_pair')
+  await chrome.evaluate(`document.querySelector('#code').value = ${JSON.stringify(pairing.pairingCode)};
+    document.querySelector('#pair').requestSubmit()`)
+  await chrome.waitFor("document.querySelector('#work')?.hidden === false")
+  const cookies = await chrome.send<{ cookies: { name: string; secure: boolean; httpOnly: boolean; sameSite: string; path: string }[] }>(
+    'Network.getCookies', { urls: [origin] })
+  const { name, secure, httpOnly, sameSite, path } = cookies.cookies.find(cookie => cookie.name === '__Host-dshpa-mobile') ?? {}
+  expect({ name, secure, httpOnly, sameSite, path }).toEqual({
+    name: '__Host-dshpa-mobile', secure: true, httpOnly: true, sameSite: 'Strict', path: '/',
+  })
+  expect(await chrome.evaluate<boolean>("document.cookie.includes('__Host-dshpa-mobile')")).toBe(false)
+  expect(await chrome.evaluate<boolean>("innerWidth === 390 && document.documentElement.scrollWidth === innerWidth")).toBe(true)
+  const manifest = await chrome.send<{ url: string; errors: unknown[] }>('Page.getAppManifest')
+  expect(manifest).toMatchObject({ url: origin + '/mobile.webmanifest', errors: [] })
+  await chrome.send('Page.reload')
+  await chrome.waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#pair')?.hidden === true")
+
+  const local = await inbox({ type: 'snapshot' })
+  assert.ok(local.ok && local.kind === 'snapshot')
+  const review = local.snapshot.approvals.find(item => item.id === 'mobile-review-approve')
+  const phone = local.snapshot.mobileReviewers?.find(item => item.label === 'Headless Chrome')
+  assert.ok(review && phone)
+  expect(await inbox({ type: 'mobile_review', requestId: review.id, expectedVersion: review.version, digest: review.digest,
+    deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload approve')")
+  await chrome.evaluate("document.querySelector('#review-items .review-actions button').click()")
+  await chrome.waitFor("document.querySelector('#review-status')?.textContent === 'Review response recorded.'")
+  const decided = await inbox({ type: 'snapshot' })
+  assert.ok(decided.ok && decided.kind === 'snapshot')
+  expect(decided.snapshot.approvals.some(item => item.id === review.id)).toBe(false)
+  const outstanding = decided.snapshot.approvals.find(item => item.id === 'mobile-review-recall')
+  assert.ok(outstanding)
+  expect(await inbox({ type: 'mobile_review', requestId: outstanding.id, expectedVersion: outstanding.version,
+    digest: outstanding.digest, deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+
+  proxy.setAvailable(false)
+  await chrome.waitFor("document.querySelector('#work')?.hidden === true && document.querySelector('#tasks')?.children.length === 0 && document.querySelector('#review-items')?.children.length === 0")
+  expect(await inbox({ type: 'create_task', commandId: 'create-during-browser-disconnect', projectId: 'mobile-review-project',
+    sessionId: 'mobile-fixture-chat', outcome: 'Review after Chrome reconnect' })).toMatchObject({ ok: true })
+  proxy.setAvailable(true)
+  await chrome.waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#tasks')?.textContent.includes('Review after Chrome reconnect') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  expect(await inbox({ type: 'mobile_revoke', deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  await chrome.waitFor("document.querySelector('#pair')?.hidden === false && document.querySelector('#work')?.hidden === true && document.querySelector('#review-items')?.children.length === 0")
+}, 45_000)
