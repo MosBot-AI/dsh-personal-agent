@@ -83,6 +83,8 @@ PA-041 实现确定性难度和可配置模型池及强度规则。可选语义�
 
 所有兜底再次检查能力、effort、数据去向和预算。用户已配置的规则可以覆盖后续匹配动作，无需每次重问；未允许的新目的地或费用突破不能自动执行。保留一个全局 fallback owner；启用网关内部重试时与 dshpa 共用尝试上限，避免双层重试乘法放大。禁止循环链，跨账号切换不得规避服务限制。
 
+PA-042 在全新的推理 Session 周围实现共享配额准入、Core 原子声明及持久等待。[验证证据](evidence/PA-042-zh.md)
+
 ## 6. DSH 接入和持久性
 
 固定宿主的 [LlmCallConfig](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/call-config.ts) 已有 reasoningEffort；[模型解析](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/index.ts) 校验模型支持的档位。宿主在 step 前快照模型选择，原生 retry 保留快照，不能在旧 `agent/request` 钩子中随意换模型。[架构](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/docs/architecture.md)。

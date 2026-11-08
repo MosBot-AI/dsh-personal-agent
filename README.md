@@ -29,6 +29,7 @@ The [capability plugin evidence](docs/evidence/PA-038.md) covers versioned regis
 
 The native routing boundary evidence covers fixed request selection, retry pinning, and budget-gated inference Sessions. [PA-040 evidence](docs/evidence/PA-040.md)
 The difficulty routing evidence covers configured model pools, effort mapping and bounded quality escalation. [PA-041 evidence](docs/evidence/PA-041.md)
+The quota and inference evidence covers atomic spend, bounded fallback and interrupted recovery. [PA-042 evidence](docs/evidence/PA-042.md)
 
 [Implementation Project](https://github.com/orgs/MosBot-AI/projects/3) · [Agent workflow](docs/11-github-project-workflow.md)
 

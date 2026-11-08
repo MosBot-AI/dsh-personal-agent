@@ -83,6 +83,8 @@ Quota telemetry distinguishes local measurements, provider reports, estimates an
 
 Recheck capabilities, effort, destinations and budgets on every fallback. Configured grants need no repeated confirmation, but new destinations or exceeded caps cannot proceed. Assign one global fallback owner and bound gateway retries within the same attempt budget; reject cycles and do not evade service limits by account rotation.
 
+PA-042 implements shared quota admission, atomic Core claims and durable waits around fresh inference Sessions. [Verification evidence](evidence/PA-042.md)
+
 ## 6. DSH and persistence
 
 Pinned [LlmCallConfig](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/call-config.ts) carries reasoningEffort; [model resolution](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm/src/index.ts) validates support. The host snapshots selection before a step and retains it on retry; the old agent/request hook cannot freely change it. [Architecture](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/docs/architecture.md).
