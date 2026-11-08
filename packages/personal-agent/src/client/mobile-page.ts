@@ -211,6 +211,7 @@ function runMobilePage() {
   }
 
   async function refresh() {
+    if (document.hidden) return
     pending?.abort()
     const controller = new AbortController()
     pending = controller
@@ -266,6 +267,15 @@ function runMobilePage() {
     } finally {
       button.disabled = false
     }
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      void refresh()
+      return
+    }
+    stop()
+    form.hidden = true
+    status.textContent = text.reconnecting
   })
   window.addEventListener('pagehide', stop)
   window.addEventListener('pageshow', event => { if (event.persisted) void refresh() })

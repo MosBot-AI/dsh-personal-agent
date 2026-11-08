@@ -85,6 +85,14 @@ export async function openHeadlessChrome(executable: string, profile: string, ce
   }
   return {
     send, evaluate,
+    async switchToAnotherTab() {
+      const other = await call<{ targetId: string }>('Target.createTarget', { url: 'about:blank' })
+      await call('Target.activateTarget', { targetId: other.targetId })
+      return async () => {
+        await call('Target.activateTarget', { targetId })
+        await call('Target.closeTarget', { targetId: other.targetId })
+      }
+    },
     async waitFor(expression: string) {
       await vi.waitFor(async () => {
         if (!await evaluate<boolean>(expression)) throw new Error('The browser state did not match the test step')

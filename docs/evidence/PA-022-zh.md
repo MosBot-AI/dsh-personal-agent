@@ -33,6 +33,8 @@
 
 2026-11-09，同一桌面 Chrome 移动视口用例在隔离 TLS 源地址上运行 `Page.getInstallabilityErrors`，返回零项安装条件错误。这项检查覆盖 Chrome 的安装条件。添加到主屏幕及启动仍待验收。
 
+真实 Chrome 标签页切换验证了页面在隐藏时立即移除任务与审批内容。返回标签页后，页面保持空白，直到浏览器重新鉴权并获取最新数据。回归在标签页隐藏期间创建任务，验证返回后新任务与待审内容一同出现。
+
 ## 待验收
 
 E05 有委派动作门禁及本地 HTTPS 审批证据。E07 和 E13 有限定范围的回环网络证据，以及桌面 Chrome 移动模拟下的浏览器证据。复测浏览器用例时，先运行 `pnpm build`，再运行 `DSHPA_CHROME_PATH=/absolute/path/to/chrome pnpm test:mobile`。CI 在已安装时选择 `google-chrome`。实际部署的 HTTPS 源地址、实体手机浏览器、添加到主屏幕及手机断线重连仍待验收。
