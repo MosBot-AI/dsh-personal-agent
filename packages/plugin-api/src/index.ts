@@ -7,6 +7,7 @@ import type { CreationWorkflowProvider } from './workflow.js'
 export * from './common.js'
 export * from './media.js'
 export * from './memory.js'
+export * from './model-routing.js'
 export * from './workflow.js'
 
 export interface ProviderByKind {
