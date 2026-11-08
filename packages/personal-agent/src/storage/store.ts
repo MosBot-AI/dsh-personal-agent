@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { MemoryAccess } from '@mosbot-ai/dshpa-plugin-api'
 import { z } from 'zod'
+import { createMobileDeviceLedger, type MobileDeviceLedger, type MobileDeviceScope } from '../api/devices.js'
+import { createMobileFeed } from '../api/events.js'
 import { createArtifactStore, readScopedArtifact } from '../artifacts/store.js'
 import { contextPointerSchema, type CheckpointCaptureResult, type ContextEvidencePointer, type ContextExclusionResult } from '../context/checkpoint.js'
 import {
@@ -297,6 +299,14 @@ class WorkStore {
 
   finishMemoryCommand(actor: MemoryLedgerActor, input: unknown) {
     return this.access(db => transaction(db, () => finishMemoryCommand(db, actor, input)))
+  }
+
+  mobileDevices(scope: MobileDeviceScope, now?: () => UtcInstant): MobileDeviceLedger {
+    return createMobileDeviceLedger(operation => this.access(operation), scope, now)
+  }
+
+  mobileFeed(scope: MobileDeviceScope, now?: () => UtcInstant): ReturnType<typeof createMobileFeed> {
+    return createMobileFeed(operation => this.access(operation), scope, this.mobileDevices(scope, now))
   }
 
   createActionGate(options: ActionGateOptions) {
