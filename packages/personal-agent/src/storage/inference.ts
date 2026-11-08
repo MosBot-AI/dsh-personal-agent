@@ -3,12 +3,12 @@ import type { DatabaseSync } from 'node:sqlite'
 import { capabilityIdSchema } from '@mosbot-ai/dshpa-plugin-api'
 import {
   inferenceAttemptSchema, modelDeploymentSchema, quotaBucketSchema, quotaObservationSchema,
-  routingDecisionSchema, routingPolicyRevisionSchema, type QuotaBucket, type QuotaObservation,
+  routingDecisionSchema, routingPolicyRevisionSchema, type QuotaBucket, type QuotaObservation, type RoutingDecision,
 } from '@mosbot-ai/dshpa-plugin-api/model-routing'
 import { inspectQuota, quotaWindowMs, type QuotaAdmission, type QuotaBlock, type QuotaUsage } from '@mosbot-ai/dshpa-model-routing/quota'
 import { z } from 'zod'
 import { ownerIdSchema, profileIdSchema, utcInstantSchema, versionSchema, type UtcInstant } from '../domain/model.js'
-import { claimRoutedBudget, type BudgetService } from '../runtime/budget.js'
+import { claimRoutedBudget, type BudgetReservation, type BudgetService } from '../runtime/budget.js'
 import { StorageError, transaction } from './schema.js'
 import type { WorkRef } from './store.js'
 
@@ -30,14 +30,19 @@ const beginSchema = z.strictObject({
   maxAttempts: z.int().min(1).max(9),
   unattended: z.boolean(),
 })
+type Claim = ReturnType<typeof claimRoutedBudget>
+type BeginResult = { ok: true; reservation: BudgetReservation } | Extract<Claim, { ok: false }>
+  | { ok: false; code: 'active' | 'duplicate' | 'chain' | 'quota'; quota?: Extract<QuotaAdmission, { kind: 'wait' }> }
+type ClaimPlan = Omit<z.infer<typeof beginSchema>, 'decision'> & { decision: Extract<RoutingDecision, { kind: 'dispatch' }> }
+type Slot = { ordinal: number; chainId: string; fenceDigest: string }
 const rowSchema = z.strictObject({
   id: attemptId, decisionId: capabilityIdSchema, seriesId: capabilityIdSchema, previousId: attemptId.nullable(),
   chainId: attemptId, fenceDigest: z.string().regex(/^[a-f0-9]{64}$/u), ordinal: z.int().min(1).max(9),
   taskAttemptId: capabilityIdSchema, generation: z.int().nonnegative(),
   deploymentId: capabilityIdSchema, deploymentRevision: z.int().positive(),
   accountId: capabilityIdSchema, bucketId: capabilityIdSchema, bucketRevision: z.int().positive(),
-  budgetId: z.uuid(), status: z.enum(['streaming', 'completed', 'failed', 'interrupted']),
-  budgetStatus: z.enum(['claimed', 'settled', 'uncertain']), partial: z.union([z.literal(0), z.literal(1)]),
+  budgetId: z.uuid().nullable(), status: z.enum(['streaming', 'completed', 'failed', 'interrupted', 'denied']),
+  budgetStatus: z.enum(['claimed', 'settled', 'uncertain']).nullable(), partial: z.union([z.literal(0), z.literal(1)]),
   failure: z.string().nullable(), createdAt: utcInstantSchema, updatedAt: utcInstantSchema,
 })
 const select = `
@@ -47,7 +52,7 @@ const select = `
     a.account_id AS accountId, a.bucket_id AS bucketId, a.bucket_revision AS bucketRevision,
     a.budget_id AS budgetId, a.status, b.status AS budgetStatus, a.partial, a.failure,
     a.created_at AS createdAt, a.updated_at AS updatedAt
-  FROM inference_attempts a JOIN budget_reservations b ON b.id = a.budget_id
+  FROM inference_attempts a LEFT JOIN budget_reservations b ON b.id = a.budget_id
   WHERE a.owner_id = ? AND a.profile_id = ? AND a.task_id = ?
 `
 
@@ -76,6 +81,71 @@ const samePin = (a: { id: string; revision: number }, b: { id: string; revision:
 function read(db: DatabaseSync, ref: WorkRef, id: string): StoredInferenceAttempt | undefined {
   const row = db.prepare(select + ' AND a.id = ?').get(...taskKey(ref), id)
   return row && decode(row)
+}
+
+function claimPlan(ref: WorkRef, raw: unknown): ClaimPlan | undefined {
+  const input = beginSchema.safeParse(raw)
+  if (!input.success) return undefined
+  const { attempt, decision, deployment, bucket, policy } = input.data
+  if (decision.kind !== 'dispatch' || attempt.status !== 'planned'
+    || attempt.taskId !== ref.taskId || decision.taskId !== ref.taskId
+    || attempt.taskAttemptId !== decision.taskAttemptId || attempt.generation !== decision.generation
+    || attempt.decisionId !== decision.id || !samePin(attempt.deployment, deployment) || !samePin(decision.deployment, deployment)
+    || !samePin(policy, decision.policy)
+    || (policy.mode === 'fixed' ? !samePin(policy.deployment, deployment)
+      : !Object.values(policy.pools).some(pool => pool.some(pin => samePin(pin, deployment))))
+    || attempt.accountId !== deployment.accountId || attempt.quotaBucketId !== deployment.quotaBucketId
+    || deployment.accountId !== bucket.accountId || deployment.quotaBucketId !== bucket.id
+    || (attempt.previousAttemptId !== undefined) !== (decision.basis === 'fallback' || decision.basis === 'escalation' || decision.basis === 'retry')) return undefined
+  return { ...input.data, decision }
+}
+
+function slot(db: DatabaseSync, ref: WorkRef, plan: ClaimPlan): Slot | 'active' | 'duplicate' | 'chain' {
+  const { attempt, decision, deployment, policy, maxAttempts, unattended } = plan
+  if (db.prepare("SELECT 1 FROM inference_attempts WHERE task_id = ? AND status = 'streaming'").get(ref.taskId)) return 'active'
+  if (db.prepare(`
+    SELECT 1 FROM inference_attempts WHERE id = ? OR (
+      task_id = ? AND task_attempt_id = ? AND generation = ? AND (decision_id = ? OR series_id = ?))
+  `).get(attempt.id, ref.taskId, attempt.taskAttemptId, attempt.generation, decision.id, attempt.requestSeriesId)) return 'duplicate'
+
+  const { requirements } = decision
+  const fenceDigest = createHash('sha256').update(JSON.stringify([decision.acceptanceDigest, policy, maxAttempts, unattended,
+    { ...requirements, capabilities: [...requirements.capabilities].sort(), dataScope: [...requirements.dataScope].sort() },
+  ])).digest('hex')
+  if (!attempt.previousAttemptId) return { ordinal: 1, chainId: attempt.id, fenceDigest }
+  const prior = read(db, ref, attempt.previousAttemptId)
+  if (!prior || prior.taskAttemptId !== attempt.taskAttemptId || prior.generation !== attempt.generation || prior.fenceDigest !== fenceDigest
+    || prior.ordinal >= maxAttempts || db.prepare('SELECT 1 FROM inference_attempts WHERE chain_id = ? AND ordinal > ?').get(prior.chainId, prior.ordinal)) return 'chain'
+  const retry = decision.basis === 'retry'
+  const sameDeployment = prior.deploymentId === deployment.id && prior.deploymentRevision === deployment.revision
+  if (retry) {
+    if (!sameDeployment || !['failed', 'interrupted', 'denied'].includes(prior.status)
+      || !['rate-limit', 'quota', 'budget', 'unavailable'].includes(prior.failure?.reason ?? 'unavailable')) return 'chain'
+  } else {
+    if (policy.mode !== 'automatic'
+      || (decision.basis === 'fallback' ? !['failed', 'interrupted', 'denied'].includes(prior.status) : prior.status !== 'completed')
+      || (decision.basis === 'fallback' && db.prepare('SELECT 1 FROM inference_attempts WHERE chain_id = ? AND deployment_id = ?')
+        .get(prior.chainId, deployment.id))) return 'chain'
+    const switches = db.prepare(`
+      SELECT COUNT(*) AS count FROM inference_attempts a JOIN inference_attempts p ON p.id = a.previous_id
+      WHERE a.chain_id = ? AND (a.deployment_id <> p.deployment_id OR a.deployment_revision <> p.deployment_revision)
+    `).get(prior.chainId)?.count
+    if (typeof switches !== 'number' || (!sameDeployment && switches >= policy.maxSwitches)) return 'chain'
+  }
+  return { ordinal: prior.ordinal + 1, chainId: prior.chainId, fenceDigest }
+}
+
+function insertAttempt(db: DatabaseSync, ref: WorkRef, plan: ClaimPlan, position: Slot, at: UtcInstant,
+  budgetId: string | null, failure?: z.infer<typeof failureSchema>): void {
+  const { attempt, decision, deployment, bucket } = plan
+  db.prepare(`
+    INSERT INTO inference_attempts (id, owner_id, profile_id, task_id, task_attempt_id, generation,
+      decision_id, series_id, previous_id, chain_id, fence_digest, ordinal, deployment_id, deployment_revision,
+      account_id, bucket_id, bucket_revision, budget_id, status, failure, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(attempt.id, ...taskKey(ref), attempt.taskAttemptId, attempt.generation, decision.id, attempt.requestSeriesId,
+    attempt.previousAttemptId ?? null, position.chainId, position.fenceDigest, position.ordinal, deployment.id, deployment.revision,
+    bucket.accountId, bucket.id, bucket.revision, budgetId, budgetId ? 'streaming' : 'denied', failure ? JSON.stringify(failure) : null, at, at)
 }
 
 function quotaUse(db: DatabaseSync, scope: Scope, bucket: QuotaBucket, since: string, inclusive: boolean): QuotaUsage {
@@ -181,26 +251,11 @@ export function createInferenceLedger(access: <T>(fn: (db: DatabaseSync) => T) =
       }))
     },
 
-    begin(ref: WorkRef, raw: unknown) {
-      const input = beginSchema.safeParse(raw)
-      if (!input.success) return { ok: false, code: 'invalid_input' } as const
-      const { attempt, decision, deployment, bucket, policy, expectedVersion, maxAttempts, unattended } = input.data
-      if (decision.kind !== 'dispatch' || attempt.status !== 'planned'
-        || attempt.taskId !== ref.taskId || decision.taskId !== ref.taskId
-        || attempt.taskAttemptId !== decision.taskAttemptId || attempt.generation !== decision.generation
-        || attempt.decisionId !== decision.id || !samePin(attempt.deployment, deployment) || !samePin(decision.deployment, deployment)
-        || !samePin(policy, decision.policy)
-        || (policy.mode === 'fixed' ? !samePin(policy.deployment, deployment)
-          : !Object.values(policy.pools).some(pool => pool.some(pin => samePin(pin, deployment))))
-        || attempt.accountId !== deployment.accountId || attempt.quotaBucketId !== deployment.quotaBucketId
-        || deployment.accountId !== bucket.accountId || deployment.quotaBucketId !== bucket.id
-        || (attempt.previousAttemptId !== undefined) !== (decision.basis === 'fallback' || decision.basis === 'escalation')) {
-        return { ok: false, code: 'invalid_input' } as const
-      }
+    begin(ref: WorkRef, raw: unknown): BeginResult {
+      const plan = claimPlan(ref, raw)
+      if (!plan) return { ok: false, code: 'invalid_input' }
+      const { attempt, decision, deployment, bucket, expectedVersion, unattended } = plan
       const { requirements } = decision
-      const digest = createHash('sha256').update(JSON.stringify([decision.acceptanceDigest, policy, maxAttempts, unattended,
-        { ...requirements, capabilities: [...requirements.capabilities].sort(), dataScope: [...requirements.dataScope].sort() },
-      ])).digest('hex')
       let refused: 'active' | 'duplicate' | 'chain' | 'quota' = 'duplicate'
       let quotaWait: Extract<QuotaAdmission, { kind: 'wait' }> | undefined
       const claimed = claimRoutedBudget(budget, {
@@ -208,53 +263,35 @@ export function createInferenceLedger(access: <T>(fn: (db: DatabaseSync) => T) =
         task: { taskId: ref.taskId, attemptId: attempt.taskAttemptId, generation: attempt.generation, expectedVersion },
         upperInputTokens: requirements.inputTokens, upperOutputTokens: requirements.outputTokens,
       }, (db, reservation) => {
-        if (db.prepare("SELECT 1 FROM inference_attempts WHERE task_id = ? AND status = 'streaming'").get(ref.taskId)) {
-          refused = 'active'
-          return false
-        }
-        if (db.prepare(`
-          SELECT 1 FROM inference_attempts WHERE id = ? OR (
-            task_id = ? AND task_attempt_id = ? AND generation = ? AND (decision_id = ? OR series_id = ?))
-        `).get(attempt.id, ref.taskId, attempt.taskAttemptId, attempt.generation, decision.id, attempt.requestSeriesId)) return false
-
-        let ordinal = 1
-        let chainId = attempt.id
-        if (attempt.previousAttemptId) {
-          const prior = read(db, ref, attempt.previousAttemptId)
-          if (policy.mode !== 'automatic' || !prior || prior.taskAttemptId !== attempt.taskAttemptId
-            || prior.generation !== attempt.generation || prior.fenceDigest !== digest
-            || (decision.basis === 'fallback' ? !['failed', 'interrupted'].includes(prior.status) : prior.status !== 'completed')
-            || prior.ordinal >= maxAttempts || prior.ordinal > policy.maxSwitches
-            || db.prepare('SELECT 1 FROM inference_attempts WHERE chain_id = ? AND ordinal > ?').get(prior.chainId, prior.ordinal)
-            || (decision.basis === 'fallback' && db.prepare(`
-              SELECT 1 FROM inference_attempts WHERE chain_id = ? AND deployment_id = ?
-            `).get(prior.chainId, deployment.id))) {
-            refused = 'chain'
-            return false
-          }
-          ordinal = prior.ordinal + 1
-          chainId = prior.chainId
-        }
+        const position = slot(db, ref, plan)
+        if (typeof position === 'string') { refused = position; return false }
         const allowed = quota(db, ref, bucket, reservation.createdAt, requirements.inputTokens + requirements.outputTokens)
-        if (allowed.kind === 'wait') {
-          refused = 'quota'
-          quotaWait = allowed
-          return false
-        }
-        db.prepare(`
-          INSERT INTO inference_attempts (id, owner_id, profile_id, task_id, task_attempt_id, generation,
-            decision_id, series_id, previous_id, chain_id, fence_digest, ordinal, deployment_id, deployment_revision,
-            account_id, bucket_id, bucket_revision, budget_id, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'streaming', ?, ?)
-        `).run(attempt.id, ...taskKey(ref), attempt.taskAttemptId, attempt.generation, decision.id, attempt.requestSeriesId,
-          attempt.previousAttemptId ?? null, chainId, digest, ordinal, deployment.id, deployment.revision,
-          bucket.accountId, bucket.id, bucket.revision, reservation.id, reservation.createdAt, reservation.createdAt)
+        if (allowed.kind === 'wait') { refused = 'quota'; quotaWait = allowed; return false }
+        insertAttempt(db, ref, plan, position, reservation.createdAt, reservation.id)
         return true
       })
-      if (claimed.ok) return { ok: true, reservation: claimed.reservation } as const
-      return claimed.code === 'invalid_transition'
-        ? { ok: false, code: refused, quota: quotaWait } as const
-        : claimed
+      if (claimed.ok) return { ok: true, reservation: claimed.reservation }
+      return claimed.code === 'invalid_transition' ? { ok: false, code: refused, quota: quotaWait } : claimed
+    },
+
+    /** Record a coordinator-verified pre-dispatch denial without consuming quota or spend. */
+    deny(ref: WorkRef, raw: unknown, failure: unknown): boolean {
+      const plan = claimPlan(ref, raw)
+      const decoded = failureSchema.safeParse(failure)
+      if (!plan || !decoded.success || !['rate-limit', 'quota', 'budget', 'context', 'unavailable'].includes(decoded.data.reason)) return false
+      const at = now()
+      return access(db => transaction(db, () => {
+        const current = db.prepare(`
+          SELECT 1 FROM tasks t JOIN attempts a ON a.id = t.attempt_id AND a.task_id = t.id
+          WHERE t.owner_id = ? AND t.profile_id = ? AND t.id = ? AND t.version = ? AND a.id = ?
+            AND t.generation = ? AND a.generation = ? AND a.status = 'running'
+        `).get(...taskKey(ref), plan.expectedVersion, plan.attempt.taskAttemptId, plan.attempt.generation, plan.attempt.generation)
+        if (!current) return false
+        const position = slot(db, ref, plan)
+        if (typeof position === 'string') return false
+        insertAttempt(db, ref, plan, position, at, null, decoded.data)
+        return true
+      }))
     },
 
     get: (ref: WorkRef, id: string) => access(db => read(db, ref, id)),
@@ -274,7 +311,7 @@ export function createInferenceLedger(access: <T>(fn: (db: DatabaseSync) => T) =
       const at = now()
       return access(db => transaction(db, () => {
         const row = read(db, ref, id)
-        if (!row || row.status !== 'streaming' || row.budgetStatus === 'claimed' || at < row.updatedAt) return false
+        if (!row || row.status !== 'streaming' || (row.budgetStatus !== 'settled' && row.budgetStatus !== 'uncertain') || at < row.updatedAt) return false
         const status = !failed ? 'completed' : row.partial || failed.reason === 'cancelled' ? 'interrupted' : 'failed'
         db.prepare("UPDATE inference_attempts SET status = ?, failure = ?, updated_at = ? WHERE id = ?")
           .run(status, failed ? JSON.stringify(failed) : null, at, id)

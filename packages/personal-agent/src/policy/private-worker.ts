@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, AgentHandle, AgentOptions, AgentSetupCommit, CreateAgentOptions, ResumeAgentOptions } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentSetup, CreateAgentOptions, ResumeAgentOptions } from '@deepseek-ai/dsh-agent'
 import type { ToolsService } from '@deepseek-ai/dsh-tools'
 import { executeToolBatch, ToolExecutionPipeline } from '@deepseek-ai/dsh-tools/pipeline'
 
@@ -49,7 +49,7 @@ function installPrivatePolicy(ctx: Context): void {
  */
 export function createPrivateWorkers(
   ctx: Context,
-  prepare?: (agentCtx: Context, agent: Agent) => AgentSetupCommit | void,
+  prepare?: AgentSetup,
 ): Readonly<PrivateWorkers> {
   function setup(agentCtx: Context, agent: Agent) {
     installPrivatePolicy(agentCtx)

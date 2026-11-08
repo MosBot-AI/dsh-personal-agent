@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import {
@@ -9,6 +10,7 @@ import {
 } from '../../packages/personal-agent/src/domain/model.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { openWorkStore, type WorkStore } from '../../packages/personal-agent/src/storage/store.js'
+import { createNativeProfile, nativeAgentRows, nativeProfileTimeoutMs, nativeSessionPersistenceRows } from '../contracts/native-profile.js'
 
 const at = utcInstantSchema.parse('2026-11-08T02:00:00.000Z')
 const scope = { ownerId: ownerIdSchema.parse('inference-owner'), profileId: profileIdSchema.parse('profile-a') }
@@ -192,3 +194,34 @@ describe('durable inference and quota claims', () => {
     expect(f.ledger.quota(scope, alternate, 8)).toMatchObject({ kind: 'ready' })
   })
 })
+
+
+it('uses a fresh native inference series across fallback and a persisted resource wait', () => {
+  const profile = createNativeProfile({
+    probe: fileURLToPath(new URL('./fixtures/routed-inference-probe.mjs', import.meta.url)),
+    patchRows: [...nativeAgentRows, ...nativeSessionPersistenceRows],
+  })
+  try {
+    const result = profile.run('routed-inference')
+    expect(result.signal, result.stderr).toBeNull()
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout).toBe('PA042_NATIVE_INFERENCE fallback wait receipts')
+  } finally { profile.dispose() }
+}, nativeProfileTimeoutMs + 1000)
+
+
+it('recovers a real process exit during native output without resending the original request', () => {
+  const profile = createNativeProfile({
+    probe: fileURLToPath(new URL('./fixtures/routed-inference-probe.mjs', import.meta.url)),
+    patchRows: [...nativeAgentRows, ...nativeSessionPersistenceRows],
+  })
+  try {
+    const interrupted = profile.run('inference-crash')
+    expect(interrupted.signal, interrupted.stderr).toBeNull()
+    expect(interrupted.status, interrupted.stderr).toBe(86)
+    const recovered = profile.run('inference-recover')
+    expect(recovered.signal, recovered.stderr).toBeNull()
+    expect(recovered.status, recovered.stderr).toBe(0)
+    expect(recovered.stdout).toBe('PA042_NATIVE_INFERENCE recovered')
+  } finally { profile.dispose() }
+}, 2 * nativeProfileTimeoutMs + 1000)

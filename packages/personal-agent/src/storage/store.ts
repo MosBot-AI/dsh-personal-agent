@@ -17,6 +17,9 @@ import {
   conversationSchema,
   deliverySchema,
   effectSchema,
+  inferenceExecutor,
+  inferenceWaitPrefix,
+  isPrivateWorkSessionId,
   projectSchema,
   sessionIdSchema,
   sourceEventSchema,
@@ -94,7 +97,6 @@ const MAX_BYTES = 1024 * 1024
 const MAX_INTENTS = 64
 const INBOX_LIMIT = 64
 const CONTEXT_BINDING_LIMIT = 16
-const privateWorkerSessionId = /^dshpa-[0-9a-f]{64}$/
 const intentsSchema = z.strictObject({
   sourceEvent: sourceEventSchema.optional(),
   effects: z.array(effectSchema).max(MAX_INTENTS).optional(),
@@ -301,8 +303,8 @@ class WorkStore {
     return createActionGate(operation => this.access(operation), options, dispatchPermitted)
   }
 
-  createInferenceLedger(options?: Parameters<typeof createInferenceLedger>[2]) {
-    if (!this.budget) throw new StorageError('invalid_input', 'Inference routing requires the Core budget')
+  createInferenceLedger(options?: Parameters<typeof createInferenceLedger>[2], expectedBudget?: BudgetService) {
+    if (!this.budget || (expectedBudget && expectedBudget !== this.budget)) throw new StorageError('invalid_input', 'Inference routing requires the Core budget')
     return createInferenceLedger(operation => this.access(operation), this.budget, options)
   }
 
@@ -695,7 +697,7 @@ class WorkStore {
             WHERE c.id = t.conversation_id AND c.owner_id = t.owner_id AND c.profile_id = t.profile_id AND s.value = ?
           ))
         ) ORDER BY t.id LIMIT ?
-      `).all(scope.ownerId, scope.profileId, sessionId, Number(!privateWorkerSessionId.test(sessionId)), sessionId, CONTEXT_BINDING_LIMIT + 1)
+      `).all(scope.ownerId, scope.profileId, sessionId, Number(!isPrivateWorkSessionId(sessionId)), sessionId, CONTEXT_BINDING_LIMIT + 1)
       if (rows.length > CONTEXT_BINDING_LIMIT) throw new StorageError('invalid_input', 'Too many work items are bound to the Context Session')
       return rows.map(row => this.decodeWork(row))
     })
@@ -763,6 +765,46 @@ class WorkStore {
         WHERE e.operation_id = ? AND t.id = ? AND t.owner_id = ? AND t.profile_id = ?
       `).get(operationId, ref.taskId, ref.ownerId, ref.profileId)
       return row && decodeRecord(row.record, effectSchema)
+    })
+  }
+
+  confirmedInferenceEffects(ref: WorkRef) {
+    return this.access(db => {
+      const rows = db.prepare(`
+        SELECT e.record FROM effects e JOIN tasks t ON t.id = e.task_id
+        WHERE t.id = ? AND t.owner_id = ? AND t.profile_id = ? AND (e.record ->> '$.status') = 'confirmed'
+        ORDER BY e.operation_id LIMIT 65
+      `).all(ref.taskId, ref.ownerId, ref.profileId)
+      if (rows.length > 64) return undefined
+      return rows.map(row => {
+        const effect = decodeRecord(row.record, effectSchema)
+        if (effect.status !== 'confirmed') throw new StorageError('corrupt', 'Expected an exact confirmed effect')
+        return { operationId: effect.operationId, payloadDigest: effect.payloadDigest, receipt: effect.receipt }
+      })
+    })
+  }
+
+  /** Re-enter an exact routed inference wait without handing the Task to the Worker scheduler. */
+  continueInference(ref: WorkRef, expectedVersion: number, referenceId: string, policyVersion: string, at: UtcInstant): StoredWorkResult {
+    return this.commit(db => {
+      if (!dispatchPermitted(db)) return { ok: false, code: 'recovery_required' }
+      const before = this.loadWork(db, ref)
+      if (!before) return { ok: false, code: 'not_found' }
+      const { task, attempt } = before
+      if (task.status !== 'waiting_resource' || attempt.worker || attempt.executor !== inferenceExecutor
+        || !referenceId.startsWith(inferenceWaitPrefix) || task.wait?.referenceId !== referenceId
+        || hasIncompletePrerequisite(db, task) || unsettledEffects(db, ref, attempt.id)) return { ok: false, code: 'condition_unmet' }
+      const fence = { at, attemptId: attempt.id, generation: attempt.generation }
+      const woke = transitionWork(before, { type: 'wake', ...fence, expectedVersion, reason: 'resource', referenceId,
+        policyVersion, grantsCurrent: true, conditionSatisfied: true, budgetAvailable: true, runtimeQuiescent: true })
+      if (!woke.ok) return woke
+      const started = transitionWork(woke.state, { type: 'start', ...fence, expectedVersion: woke.state.task.version,
+        executor: inferenceExecutor, agentId: attempt.agentId, sessionId: attempt.sessionId, scope: attempt.scope })
+      if (!started.ok) return started
+      const encode = recordEncoder()
+      this.persist(db, before, woke, 'wake', at, {}, encode)
+      const receipt = this.persist(db, woke.state, started, 'start', at, {}, encode)
+      return { ...receipt, replayed: false }
     })
   }
 
@@ -1026,7 +1068,7 @@ class WorkStore {
 
   private contextSession(db: DatabaseSync, { task, attempt }: WorkState, sessionId: SessionId, writing = false): boolean {
     if (attempt.sessionId === sessionId) return !writing || attempt.worker?.releasedAt === undefined
-    if (task.conversationId === undefined || privateWorkerSessionId.test(sessionId)) return false
+    if (task.conversationId === undefined || isPrivateWorkSessionId(sessionId)) return false
     return db.prepare(`
       SELECT 1 FROM conversations c JOIN json_each(c.record, '$.sessionIds') s
       WHERE c.id = ? AND c.owner_id = ? AND c.profile_id = ? AND s.value = ?

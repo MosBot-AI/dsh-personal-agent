@@ -3,6 +3,7 @@ import type { AgentRegistry } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { createPrivateWorkers, type PrivateWorkers } from '../policy/private-worker.js'
 import { createWorkerExecutor, type WorkerExecutor, type WorkerExecutorOptions } from './executor.js'
+import { createRoutedInferenceExecutor, type RoutedInferenceExecutor } from './routed-inference.js'
 import { createNativeWorkerRuntime, type NativeWorkerRuntime } from './native-worker.js'
 
 export interface HostAdapter {
@@ -10,6 +11,7 @@ export interface HostAdapter {
   readonly privateWorkers: Readonly<PrivateWorkers>
   readonly workerRuntime: NativeWorkerRuntime
   createWorkerExecutor(options: Omit<WorkerExecutorOptions, 'runtime'>): WorkerExecutor
+  createInferenceExecutor(options: Omit<Parameters<typeof createRoutedInferenceExecutor>[1], 'flush'>): RoutedInferenceExecutor
   flush(session: Session): Promise<void>
 }
 
@@ -32,6 +34,7 @@ export function createHostAdapter(ctx: Context): HostAdapter {
     privateWorkers: createPrivateWorkers(ctx),
     workerRuntime,
     createWorkerExecutor: options => createWorkerExecutor({ ...options, runtime: workerRuntime }),
+    createInferenceExecutor: options => createRoutedInferenceExecutor(ctx, { ...options, flush }),
     flush,
   })
 }

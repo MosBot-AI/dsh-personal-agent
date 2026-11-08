@@ -4,7 +4,7 @@ import { MessageId } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-token-meter'
 import { z } from 'zod'
-import { nonEmptyTextSchema, sessionIdSchema, utcInstantSchema, type SourceEventId, type UtcInstant } from '../domain/model.js'
+import { isPrivateWorkSessionId, nonEmptyTextSchema, sessionIdSchema, utcInstantSchema, type SourceEventId, type UtcInstant } from '../domain/model.js'
 import type { WorkState } from '../domain/transitions.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
 import type { NativeCheckpointCapture, NativeCheckpointPolicy } from '../runtime/checkpoint-compaction.js'
@@ -16,7 +16,6 @@ import { createRecall, type RecallEvidence } from './recall.js'
 import { contextSourceLabels, localInboxSource } from './source-authority.js'
 
 const weight = z.int().min(0).max(100)
-const managedWorker = /^dshpa-[a-f0-9]{64}$/u
 const maxModelInputBytes = 64 * 1024
 const routeResolutionMs = 3_000
 const ownerDecisionSchema = z.object({ kind: z.literal('inbox-answer'), referenceId: nonEmptyTextSchema.max(4096),
@@ -34,7 +33,7 @@ type Prepared = ContextAssemblyResult | { ok: false; code: 'permission_denied' |
 
 function now(): UtcInstant { return utcInstantSchema.parse(new Date().toISOString()) }
 
-export function isManagedWorkerSession(id: string): boolean { return managedWorker.test(id) }
+export function isManagedWorkerSession(id: string): boolean { return isPrivateWorkSessionId(id) }
 
 function authorityFields({ task }: WorkState) {
   return { taskId: task.id, version: task.version, objective: task.requestedOutcome, constraints: task.constraints,
