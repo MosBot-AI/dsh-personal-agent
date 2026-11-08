@@ -107,9 +107,11 @@ mobile:
   port: 18472
 ```
 
-Use a dedicated HTTPS origin on your reverse proxy and forward it to `http://127.0.0.1:18472`. Preserve the configured Host and browser Origin headers and disable buffering for `/v1/events`. Keep the native DSH owner listener on loopback, outside the proxy. The mobile upstream binds to loopback and serves only its own page, pairing, snapshot and event routes. It relies on the reverse proxy for TLS.
+Use a dedicated HTTPS origin on your reverse proxy and forward it to `http://127.0.0.1:18472`. Preserve the configured Host and browser Origin headers and disable buffering for `/v1/events`. Keep the native DSH owner listener on loopback, outside the proxy. The mobile upstream binds to loopback and serves its own page, pairing, task and approval routes. It relies on the reverse proxy for TLS.
 
-In the authenticated local **Today** panel, open **Mobile access**, name the device, and create a pairing code. Open the configured HTTPS origin on the phone and enter the code within five minutes. The paired browser can view conversation-linked tasks and reconnect to their updates. Use **Revoke** in the local panel to terminate that device's access. Pairing creates a 30-day secure browser credential, and restoring a WorkStore backup clears previous mobile credentials. Approval handoff is a later PA-022 checkpoint. [Verification evidence](docs/evidence/PA-022.md)
+In the authenticated local **Today** panel, open **Mobile access**, name the device, and create a pairing code. Open the configured HTTPS origin on the phone and enter the code within five minutes. The paired browser can view conversation-linked tasks and reconnect to their updates. Use **Revoke** in the local panel to terminate that device's access. Pairing creates a 30-day secure browser credential, and restoring a WorkStore backup clears previous mobile credentials. The mobile page provides an app manifest for browsers that support home-screen installation.
+
+To review an exact action on a phone, select the enrolled device on its local **Today** approval card and choose **Send review to device**. Only that device can respond while the review is assigned. The phone shows the account, resource, disclosure scope, digest and exact payload. **Recall review** returns a pending decision to the original local client. Approving records a one-use grant for the existing action gate. It leaves execution to the trusted coordinator. [Verification evidence](docs/evidence/PA-022.md)
 
 ### Route events from trusted adapters
 

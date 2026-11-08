@@ -1,3 +1,5 @@
+import type { InboxApproval } from '../inbox/protocol.js'
+
 export function mobilePage(chinese: boolean): string {
   const title = chinese ? 'dshpa 移动工作台' : 'dshpa Mobile'
   return `<!doctype html>
@@ -6,6 +8,8 @@ export function mobilePage(chinese: boolean): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title}</title>
+  <link rel="manifest" href="/mobile.webmanifest">
+  <link rel="icon" href="/mobile.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/mobile.css">
   <script src="/mobile.js" defer></script>
 </head>
@@ -18,6 +22,11 @@ export function mobilePage(chinese: boolean): string {
       <input id="code" type="password" required maxlength="43" autocomplete="off" autocapitalize="off" spellcheck="false">
       <button>${chinese ? '配对此设备' : 'Pair this device'}</button>
     </form>
+    <section id="reviews" aria-labelledby="review-heading" hidden>
+      <h2 id="review-heading">${chinese ? '待审批' : 'Approvals'}</h2>
+      <p id="review-status" role="status"></p>
+      <ul id="review-items"></ul>
+    </section>
     <section id="work" aria-labelledby="work-heading" hidden>
       <h2 id="work-heading">${chinese ? '任务' : 'Tasks'}</h2>
       <ul id="tasks"></ul>
@@ -26,6 +35,16 @@ export function mobilePage(chinese: boolean): string {
 </body>
 </html>`
 }
+
+export const mobileManifest = JSON.stringify({
+  name: 'dshpa Mobile', short_name: 'dshpa', start_url: '/', scope: '/', display: 'standalone',
+  icons: [{ src: '/mobile.svg', sizes: 'any', type: 'image/svg+xml' }],
+})
+
+export const mobileIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#1d4ed8"/>
+  <path d="M35 64l19 19 39-41" fill="none" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`
 
 export const mobileStyles = `
 :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
@@ -39,6 +58,11 @@ label, input, button { display: block; }
 input, button { box-sizing: border-box; min-height: 44px; font: inherit; margin-top: .6rem; border: 1px solid GrayText; border-radius: .5rem; padding: .5rem .75rem; }
 input { width: 100%; }
 button { cursor: pointer; }
+.review-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+dl { margin: .65rem 0; }
+dt { font-weight: 600; }
+dd { margin: 0 0 .35rem; }
 :focus-visible { outline: 2px solid Highlight; outline-offset: 3px; }
 ul { list-style: none; padding: 0; margin: 0; }
 li { border: 1px solid GrayText; border-radius: .75rem; padding: .8rem; margin: .6rem 0; overflow-wrap: anywhere; }
@@ -52,9 +76,13 @@ function runMobilePage() {
   const text = chinese ? {
     connected: '已连接', pairing: '请从本机工作台获取配对码。', rejected: '配对失败，请检查配对码是否有效。',
     reconnecting: '正在重新连接…', empty: '暂时没有任务。',
+    approve: '批准此动作', deny: '拒绝此动作', recorded: '已记录审批答复。', changed: '审批已变化或不可用，请重新检查。',
+    account: '账户', resource: '资源', recipient: '接收方', scope: '数据范围', digest: '载荷摘要', expires: '过期时间', preview: '完整载荷预览',
   } : {
     connected: 'Connected', pairing: 'Get a pairing code from the local inbox.', rejected: 'Pairing failed. Check that the code is valid.',
     reconnecting: 'Reconnecting…', empty: 'No tasks yet.',
+    approve: 'Approve this action', deny: 'Deny this action', recorded: 'Review response recorded.', changed: 'The review changed or is unavailable. Check it again.',
+    account: 'Account', resource: 'Resource', recipient: 'Recipient', scope: 'Data scope', digest: 'Payload digest', expires: 'Expires', preview: 'Exact payload preview',
   }
   const translations: Record<string, string> = {
     queued: '已排队', running: '运行中', waiting_input: '等待输入', waiting_approval: '等待审批',
@@ -67,6 +95,10 @@ function runMobilePage() {
   const code = document.querySelector<HTMLInputElement>('#code')!
   const work = document.querySelector<HTMLElement>('#work')!
   const tasks = document.querySelector<HTMLUListElement>('#tasks')!
+  const reviewSection = document.querySelector<HTMLElement>('#reviews')!
+  const reviewStatus = document.querySelector<HTMLParagraphElement>('#review-status')!
+  const reviewItems = document.querySelector<HTMLUListElement>('#review-items')!
+  const replying = new Set<string>()
   let stream: EventSource | undefined
   let pending: AbortController | undefined
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
@@ -80,6 +112,9 @@ function runMobilePage() {
     refreshTimer = undefined
     work.hidden = true
     tasks.replaceChildren()
+    reviewSection.hidden = true
+    reviewItems.replaceChildren()
+    reviewStatus.textContent = ''
   }
 
   function showPairing(message = text.pairing) {
@@ -99,10 +134,12 @@ function runMobilePage() {
     const path = cursor ? '/v1/events?cursor=' + encodeURIComponent(cursor) : '/v1/events'
     const events = new EventSource(path)
     stream = events
-    events.addEventListener('work', () => {
+    const scheduleRefresh = () => {
       if (stream !== events || refreshTimer !== undefined) return
       refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh() }, 75)
-    })
+    }
+    events.addEventListener('work', scheduleRefresh)
+    events.addEventListener('approvals', scheduleRefresh)
     events.addEventListener('session-ended', () => { if (stream === events) showPairing() })
     events.addEventListener('snapshot-required', () => {
       if (stream !== events) return
@@ -112,17 +149,81 @@ function runMobilePage() {
     events.onerror = () => { if (stream === events) reconnect() }
   }
 
+  async function respond(approval: InboxApproval, decision: 'approve' | 'deny', controls: HTMLDivElement) {
+    if (replying.has(approval.id)) return
+    replying.add(approval.id)
+    for (const button of controls.querySelectorAll('button')) button.disabled = true
+    try {
+      const response = await fetch('/v1/approvals/' + encodeURIComponent(approval.id) + '/responses', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        body: JSON.stringify({ expectedVersion: approval.version, digest: approval.digest, decision }),
+      })
+      if (response.status === 401) { showPairing(); return }
+      reviewStatus.textContent = response.ok ? text.recorded : text.changed
+    } catch {
+      reviewStatus.textContent = text.changed
+    } finally {
+      replying.delete(approval.id)
+    }
+    await refresh()
+  }
+
+  function renderReviews(approvals: readonly InboxApproval[]) {
+    reviewItems.replaceChildren(...approvals.map(approval => {
+      const row = document.createElement('li')
+      const kind = document.createElement('strong')
+      kind.textContent = approval.kind
+      const fields = document.createElement('dl')
+      const entries = [
+        [text.account, approval.accountId], [text.resource, approval.resourceRef],
+        [text.recipient, approval.recipient], [text.scope, approval.dataScope.join(', ')],
+        [text.digest, approval.digest], [text.expires, new Date(approval.expiresAt).toLocaleString()],
+      ]
+      for (const [name, value] of entries) {
+        if (!value) continue
+        const label = document.createElement('dt')
+        const field = document.createElement('dd')
+        label.textContent = name!
+        field.textContent = value
+        fields.append(label, field)
+      }
+      const details = document.createElement('details')
+      details.open = true
+      const caption = document.createElement('summary')
+      const preview = document.createElement('pre')
+      caption.textContent = text.preview
+      preview.textContent = approval.preview
+      details.append(caption, preview)
+      const controls = document.createElement('div')
+      controls.className = 'review-actions'
+      for (const decision of ['approve', 'deny'] as const) {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.textContent = text[decision]
+        button.disabled = replying.has(approval.id) || Date.parse(approval.expiresAt) <= Date.now()
+        button.onclick = () => { void respond(approval, decision, controls) }
+        controls.append(button)
+      }
+      row.append(kind, fields, details, controls)
+      return row
+    }))
+    reviewSection.hidden = approvals.length === 0 && !reviewStatus.textContent
+  }
+
   async function refresh() {
     pending?.abort()
     const controller = new AbortController()
     pending = controller
     try {
-      const response = await fetch('/v1/snapshot', { signal: controller.signal, cache: 'no-store' })
+      const request: RequestInit = { signal: controller.signal, cache: 'no-store' }
+      const [response, reviews] = await Promise.all([fetch('/v1/snapshot', request), fetch('/v1/approvals', request)])
       if (controller.signal.aborted) return
-      if (response.status === 401) { showPairing(); return }
-      if (!response.ok) throw new Error()
+      if (response.status === 401 || reviews.status === 401) { showPairing(); return }
+      if (!response.ok || !reviews.ok) throw new Error()
       const snapshot = await response.json() as { cursor: string | null; tasks: { outcome: string; status: string }[] }
+      const { approvals } = await reviews.json() as { approvals: InboxApproval[] }
       if (controller.signal.aborted) return
+      renderReviews(approvals)
       const rows = snapshot.tasks.map(task => {
         const row = document.createElement('li')
         const outcome = document.createElement('p')

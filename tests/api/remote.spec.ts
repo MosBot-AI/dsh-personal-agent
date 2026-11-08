@@ -33,6 +33,13 @@ function fixture() {
     get foreignLedger() { return store.mobileDevices(other, () => clock) },
     advance(ms: number) { clock = utcInstantSchema.parse(new Date(Date.parse(clock) + ms).toISOString()) },
     reopen() { store.close(); store = openWorkStore(directory) },
+    reopenAsV14() {
+      store.close()
+      const db = new DatabaseSync(join(directory, DATABASE_FILENAME))
+      try { db.exec('DROP TABLE mobile_approval_reviews; PRAGMA user_version = 14') }
+      finally { db.close() }
+      store = openWorkStore(directory)
+    },
   }
 }
 
@@ -98,6 +105,19 @@ it('expires pairing codes and active devices and bounds pending enrollment', () 
   f.advance(30 * 24 * 60 * 60_000)
   expect(f.ledger.authenticate(result.credential)).toBeUndefined()
   expect(f.ledger.verifiedDevices()).toEqual([])
+})
+
+it('preserves a v14 device credential when upgrading to the approval schema', () => {
+  const f = fixture()
+  const pair = requireSuccess(f.ledger.begin('Phone'))
+  const enrolled = requireSuccess(f.ledger.enroll(pair.pairingCode))
+  f.reopenAsV14()
+  expect(f.ledger.authenticate(enrolled.credential)).toEqual(enrolled.device)
+  const db = new DatabaseSync(join(f.directory, DATABASE_FILENAME), { readOnly: true })
+  try {
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(15)
+    expect(db.prepare('SELECT count(*) AS count FROM mobile_approval_reviews').get()?.count).toBe(0)
+  } finally { db.close() }
 })
 
 it('clears both prior device credentials and pairing codes on backup restore', async () => {

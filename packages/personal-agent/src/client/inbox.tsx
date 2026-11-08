@@ -424,7 +424,7 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
       <section className="dshpa-today">
         <section className="dshpa-section" aria-labelledby="dshpa-attention">
           <h2 id="dshpa-attention">{t('today.attention')} <span>{approvals.length + questions.length}</span></h2>
-          {approvals.map(approval => <ApprovalCard key={approval.id} approval={approval} t={t}
+          {approvals.map(approval => <ApprovalCard key={approval.id} approval={approval} t={t} reviewers={snapshot?.mobileReviewers}
             task={snapshot?.tasks.find(task => task.id === approval.taskId)}
             disabled={!writable || Boolean(snapshot?.recoveryMode) || mutations.current.has(`approval:${approval.id}`)}
             submit={request => { void mutate(`approval:${approval.id}`, request) }} viewTask={chooseTask} />)}

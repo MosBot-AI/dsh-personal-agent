@@ -8,7 +8,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Added
 
-- Add an opt-in mobile work view with local pairing controls, revocable browser credentials and scoped task updates.
+- Add opt-in mobile task updates and exact approval review with local pairing, device revocation and explicit per-review handoff.
 - Add the pinned TypeScript and pnpm workspace and a native bundle that loads through the named `dshpa` profile.
 - Add a native DSH agent and session adapter, with real-host contract checks and compatibility evidence for control, persistence, and scheduling.
 - Define durable work records, validate owner commands and worker reports, and add deterministic task transitions with version and attempt-generation checks.

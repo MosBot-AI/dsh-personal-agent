@@ -258,6 +258,83 @@ describe('exact action authorization', () => {
     expect(currentEffect(fixture, seeded)?.status).toBe('authorized')
   })
 
+  it('moves one version-fenced review to the exact device while preserving coordinator dispatch', () => {
+    const fixture = openFixture()
+    const mobile = requireValue(fixture.identity.bindOwner({ ...ownerMetadata, deviceId: 'device-two',
+      clientId: 'mobile-client', sessionId: 'mobile-session' }), 'a mobile identity')
+    const wrongSession = requireValue(fixture.identity.bindOwner({ ...ownerMetadata, deviceId: 'device-two',
+      clientId: 'mobile-client', sessionId: 'wrong-session' }), 'another session')
+    const seeded = seed(fixture, 'mobile-review')
+    const approval = review(fixture, seeded)
+    const fence = { requestId: approval.approval.id, digest: seeded.digest, expectedVersion: approval.version }
+    expect(fixture.gate.assignMobileReview({ ...fence, digest: '0'.repeat(64) }, fixture.ownerToken, mobile))
+      .toEqual({ ok: false, code: 'action_changed' })
+    expect(fixture.gate.assignMobileReview(fence, mobile, fixture.ownerToken)).toEqual({ ok: false, code: 'permission_denied' })
+    expect(fixture.gate.assignMobileReview(fence, fixture.ownerToken, mobile)).toEqual({ ok: true })
+    fixture.reopen()
+    expect(fixture.gate.pending(mobile, [seeded.ref.taskId])).toMatchObject([{ version: 1, mobileDeviceId: 'device-two' }])
+    expect(fixture.gate.pending(wrongSession, [seeded.ref.taskId])).toEqual([])
+    expect(fixture.gate.respond(response(seeded, 1), fixture.ownerToken)).toEqual({ ok: false, code: 'permission_denied' })
+    expect(fixture.gate.respond(response(seeded, 1), wrongSession)).toEqual({ ok: false, code: 'permission_denied' })
+    expect(fixture.gate.respond(response(seeded), mobile)).toEqual({ ok: false, code: 'version_conflict' })
+    const granted = fixture.gate.respond(response(seeded, 1), mobile)
+    if (!granted.ok || granted.status !== 'approved') throw new Error('Expected a mobile approval')
+    expect(fixture.gate.review(seeded.rawAction, seeded.request, fixture.ownerToken)).toEqual({ decision: 'allow', grantId: granted.grantId })
+    expect(fixture.gate.respond(response(seeded, 1), mobile)).toEqual({ ok: false, code: 'already_decided' })
+    expect(fixture.gate.dispatch(seeded.rawAction, granted.grantId, seeded.version)).toEqual({ ok: true, status: 'dispatching' })
+    expect(fixture.gate.dispatch(seeded.rawAction, granted.grantId, seeded.version)).toEqual({ ok: false, code: 'already_claimed' })
+    expect(fixture.handoffs).toEqual([canonical(seeded.rawAction).action])
+  })
+
+  it('lets the original owner recall a revoked device review and refuses a revoked mobile grant', () => {
+    const fixture = openFixture()
+    const mobile = requireValue(fixture.identity.bindOwner({ ...ownerMetadata, deviceId: 'device-two',
+      clientId: 'mobile-client', sessionId: 'mobile-session' }), 'a mobile identity')
+    const pending = seed(fixture, 'mobile-pending')
+    const decided = seed(fixture, 'mobile-decided')
+    const move = (seeded: Seed) => {
+      const approval = review(fixture, seeded)
+      const fence = { requestId: approval.approval.id, digest: seeded.digest, expectedVersion: approval.version }
+      expect(fixture.gate.assignMobileReview(fence, fixture.ownerToken, mobile)).toEqual({ ok: true })
+      return fence
+    }
+    const fence = move(pending)
+    move(decided)
+    const granted = fixture.gate.respond(response(decided, 1), mobile)
+    if (!granted.ok || granted.status !== 'approved') throw new Error('Expected a mobile approval')
+    fixture.profile(profile => ({ ...profile, verifiedDevices: profile.verifiedDevices.filter(device => device.deviceId !== 'device-two') }))
+    expect(fixture.gate.respond(response(pending, 1), mobile)).toEqual({ ok: false, code: 'permission_denied' })
+    expect(fixture.gate.review(decided.rawAction, decided.request, fixture.ownerToken)).toEqual({ decision: 'deny', code: 'permission_denied' })
+    expect(fixture.gate.dispatch(decided.rawAction, granted.grantId, decided.version)).toEqual({ ok: false, code: 'permission_denied' })
+    expect(fixture.gate.assignMobileReview({ ...fence, expectedVersion: 1 }, fixture.ownerToken, null)).toEqual({ ok: true })
+    expect(fixture.gate.respond(response(pending, 1), fixture.ownerToken)).toEqual({ ok: false, code: 'version_conflict' })
+    expect(fixture.gate.respond({ ...response(pending, 2), decision: 'deny' }, fixture.ownerToken)).toEqual({ ok: true, status: 'denied' })
+    expect(fixture.handoffs).toEqual([])
+  })
+
+  it('rejects an assigned response after approval expiry or task cancellation', () => {
+    const fixture = openFixture()
+    const mobile = requireValue(fixture.identity.bindOwner({ ...ownerMetadata, deviceId: 'device-two',
+      clientId: 'mobile-client', sessionId: 'mobile-session' }), 'a mobile identity')
+    const expired = seed(fixture, 'mobile-expiry')
+    const cancelled = seed(fixture, 'mobile-cancel')
+    for (const seeded of [expired, cancelled]) {
+      const approval = review(fixture, seeded)
+      expect(fixture.gate.assignMobileReview({ requestId: approval.approval.id, expectedVersion: approval.version, digest: seeded.digest },
+        fixture.ownerToken, mobile)).toEqual({ ok: true })
+    }
+    expect(fixture.store.applyCommand({ type: 'work.cancel', taskId: cancelled.ref.taskId,
+      commandId: 'cancel-mobile-fixture', expectedVersion: cancelled.version, payload: {},
+    }, cancelled.context)).toMatchObject({ ok: true })
+    expect(fixture.gate.respond(response(cancelled, 1), mobile)).toEqual({ ok: false, code: 'stale_attempt' })
+    fixture.setClock(() => expiresAt)
+    expect(fixture.gate.respond(response(expired, 1), mobile)).toEqual({ ok: false, code: 'expired' })
+    fixture.reopen()
+    fixture.setClock(() => issuedAt)
+    expect(fixture.gate.respond(response(expired, 1), mobile)).toEqual({ ok: false, code: 'expired' })
+    expect(fixture.handoffs).toEqual([])
+  })
+
   it('matches the exact account, recipient, resource, connector payload and worker disclosure scope', () => {
     const fixture = openFixture()
     const seeded = seed(fixture, 'route')

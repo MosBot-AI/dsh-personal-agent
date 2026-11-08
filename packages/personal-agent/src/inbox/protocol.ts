@@ -96,6 +96,7 @@ export interface InboxApproval {
   readonly recipient?: string
   readonly dataScope: readonly string[]
   readonly preview: string
+  readonly mobileDeviceId?: string
 }
 
 export interface InboxUsage {
@@ -160,6 +161,7 @@ type RoutineDraft = {
 export interface InboxSnapshot {
   readonly workerConfigured: boolean
   readonly mobileConfigured?: boolean
+  readonly mobileReviewers?: readonly Pick<MobileDeviceSummary, 'deviceId' | 'label'>[]
   readonly memoryConfigured?: boolean
   readonly knowledgeConfigured?: boolean
   readonly githubRead?: { readonly projectId?: string }
@@ -185,6 +187,7 @@ export type InboxRequest =
   | { type: 'mobile_devices' }
   | { type: 'mobile_pair'; label: string }
   | { type: 'mobile_revoke'; deviceId: string }
+  | { type: 'mobile_review'; requestId: string; expectedVersion: number; digest: string; deviceId: string | null }
   | { type: 'knowledge_status' }
   | { type: 'knowledge_search'; rootId?: string; query: string; limit?: number }
   | { type: 'knowledge_read'; ref: KnowledgeSource['ref']; revision: string; offset?: number; maxBytes?: number }

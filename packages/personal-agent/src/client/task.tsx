@@ -1,5 +1,5 @@
 import type { FormEvent, RefObject } from 'react'
-import type { InboxApproval, InboxArtifact, InboxProject, InboxRequest, InboxTask } from '../inbox/protocol.js'
+import type { InboxApproval, InboxArtifact, InboxProject, InboxRequest, InboxTask, MobileDeviceSummary } from '../inbox/protocol.js'
 import { formatTime, type Translate } from './copy.js'
 
 export function requestId(): string {
@@ -14,20 +14,24 @@ interface ApprovalProps {
   readonly approval: InboxApproval
   readonly task?: InboxTask
   readonly disabled: boolean
+  readonly reviewers?: readonly Pick<MobileDeviceSummary, 'deviceId' | 'label'>[]
   readonly t: Translate
   readonly submit: (request: InboxRequest) => void
   readonly viewTask: (id: string) => void
 }
 
-export function ApprovalCard({ approval, task, disabled, t, submit, viewTask }: ApprovalProps) {
+export function ApprovalCard({ approval, task, disabled, reviewers, t, submit, viewTask }: ApprovalProps) {
   const expired = Date.parse(approval.expiresAt) <= Date.now()
-  const decide = (decision: 'approve' | 'deny') => submit({
-    type: 'approval',
-    requestId: approval.id,
-    expectedVersion: approval.version,
-    digest: approval.digest,
-    decision,
-  })
+  const fence = { requestId: approval.id, expectedVersion: approval.version, digest: approval.digest }
+  const decide = (decision: 'approve' | 'deny') => submit({ type: 'approval', ...fence, decision })
+  const assigned = approval.mobileDeviceId
+  function move(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const id = new FormData(event.currentTarget).get('reviewer')
+    if (!disabled && !expired && typeof id === 'string' && reviewers?.some(device => device.deviceId === id)) {
+      submit({ type: 'mobile_review', ...fence, deviceId: id })
+    }
+  }
   return <article className="dshpa-card dshpa-attention">
     <h3>{t('today.approval')}</h3>
     {task && <p className="dshpa-summary">{task.outcome}</p>}
@@ -44,11 +48,22 @@ export function ApprovalCard({ approval, task, disabled, t, submit, viewTask }: 
       <summary>{t('approval.preview')}</summary>
       <pre>{approval.preview}</pre>
     </details>
+    {assigned ? <div className="dshpa-actions">
+      <span>{t('approval.mobileAssigned')} {reviewers?.find(device => device.deviceId === assigned)?.label}</span>
+      <button type="button" disabled={disabled || expired}
+        onClick={() => submit({ type: 'mobile_review', ...fence, deviceId: null })}>{t('approval.mobileRecall')}</button>
+    </div> : Boolean(reviewers?.length) && <form className="dshpa-actions" onSubmit={move}>
+      <label>{t('approval.mobileDevice')} <select name="reviewer" required defaultValue="" disabled={disabled || expired}>
+        <option value="" disabled>{t('approval.mobileDevice')}</option>
+        {reviewers?.map(device => <option key={device.deviceId} value={device.deviceId}>{device.label}</option>)}
+      </select></label>
+      <button disabled={disabled || expired}>{t('approval.mobileSend')}</button>
+    </form>}
     <div className="dshpa-actions">
-      <button type="button" className="dshpa-primary" disabled={disabled || expired} onClick={() => decide('approve')}>
+      <button type="button" className="dshpa-primary" disabled={disabled || expired || Boolean(assigned)} onClick={() => decide('approve')}>
         {t('action.approve')}
       </button>
-      <button type="button" disabled={disabled || expired} onClick={() => decide('deny')}>{t('action.deny')}</button>
+      <button type="button" disabled={disabled || expired || Boolean(assigned)} onClick={() => decide('deny')}>{t('action.deny')}</button>
       {task && <button type="button" onClick={() => viewTask(task.id)}>{t('today.showTask')}</button>}
     </div>
   </article>

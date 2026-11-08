@@ -3,11 +3,14 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import {
   approvalSchema,
+  clientIdSchema,
+  deviceIdSchema,
   effectSchema,
   grantIdSchema,
   grantSchema,
   operationIdSchema,
   requestIdSchema,
+  sessionIdSchema,
   sha256DigestSchema,
   utcInstantSchema,
   versionSchema,
@@ -15,6 +18,7 @@ import {
   type Effect,
   type Grant,
   type GrantId,
+  type Profile,
   type TaskId,
   type UtcInstant,
 } from '../domain/model.js'
@@ -62,14 +66,17 @@ export type ActionDecision =
   | { decision: 'ask'; action: Action; approval: Approval; version: number }
   | { decision: 'allow'; grantId: GrantId }
 
+type Approver = Pick<OwnerIdentity, 'clientId' | 'deviceId' | 'sessionId' | 'verifiedAt'>
+
 interface ApprovalEntry {
+  operationId: Action['operationId']
   approval: Approval
-  clientId: string
-  deviceId: string
-  sessionId: string
-  verifiedAt: string
+  primary: Approver
+  mobile?: Approver
   version: number
 }
+
+export type PendingApproval = Extract<ActionDecision, { decision: 'ask' }> & { mobileDeviceId?: Approver['deviceId'] }
 
 interface GrantEntry {
   grant: Grant
@@ -77,11 +84,11 @@ interface GrantEntry {
 }
 
 const requestSchema = z.strictObject({ requestId: requestIdSchema, expiresAt: utcInstantSchema })
-const responseSchema = z.strictObject({
-  requestId: requestIdSchema,
-  expectedVersion: versionSchema,
-  decision: z.enum(['approve', 'deny']),
-  digest: sha256DigestSchema,
+const reviewFence = { requestId: requestIdSchema, expectedVersion: versionSchema, digest: sha256DigestSchema }
+const responseSchema = z.strictObject({ ...reviewFence, decision: z.enum(['approve', 'deny']) })
+const handoffSchema = z.strictObject(reviewFence)
+const approverSchema = z.strictObject({
+  clientId: clientIdSchema, deviceId: deviceIdSchema, sessionId: sessionIdSchema, verifiedAt: utcInstantSchema,
 })
 const reviewable = new Set(['queued', 'running', 'verifying', 'waiting_approval'])
 const dispatchable = new Set(['running', 'verifying'])
@@ -147,21 +154,23 @@ function readProposal(db: DatabaseSync, operationId: Action['operationId']): Sav
 }
 
 function readApproval(db: DatabaseSync, operationId: Action['operationId']): ApprovalEntry | undefined {
-  const row = db.prepare('SELECT * FROM action_approvals WHERE operation_id = ?').get(operationId)
+  const row = db.prepare(`SELECT a.*, m.client_id AS mobile_client_id, m.device_id AS mobile_device_id,
+    m.session_id AS mobile_session_id, m.device_verified_at AS mobile_verified_at
+    FROM action_approvals a LEFT JOIN mobile_approval_reviews m ON m.request_id = a.request_id
+    WHERE a.operation_id = ?`).get(operationId)
   if (!row) return undefined
   const approval = parseRecord(row.record, approvalSchema)
-  if (approval.id !== row.request_id || approval.status !== row.status
-    || typeof row.version !== 'number' || typeof row.client_id !== 'string'
-    || typeof row.session_id !== 'string' || typeof row.device_id !== 'string'
-    || typeof row.device_verified_at !== 'string') return corrupt()
-  return {
-    approval,
-    clientId: row.client_id,
-    deviceId: row.device_id,
-    sessionId: row.session_id,
-    verifiedAt: row.device_verified_at,
-    version: row.version,
-  }
+  if (approval.id !== row.request_id || approval.status !== row.status || typeof row.version !== 'number') return corrupt()
+  const primary = approverSchema.safeParse({
+    clientId: row.client_id, deviceId: row.device_id, sessionId: row.session_id, verifiedAt: row.device_verified_at,
+  })
+  if (!primary.success) return corrupt()
+  if (row.mobile_device_id === null) return { operationId, approval, primary: primary.data, version: row.version }
+  const mobile = approverSchema.safeParse({
+    clientId: row.mobile_client_id, deviceId: row.mobile_device_id,
+    sessionId: row.mobile_session_id, verifiedAt: row.mobile_verified_at,
+  })
+  return mobile.success ? { operationId, approval, primary: primary.data, mobile: mobile.data, version: row.version } : corrupt()
 }
 
 function readGrant(db: DatabaseSync, operationId: Action['operationId']): GrantEntry | undefined {
@@ -175,10 +184,16 @@ function readGrant(db: DatabaseSync, operationId: Action['operationId']): GrantE
   return { grant, expired: row.expired_at !== null }
 }
 
-function isApprover(entry: ApprovalEntry, owner: OwnerIdentity): boolean {
+function isApprover(entry: ApprovalEntry, owner: OwnerIdentity, approver = entry.primary): boolean {
   return scopeMatches(entry.approval, owner) && entry.approval.policyVersion === owner.policyVersion
-    && entry.deviceId === owner.deviceId && entry.clientId === owner.clientId
-    && entry.sessionId === owner.sessionId && entry.verifiedAt === owner.verifiedAt
+    && approver.deviceId === owner.deviceId && approver.clientId === owner.clientId
+    && approver.sessionId === owner.sessionId && approver.verifiedAt === owner.verifiedAt
+}
+
+function responderEnrolled(entry: ApprovalEntry, profile: Profile): boolean {
+  const responder = entry.mobile ?? entry.primary
+  const devices = profile.verifiedDevices.filter(device => device.deviceId === responder.deviceId)
+  return devices.length === 1 && devices[0]?.verifiedAt === responder.verifiedAt
 }
 
 function approvalMatches(entry: ApprovalEntry, proposal: Proposal): boolean {
@@ -201,10 +216,11 @@ function grantError(db: DatabaseSync, proposal: Proposal, entry: ApprovalEntry, 
   const { approval } = entry
   const { grant } = saved
   const { action } = proposal
+  const responder = entry.mobile ?? entry.primary
   if (!approvalMatches(entry, proposal) || approval.status !== 'approved'
     || !scopeMatches(grant, action) || grant.approvalEvidence.requestId !== approval.id
     || grant.policyVersion !== action.policyVersion || grant.expiresAt !== approval.expiresAt
-    || approval.responseActor?.deviceId !== entry.deviceId || grant.approvingPrincipal.deviceId !== entry.deviceId
+    || approval.responseActor?.deviceId !== responder.deviceId || grant.approvingPrincipal.deviceId !== responder.deviceId
     || !matchesScope(grant.action, action)) return 'permission_denied'
   if (grant.revokedAt !== undefined) return 'revoked'
   if (db.prepare('SELECT 1 FROM action_dispatches WHERE grant_id = ?').get(grant.id)) return 'already_claimed'
@@ -308,6 +324,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
         }
         const grant = readGrant(db, action.operationId)
         if (!grant || entry.approval.status !== 'approved') return deny('already_decided')
+        if (!responderEnrolled(entry, current.profile)) return deny('permission_denied')
         const error = grantError(db, proposal, entry, grant, at)
         if (error) return deny(error)
         if (work.effect.status !== 'authorized' || work.effect.grantId !== grant.grant.id) return deny('permission_denied')
@@ -348,39 +365,101 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     }))
   }
 
-  /** Project only requests that the original verified owner can still answer. */
-  function pending(ownerToken: unknown, taskIds: readonly TaskId[]): Extract<ActionDecision, { decision: 'ask' }>[] {
+  /** Show pending reviews only to the original owner client and the exact assigned device. */
+  function pending(ownerToken: unknown, taskIds: readonly TaskId[]): PendingApproval[] {
     const owner = identity.resolveOwner(ownerToken)
     const ids = taskIds.slice(0, 64)
     if (!owner || ids.length === 0) return []
+    const binding = [owner.clientId, owner.sessionId, owner.deviceId, owner.verifiedAt] as const
     return access(db => transaction(db, () => {
       const rows = db.prepare(`
-        SELECT operation_id FROM action_approvals
-        WHERE owner_id = ? AND profile_id = ? AND status = 'pending'
-          AND client_id = ? AND session_id = ? AND device_id = ? AND device_verified_at = ?
-          AND task_id IN (${ids.map(() => '?').join(', ')})
-        ORDER BY rowid DESC LIMIT 64
-      `).all(owner.ownerId, owner.profileId, owner.clientId, owner.sessionId, owner.deviceId, owner.verifiedAt, ...ids)
-      const result: Extract<ActionDecision, { decision: 'ask' }>[] = []
+        SELECT a.operation_id FROM action_approvals a LEFT JOIN mobile_approval_reviews m ON m.request_id = a.request_id
+        WHERE a.owner_id = ? AND a.profile_id = ? AND a.status = 'pending'
+          AND ((a.client_id = ? AND a.session_id = ? AND a.device_id = ? AND a.device_verified_at = ?)
+            OR (m.client_id = ? AND m.session_id = ? AND m.device_id = ? AND m.device_verified_at = ?))
+          AND a.task_id IN (${ids.map(() => '?').join(', ')})
+        ORDER BY a.rowid DESC LIMIT 64
+      `).all(owner.ownerId, owner.profileId, ...binding, ...binding, ...ids)
+      const result: PendingApproval[] = []
       const at = now()
       for (const row of rows) {
         const operation = operationIdSchema.safeParse(row.operation_id)
         if (!operation.success) return corrupt()
-        const proposal = readProposal(db, operation.data)
         const entry = readApproval(db, operation.data)
-        if (!proposal || !entry || !approvalMatches(entry, proposal)) return corrupt()
-        if (!isApprover(entry, owner)) continue
-        if (at >= entry.approval.expiresAt) {
-          expireApproval(db, entry)
-          continue
-        }
-        const { action } = proposal
-        if (currentPolicy(action)?.account.verifiedAt !== proposal.verifiedAt || !routeFor(action)) continue
-        const work = checkWork(db, proposal, reviewable)
-        if (!work.ok || work.effect.status !== 'prepared') continue
-        result.push({ decision: 'ask', action, approval: entry.approval, version: entry.version })
+        if (!entry) return corrupt()
+        if (!isApprover(entry, owner) && !(entry.mobile && isApprover(entry, owner, entry.mobile))) continue
+        const review = currentReview(db, entry, at)
+        if (!review.ok) continue
+        result.push({ decision: 'ask', action: review.proposal.action, approval: entry.approval, version: entry.version,
+          ...(entry.mobile ? { mobileDeviceId: entry.mobile.deviceId } : {}) })
       }
       return result
+    }))
+  }
+
+  function findReview(db: DatabaseSync, requestId: Approval['id'], owner: OwnerIdentity): ApprovalEntry | undefined {
+    const row = db.prepare(`
+      SELECT operation_id FROM action_approvals WHERE request_id = ? AND owner_id = ? AND profile_id = ?
+    `).get(requestId, owner.ownerId, owner.profileId)
+    if (!row) return undefined
+    const operation = operationIdSchema.safeParse(row.operation_id)
+    if (!operation.success) return corrupt()
+    return readApproval(db, operation.data) ?? corrupt()
+  }
+
+  function currentReview(db: DatabaseSync, entry: ApprovalEntry, at: UtcInstant, digest?: string) {
+    if (at >= entry.approval.expiresAt) {
+      expireApproval(db, entry)
+      return fail('expired')
+    }
+    if (digest !== undefined && entry.approval.action.payloadDigest !== digest) return fail('action_changed')
+    const proposal = readProposal(db, entry.operationId)
+    if (!proposal || !approvalMatches(entry, proposal)) return corrupt()
+    if (!routeFor(proposal.action) || currentPolicy(proposal.action)?.account.verifiedAt !== proposal.verifiedAt) {
+      return fail('permission_denied')
+    }
+    const work = checkWork(db, proposal, reviewable)
+    if (!work.ok) return work
+    if (work.effect.status !== 'prepared') return fail('already_claimed')
+    return { ok: true as const, proposal, work }
+  }
+
+  function checkReview(db: DatabaseSync, entry: ApprovalEntry, fence: z.output<typeof handoffSchema>, at: UtcInstant) {
+    if (entry.approval.status === 'expired') return fail('expired')
+    if (entry.approval.status !== 'pending') return fail('already_decided')
+    if (entry.version !== fence.expectedVersion) return fail('version_conflict')
+    return currentReview(db, entry, at, fence.digest)
+  }
+
+  /** Only the original authenticated owner can move or recall a pending review. */
+  function assignMobileReview(input: unknown, ownerToken: unknown, targetToken: unknown):
+  | Failure | { ok: true } {
+    const owner = identity.resolveOwner(ownerToken)
+    const target = targetToken === null ? null : identity.resolveOwner(targetToken)
+    if (!owner || target === undefined || (target && (!scopeMatches(owner, target) || target.deviceId === owner.deviceId))) {
+      return fail('permission_denied')
+    }
+    const fence = handoffSchema.safeParse(input)
+    if (!fence.success) return fail('invalid_input')
+    return access(db => transaction(db, () => {
+      if (!permit(db)) return fail('recovery_required')
+      const entry = findReview(db, fence.data.requestId, owner)
+      if (!entry) return fail('not_found')
+      if (!isApprover(entry, owner)) return fail('permission_denied')
+      const review = checkReview(db, entry, fence.data, now())
+      if (!review.ok) return review
+      if (!target && !entry.mobile) return fail('not_found')
+      const { requestId, expectedVersion } = fence.data
+      const update = db.prepare(`UPDATE action_approvals SET version = version + 1
+        WHERE request_id = ? AND status = 'pending' AND version = ?`).run(requestId, expectedVersion)
+      if (update.changes !== 1) return fail('version_conflict')
+      if (target) {
+        db.prepare(`INSERT INTO mobile_approval_reviews (request_id, device_id, client_id, session_id, device_verified_at)
+          VALUES (?, ?, ?, ?, ?) ON CONFLICT (request_id) DO UPDATE SET device_id = excluded.device_id,
+          client_id = excluded.client_id, session_id = excluded.session_id, device_verified_at = excluded.device_verified_at`)
+          .run(requestId, target.deviceId, target.clientId, target.sessionId, target.verifiedAt)
+      } else db.prepare('DELETE FROM mobile_approval_reviews WHERE request_id = ?').run(requestId)
+      return { ok: true }
     }))
   }
 
@@ -390,35 +469,17 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     if (!owner) return fail('permission_denied')
     const response = responseSchema.safeParse(input)
     if (!response.success) return fail('invalid_input')
-    const { requestId, expectedVersion, decision, digest } = response.data
+    const { requestId, expectedVersion, decision } = response.data
     return access(db => transaction(db, () => {
       if (!permit(db)) return fail('recovery_required')
-      const row = db.prepare(`
-        SELECT operation_id FROM action_approvals WHERE request_id = ? AND owner_id = ? AND profile_id = ?
-      `).get(requestId, owner.ownerId, owner.profileId)
-      if (!row) return fail('not_found')
-      const operation = operationIdSchema.safeParse(row.operation_id)
-      if (!operation.success) return corrupt()
-      const operationId = operation.data
-      const entry = readApproval(db, operationId)
-      if (!entry || !isApprover(entry, owner)) return fail('permission_denied')
-      if (entry.approval.status === 'expired') return fail('expired')
-      if (entry.approval.status !== 'pending') return fail('already_decided')
-      if (entry.version !== expectedVersion) return fail('version_conflict')
+      const entry = findReview(db, requestId, owner)
+      if (!entry) return fail('not_found')
+      if (!isApprover(entry, owner, entry.mobile ?? entry.primary)) return fail('permission_denied')
       const at = now()
-      if (at >= entry.approval.expiresAt) {
-        expireApproval(db, entry)
-        return fail('expired')
-      }
-      const proposal = readProposal(db, operationId)
-      if (!proposal || !approvalMatches(entry, proposal)) return corrupt()
-      if (proposal.digest !== digest) return fail('action_changed')
-      if (!routeFor(proposal.action) || currentPolicy(proposal.action)?.account.verifiedAt !== proposal.verifiedAt) {
-        return fail('permission_denied')
-      }
-      const work = checkWork(db, proposal, reviewable)
-      if (!work.ok) return work
-      if (work.effect.status !== 'prepared') return fail('already_claimed')
+      const review = checkReview(db, entry, response.data, at)
+      if (!review.ok) return review
+      const { proposal, work } = review
+      const operationId = proposal.action.operationId
       const status = decision === 'approve' ? 'approved' : 'denied'
       const principal = { ownerId: owner.ownerId, profileId: owner.profileId, deviceId: owner.deviceId }
       const approved = approvalSchema.parse({ ...entry.approval, status, responseActor: principal })
@@ -488,8 +549,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
         || !grantEntry || grantEntry.grant.id !== grantId.data) {
         return fail('permission_denied')
       }
-      const devices = current.profile.verifiedDevices.filter(device => device.deviceId === approval.deviceId)
-      if (devices.length !== 1 || devices[0]?.verifiedAt !== approval.verifiedAt) return fail('permission_denied')
+      if (!responderEnrolled(approval, current.profile)) return fail('permission_denied')
       const at = now()
       const error = grantError(db, saved, approval, grantEntry, at)
       if (error) return fail(error)
@@ -522,7 +582,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     }
   }
 
-  return Object.freeze({ review, pending, respond, revoke, dispatch })
+  return Object.freeze({ review, pending, assignMobileReview, respond, revoke, dispatch })
 }
 
 function writeEffect(db: DatabaseSync, effect: Effect, status: 'authorized' | 'dispatching', grantId: GrantId): void {
