@@ -4,6 +4,7 @@ import { isManagedWorkerSession, type LocalContext } from './context/local-conte
 import {
   activateLocalInbox, localInboxConfigSchema, type LocalAttentionService, type LocalComputeService, type LocalRoutingService,
 } from './inbox/host.js'
+import type { MediaJobService } from './media/jobs.js'
 import { installCapabilityPlugins } from './runtime/capability-registry.js'
 import { computeDenied } from './runtime/compute.js'
 import { createHostAdapter, type HostAdapter } from './runtime/host-adapter.js'
@@ -21,6 +22,7 @@ declare module '@deepseek-ai/cordis' {
     dshpaRouting: LocalRoutingService
     dshpaAttention: LocalAttentionService
     dshpaCompute: LocalComputeService
+    dshpaMedia: Pick<MediaJobService, 'enqueue' | 'inspect' | 'cancel'>
   }
 }
 
@@ -96,6 +98,10 @@ export function apply(ctx: Context, config?: { inbox?: unknown }): void {
         web.provide('dshpaRouting', runtime.routing)
         web.provide('dshpaAttention', runtime.attention)
         web.provide('dshpaCompute', runtime.compute)
+        if (runtime.media) {
+          const { enqueue, inspect, cancel } = runtime.media
+          web.provide('dshpaMedia', Object.freeze({ enqueue, inspect, cancel }))
+        }
         return () => {
           activeContext = undefined
           return runtime.dispose()

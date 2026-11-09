@@ -39,6 +39,12 @@ jobs:
           node-version: '24.9.0'
       - name: Install pinned workspace
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm install --frozen-lockfile
+      - name: Ensure media verification tools are available
+        run: |
+          if ! command -v ffmpeg || ! command -v ffprobe; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
       - name: Verify native bundle
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm check
       - name: Verify keyless native Web flow

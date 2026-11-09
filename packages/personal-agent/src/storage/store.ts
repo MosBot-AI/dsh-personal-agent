@@ -54,6 +54,9 @@ import {
   artifactProofs, collectArtifacts, createVerifier, criteriaSatisfied, exactEffectReceipt, readyToVerify,
   verificationRecordSchema, type VerificationCommit, type VerificationOptions,
 } from '../domain/verification.js'
+import { holdingLease } from '../media/resources.js'
+import { createMediaJobs, type MediaJobAuthority, type MediaJobService, type MediaServiceConfig } from '../media/jobs.js'
+import type { CapabilityRegistry } from '../runtime/capability-registry.js'
 import { createActionGate, type ActionGateOptions } from '../policy/dispatch.js'
 import { createAttention, type AttentionOptions } from '../runtime/attention.js'
 import { createInferenceLedger, markColdInferenceAttempts } from './inference.js'
@@ -307,6 +310,14 @@ class WorkStore {
 
   mobileFeed(scope: MobileDeviceScope, now?: () => UtcInstant): ReturnType<typeof createMobileFeed> {
     return createMobileFeed(operation => this.access(operation), scope, this.mobileDevices(scope, now))
+  }
+
+  createMediaJobs(registry: CapabilityRegistry, config: MediaServiceConfig, authority: MediaJobAuthority): MediaJobService {
+    return createMediaJobs(operation => this.access(operation), registry, config, authority)
+  }
+
+  mediaLeaseHeld(): boolean {
+    return this.access(db => db.prepare(`SELECT 1 FROM media_jobs WHERE ${holdingLease}`).get() !== undefined)
   }
 
   createActionGate(options: ActionGateOptions) {

@@ -50,6 +50,8 @@ pnpm exec dsh plugin --profile your-profile add "link:$PWD/examples/plugins/medi
 
 **MediaProvider：** `capabilities`、`submit`、`inspect`、`cancel`、`collect`，提供持久句柄和结构化错误。声明图/视频、编辑/生成、支持规格、取消粒度、资源、目的地与价格。图片和视频可配置不同 provider，也可共享一个 ComfyUI 实例。每个 MediaJob 固定配置实例、实现 ID、插件版本和配置修订。选择变更仅影响新作业。读回解析已记录的确切句柄，原绑定缺失时报告其提供方不可用。
 
+可选的 `durableSubmission` 契约在发送前准备后端句柄与工作流摘要。宿主将两者持久化后，才允许一次提交。响应不明确时，宿主使用预分配句柄核对结果。当前本地队列只接入实现此契约的免费本地提供器。 [ComfyUI 提供器](../packages/media-comfyui/README-zh.md)
+
 **CreationWorkflowProvider：** 声明输入/输出、依赖能力、工作流版本、步骤与恢复点。核心包装的媒体与工具回调继承确切任务范围，并在返回、取消或提供方排空时关闭。核心在交接前记录子媒体意图，在工作流取得句柄前记录已受理回执。核心策略检查每个子调用及声明的结果结构。
 
 **MemoryProvider：** `read`、`search`、`upsert`、`supersede`、`forget`、`exportSnapshot`、`importSnapshot`、`health`。记录格式保留稳定 ID、owner/scope、内容、来源、显式/推断、有效期、revision 和删除标记。只支持向量检索的组件实现可选 `MemoryRetrievalProvider`，不能伪装成完整记忆存储；检索返回稳定记录 ID、分数和来源，核心再次检查范围与遗忘排除项。

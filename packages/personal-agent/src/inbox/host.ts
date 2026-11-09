@@ -16,11 +16,12 @@ import { connectorBindingSchema, createReadConnector } from '../connectors/regis
 import { createLocalContext, localContextConfigSchema } from '../context/local-context.js'
 import { createLocalMemory, localMemoryConfigSchema } from '../context/memory.js'
 import {
-  accountIdSchema, deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema, projectIdSchema, sha256DigestSchema,
+  accountIdSchema, artifactIdSchema, deviceIdSchema, nonEmptyTextSchema, ownerIdSchema, profileIdSchema, profileSchema, projectIdSchema, sha256DigestSchema,
   sourceInstanceIdSchema, utcInstantSchema,
-  type Profile, type SessionId, type SourceEvent,
+  taskIdSchema, type Profile, type SessionId, type SourceEvent,
 } from '../domain/model.js'
 import type { WorkState } from '../domain/transitions.js'
+import { mediaServiceConfigSchema, type MediaJobService } from '../media/jobs.js'
 import { ROUTINE_SOURCE } from '../domain/routines.js'
 import { createIdentityBoundary, type SourceToken } from '../policy/identity.js'
 import type { ActionRoute } from '../policy/dispatch.js'
@@ -76,6 +77,7 @@ export const localInboxConfigSchema = z.strictObject({
       z.strictObject({ kind: z.literal('mcp'), url: mcpLoopbackUrlSchema, fingerprint: sha256DigestSchema })]).default({ kind: 'github' }),
   }).optional(),
   gpu: gpuConfigSchema.optional(),
+  media: mediaServiceConfigSchema.optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
     model: nonEmptyTextSchema.max(256),
@@ -268,6 +270,7 @@ export function activateLocalInbox(
   let router: EventRouter | undefined
   let schedules: ReturnType<typeof createScheduleAdapter> | undefined
   let proactive: ProactiveService | undefined
+  let media: MediaJobService | undefined
   let executor: WorkerExecutor | undefined
   let resident: ResidentOperations | undefined
   let mobileHttp: ReturnType<typeof startMobileHttp> | undefined
@@ -317,11 +320,30 @@ export function activateLocalInbox(
     const budget = store.createBudget(budgetConfig)
     const attention = store.createAttention({ allowExternal: options.allowAttentionDelivery })
     const gpu = createGpuQueue(config.gpu ?? {}, ref => {
-      if (ref.ownerId !== scope.ownerId || ref.profileId !== scope.profileId || !store.canDispatch()) return false
+      if (ref.ownerId !== scope.ownerId || ref.profileId !== scope.profileId || !store.canDispatch()
+        || (config.media && store.mediaLeaseHeld())) return false
       const state = store.getWork(ref)
       return Boolean(state && state.task.generation === ref.generation && state.attempt.id === ref.attemptId
         && state.attempt.generation === ref.generation && ['queued', 'running', 'waiting_resource'].includes(state.task.status))
     })
+    if (config.media) {
+      const registry = capabilityRegistryFor(ctx)
+      if (!registry) throw new Error('The media service requires the capability registry')
+      media = store.createMediaJobs(registry, config.media, {
+        current(access) {
+          if (access.ownerId !== scope.ownerId || access.profileId !== scope.profileId) return false
+          const state = store.getWork({ ...scope, taskId: taskIdSchema.parse(access.taskId) })
+          return Boolean(state && state.task.generation === access.generation && state.attempt.id === access.attemptId
+            && state.attempt.generation === access.generation && ['queued', 'running', 'waiting_resource'].includes(state.task.status))
+        },
+        canLease: () => gpu.snapshot(scope).active === 0,
+        artifactAllowed(access, artifact) {
+          const sealed = store.artifacts.read({ ...scope, taskId: taskIdSchema.parse(access.taskId) }, artifactIdSchema.parse(artifact.artifactId))
+          return Boolean(sealed && sealed.artifact.attemptId === access.attemptId && sealed.generation === access.generation
+            && sealed.artifact.contentHash === artifact.contentHash && sealed.artifact.mediaType === artifact.mediaType)
+        },
+      })
+    }
     const routeHasPrice = (route: { provider: string; model: string }) => budgetConfig.routes.some(item =>
       item.provider === route.provider && item.model === route.model && item.pricing.kind === 'known')
 
@@ -507,8 +529,9 @@ export function activateLocalInbox(
       })
     }
 
+    media?.start(() => console.error('dshpa: media reconciliation failed'))
     return Object.freeze({
-      store, executor, identity, actionGate, ownerToken, owner, recovery, routing, attention, context, schedules: schedule,
+      media, store, executor, identity, actionGate, ownerToken, owner, recovery, routing, attention, context, schedules: schedule,
       compute: Object.freeze({ budget, gpu }),
       async dispose() {
         const operations = resident?.close()
@@ -519,7 +542,7 @@ export function activateLocalInbox(
         const detached = remove()
         try {
           eventRouter.close()
-          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close(), mobileClosed])
+          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close(), media?.close(), mobileClosed])
           if (!workersReleased || !gpuReleased) throw new Error('Inbox compute cleanup remains unverified')
         } finally {
           try { detachResident?.() } finally { await detached }
@@ -533,8 +556,8 @@ export function activateLocalInbox(
       router?.close()
     } finally {
       detachResident?.()
-      if (startup || schedules || resident || detachInbox || proactive || mobileHttp) {
-        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.(), proactive?.close(), mobileHttp?.close()])
+      if (startup || schedules || resident || detachInbox || proactive || media || mobileHttp) {
+        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.(), proactive?.close(), media?.close(), mobileHttp?.close()])
           .then(() => store.close()).catch(() => undefined)
       }
       else store.close()

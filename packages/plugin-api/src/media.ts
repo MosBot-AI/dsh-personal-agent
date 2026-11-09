@@ -80,6 +80,20 @@ export const mediaHandleSchema = z.strictObject({
 })
 export type MediaHandle = z.infer<typeof mediaHandleSchema>
 
+export const preparedMediaSubmissionSchema = z.strictObject({
+  handle: mediaHandleSchema,
+  workflowDigest: contentHashSchema,
+  seed: z.int().nonnegative().optional(),
+})
+export type PreparedMediaSubmission = z.infer<typeof preparedMediaSubmissionSchema>
+
+export interface DurableMediaSubmission {
+  /** Prepare without sending or creating a backend job. Persist this result before submit. */
+  prepare(request: MediaSubmitRequest, signal: AbortSignal): MaybePromise<ProviderResult<PreparedMediaSubmission>>
+  /** Dispatch once. After any ambiguous result, inspect the prepared handle. */
+  submit(request: MediaSubmitRequest, prepared: PreparedMediaSubmission, signal: AbortSignal): MaybePromise<ProviderResult<MediaHandle>>
+}
+
 export const mediaJobRequestSchema = z.strictObject({ access: mediaAccessSchema, handle: mediaHandleSchema })
 export type MediaJobRequest = z.infer<typeof mediaJobRequestSchema>
 
@@ -105,6 +119,7 @@ export const mediaOutputsSchema = z.array(mediaOutputSchema).min(1).max(32)
 /** Handles are pinned to the originating provider configuration for every later operation. */
 export interface MediaProvider extends ProviderLifecycle {
   readonly capabilities: MediaCapabilities
+  readonly durableSubmission?: DurableMediaSubmission
   submit(request: MediaSubmitRequest, signal: AbortSignal): MaybePromise<ProviderResult<MediaHandle>>
   inspect(request: MediaJobRequest, signal: AbortSignal): MaybePromise<ProviderResult<MediaJobStatus>>
   cancel(request: MediaJobRequest, signal: AbortSignal): MaybePromise<ProviderResult<MediaJobStatus>>
