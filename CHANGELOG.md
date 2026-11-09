@@ -45,6 +45,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Changed
 
+- Make isolated Linux mobile browser checks independent of the desktop keyring and cover pairing, device and approval expiry plus review recall.
+
 - Add WorkStore migration support for scoped mobile device credentials. Restoring an older backup clears mobile pairing codes and credentials.
 - Refine the existing DSH-native plan into dependency-driven release stages, keeping local operation central and defining explicit plugin migration and recovery requirements.
 

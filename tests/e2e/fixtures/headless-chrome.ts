@@ -14,7 +14,10 @@ export async function openHeadlessChrome(executable: string, profile: string, ce
   const key = new X509Certificate(certificate).publicKey.export({ type: 'spki', format: 'der' })
   const pin = createHash('sha256').update(key).digest('base64')
   const child = spawn(executable, [
-    '--headless', '--remote-debugging-pipe', '--user-data-dir=' + profile,
+    '--headless',
+    // This disposable profile must not wait for a locked Linux desktop keyring.
+    ...(process.platform === 'linux' ? ['--password-store=basic'] : []),
+    '--remote-debugging-pipe', '--user-data-dir=' + profile,
     '--ignore-certificate-errors-spki-list=' + pin,
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
     '--disable-component-update', '--disable-sync', 'about:blank',
