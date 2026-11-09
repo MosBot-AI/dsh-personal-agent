@@ -11,7 +11,7 @@
 - 适配器验证归属绑定后，才调用 ComfyUI 的单任务取消路由。它从已批准的输出节点下载有大小上限的文件，探测媒体类型、尺寸和时长，解码媒体流并计算 SHA-256。任务保存已验证的元数据，文件保留在 ComfyUI 中。 [提供器配置](../../packages/media-comfyui/README-zh.md)
 ## 媒体回归测试环境
 
-媒体回归使用模拟 ComfyUI v0.44.0 HTTP 行为的本地回环服务。测试环境没有安装 ComfyUI。模拟服务返回的 PNG 和 MP4 都由 FFmpeg 生成，文中记录的 SHA-256 是这些样本文件的摘要。
+此前媒体回归使用模拟 ComfyUI v0.44.0 HTTP 行为的本地回环服务。该次测试环境没有安装 ComfyUI。模拟服务返回的 PNG 和 MP4 都由 FFmpeg 生成，文中记录的 SHA-256 是这些样本文件的摘要。
 
 - 在 [Issue 评论建议的丢响应场景](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6715554235) 中，模拟服务记录一次 POST，将模拟任务入队，再在响应前关闭套接字。请求到达时，另一条 SQLite 连接已能读到准备记录。调用端重新打开存储与注册表，经历一次空回查，随后核对同一模拟任务的 prompt ID 和样本 PNG 摘要。最终 POST 仍只有一次。
 - 在进程崩溃场景中，模拟服务记录提交并挂起响应。测试向自己启动的一次性 dshpa 调用进程发送 `SIGKILL`。SQLite 仍保存 `submitting` 状态和预分配的 prompt ID。另一个进程打开同一数据库，核对模拟任务并验证 FFmpeg 样本摘要。模拟服务总共记录一次 POST。
@@ -66,3 +66,30 @@ E06 使用持久化数据库验证受控传输故障与操作系统进程崩溃�
 - `pnpm test:media-live`：因未设置 `DSHPA_COMFYUI_LIVE_CONFIG` 跳过一项；退出码零不代表真实环境验收。固定的本地上游 checkout 不可用，无法完成 `--check-sources`。
 
 真实 ComfyUI 生成、物理 GPU/OOM 和运行中渲染取消、实际睡眠/唤醒，以及实体手机和已部署 HTTPS 验收仍待完成。此前并发评审负载下曾失败一次的 schedule 恢复用例在本次最终工作区检查中通过；之前的根因尚未证实。测试未使用生产数据或部署。
+
+## 独立真实 ComfyUI CPU 恢复验证（2026-11-09）
+
+所有者指定当前 Linux 笔记本作为开发及验收主机。本次运行使用未修改的 dshpa main `c3c613391be888fffd3885fd955fadc30e337912`，对官方 ComfyUI v0.44.0、提交 `2c75dc1b379a59e0880619d029607af5169a62ef` 独立复现了新报告的无模型 CPU 用例。未修改适配器、测试中继或验收测试源码。
+
+环境：Debian 13 x86_64、Python 3.13.5、PyTorch 2.15.0+cpu、torchvision 0.29.2+cpu、Node.js 24.14.1、pnpm 11.28.5 及 FFmpeg/ffprobe 7.1.5。依赖安装在 `/tmp/dshpa-comfy-live-20261109/venv`，CPU 版本约束避免替换成 CUDA 构建。`pip check` 通过，`torch.version.cuda` 为 `None`，服务只报告 CPU 设备。完整依赖冻结清单及安装日志均已保留。
+
+服务使用临时回环端口、一次性输入／输出／用户／模型目录、`--cpu --offline --disable-all-custom-nodes --disable-auto-launch`，并启用 Hugging Face／Transformers 离线设置。评审后的工作流为内置 `EmptyImage`（64×64、单张、恒定蓝色）-> `SaveImage`，另有未连接的内置 `RandomNoise.noise_seed`，用于满足适配器要求的数字种子绑定。提示词绑定到 `SaveImage.filename_prefix`。未安装模型权重或自定义节点。
+
+固定版本检出目录中的准确应用命令：
+
+```sh
+pnpm build
+DSHPA_COMFYUI_LIVE_CONFIG=/tmp/dshpa-comfy-live-20261109/provider.json pnpm test:media-live
+```
+
+构建通过。现有 live 测试通过一项用例，没有跳过。中继在派发前核对持久化提示 ID／请求，丢弃已接受提交的响应，并验证新调用进程使用同一个提示 ID 恢复输出摘要，且仅发生一次 POST。标准测试报告器隐藏成功用例的控制台输出；下述独立服务／历史／输出读取保留了具体标识。
+
+| 独立观察 | 结果 |
+| --- | --- |
+| ComfyUI 历史及服务日志 | 一条历史记录、一条 `got prompt` 日志；已完成提示 `b05bb32a-8b2e-41be-8833-1c2c8e8d285e`。 |
+| 输出目录 | 恰好一张 PNG，481 字节。 |
+| ffprobe | PNG 编码，64×64。 |
+| 独立文件 SHA-256 | `f20b2af6d426c86184cb205ca7cadb5fecdf676bfdacfa477d60bfd0fbabc70c`。 |
+| 源码／状态隔离 | 测试时 dshpa 检出目录在对应 main 提交上保持干净；全部服务状态均为一次性数据。验证后已停止本次创建的服务。 |
+
+这证明了无模型 CPU 夹具中的真实本地 ComfyUI 传输、输出解码和提交响应丢失恢复。恒定颜色工作流不验证提示词遵循、模型图片／视频质量、实体 GPU／OOM、运行中渲染取消或休眠唤醒；这些验收项仍未完成。本结果不把 PA-033 标记为 Done，也不添加 `acceptance:verified`。
