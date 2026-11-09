@@ -255,7 +255,7 @@ function makeProvider(pin: ProviderPin<'media'>, config: Config): MediaProvider 
             const response = await http.request('/view?' + query, signal)
             if (!response.ok) {
               await response.body?.cancel().catch(() => undefined)
-              return fail('provider_unavailable')
+              return fail(response.status === 404 ? 'invalid_result' : 'provider_unavailable')
             }
             const bytes = await readBounded(response, remainingBytes)
             remainingBytes -= bytes.length
