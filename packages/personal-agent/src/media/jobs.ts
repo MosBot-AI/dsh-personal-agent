@@ -78,6 +78,7 @@ export function createMediaJobs(dbAccess: DbAccess, registry: CapabilityRegistry
   const abort = new AbortController()
   let inFlight: Promise<void> | undefined
   let timer: NodeJS.Timeout | undefined
+  let collection: { sequence: number; abort: AbortController } | undefined
 
   function current(access: MediaAccess): boolean {
     return !abort.signal.aborted && authority.current(access)
@@ -115,15 +116,23 @@ export function createMediaJobs(dbAccess: DbAccess, registry: CapabilityRegistry
     const parsed = jobRefSchema.safeParse(raw)
     if (!parsed.success) return fail('invalid_input')
     if (!current(parsed.data.access)) return fail('permission_denied')
-    return dbAccess(db => transaction(db, () => {
+    let cancelSequence: number | undefined
+    const result = dbAccess(db => transaction(db, () => {
       const key = params(parsed.data)
       if (cancel && !dispatchPermitted(db)) return fail('busy')
       if (cancel) db.prepare(`UPDATE media_jobs SET cancel_requested = 1,
         state = CASE WHEN state = 'queued' THEN 'cancelled' ELSE state END
-        WHERE ${byScope} AND state IN ('queued', 'submitting', 'unknown', 'rendering')`).run(...key)
+        WHERE ${byScope} AND state IN ('queued', 'submitting', 'unknown', 'rendering', 'collecting')`).run(...key)
       const row = db.prepare(`SELECT * FROM media_jobs WHERE ${byScope}`).get(...key)
+      // Keep the durable lease until the physical collector settles, even when
+      // it does not honor abort. The saved flag fences its eventual result.
+      if (cancel && collection && row?.state === 'collecting' && row.cancel_requested === 1 && row.sequence === collection.sequence) {
+        cancelSequence = collection.sequence
+      }
       return row ? ok(publicStatus(decode(row))) : fail('not_found')
     }))
+    if (cancelSequence !== undefined && collection?.sequence === cancelSequence) collection.abort.abort()
+    return result
   }
 
   function update(job: Job, state: JobState, reason?: string, outputs?: MediaOutput[]): void {
@@ -180,10 +189,21 @@ export function createMediaJobs(dbAccess: DbAccess, registry: CapabilityRegistry
   async function reconcile(job: Job, signal: AbortSignal): Promise<void> {
     const request: MediaJobRequest = { access: job.request.access, handle: job.prepared!.handle }
     if (job.state === 'collecting') {
+      const cancelled = () => dbAccess(db => db.prepare('SELECT cancel_requested FROM media_jobs WHERE sequence = ?')
+        .get(job.sequence)?.cancel_requested === 1)
+      if (cancelled()) return update(job, 'cancelled')
       if (!current(request.access)) return update(job, 'cancelled', 'permission_denied')
-      const output = checked(mediaOutputsSchema, await registry.invoke(job.provider, (provider, active) =>
-        provider.collect(request, active), signal))
+      const abortCollection = new AbortController()
+      collection = { sequence: job.sequence, abort: abortCollection }
+      let output: ProviderResult<MediaOutput[]>
+      try {
+        output = checked(mediaOutputsSchema, await registry.invoke(job.provider, (provider, active) =>
+          provider.collect(request, active), AbortSignal.any([signal, abortCollection.signal])))
+      } finally {
+        collection = undefined
+      }
       if (signal.aborted) return
+      if (cancelled()) return update(job, 'cancelled')
       if (!output.ok) {
         if (output.code === 'invalid_result' || output.code === 'permission_denied') update(job, 'failed', output.code)
         else update(job, 'collecting', output.code)
