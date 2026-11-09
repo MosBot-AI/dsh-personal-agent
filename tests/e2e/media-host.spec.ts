@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { expect, it, onTestFinished, vi } from 'vitest'
+import { mediaServiceConfigSchema } from '../../packages/personal-agent/src/media/jobs.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { openWorkStore } from '../../packages/personal-agent/src/storage/store.js'
 import { comfyFixture, imageSpec, mediaRequest } from '../media/fixture.js'
@@ -77,3 +78,35 @@ it('loads the native media bundle and recovers its job after a host restart agai
     sizeBytes: bytes.length, contentHash: createHash('sha256').update(bytes).digest('hex') }])
   expect(fixture.submissions.map(request => request.prompt_id)).toEqual([originalId])
 }, 60_000)
+
+it.each([true, false])('honors a persisted media lease (%s) with media disabled in the next host', async held => {
+  const fixture = await comfyFixture()
+  const { registry, pin } = await fixture.register()
+  const leaseProbe = fileURLToPath(new URL('./fixtures/media-lease-probe.mjs', import.meta.url))
+  const prepared = prepareWebHost(leaseProbe, [
+    '- id: dshpa', '  config:', '    inbox:',
+    "      storageDirectory: !!js dshHomePath('media-state')",
+    '      workRoot: !!js process.cwd()',
+  ])
+  let host: Awaited<ReturnType<typeof openWebHost>> | undefined
+  onTestFinished(async () => {
+    try { await host?.close(); await registry.close() }
+    finally { rmSync(prepared.root, { recursive: true, force: true }) }
+  })
+  const storage = join(prepared.dshHome, 'media-state')
+  const store = openWorkStore(storage)
+  const access = createAttempt(store, 'media-lease')
+  const jobs = store.createMediaJobs(registry, mediaServiceConfigSchema.parse({ providers: { image: pin } }),
+    { current: () => true, artifactAllowed: () => false })
+  try {
+    expect(jobs.enqueue({ ...mediaRequest(), access }).ok).toBe(true)
+    if (held) await jobs.step()
+    expect(store.mediaLeaseHeld()).toBe(held)
+    writeFileSync(join(storage, 'local-inbox-identity.json'), JSON.stringify({ ownerId: access.ownerId, profileId: access.profileId,
+      deviceId: 'native-media-device', verifiedAt: new Date().toISOString() }), { mode: 0o600 })
+    writeFileSync(join(prepared.root, 'media-lease.json'), JSON.stringify({ access, held }), { mode: 0o600 })
+  } finally { await jobs.close(); store.close() }
+  // The restarted native host deliberately has neither media config nor a media provider.
+  // A queued job is the positive control: only a persisted physical lease blocks GPU work.
+  host = await openWebHost(leaseProbe, { prepared })
+}, 30_000)

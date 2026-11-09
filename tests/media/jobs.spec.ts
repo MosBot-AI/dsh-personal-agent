@@ -205,3 +205,38 @@ it.each([imageSpec, videoSpec])('checks the acceptance relay against a simulated
   expect(upstream.submissions.map(request => request.prompt_id)).toEqual([evidence.promptId])
   expect(evidence.outputs).toHaveLength(1)
 })
+
+
+it('retries an interrupted output body without releasing the lease or rendering again', async () => {
+  const fixture = await comfyFixture()
+  const { registry, pin } = await fixture.register()
+  const directory = join(fixture.directory, 'work')
+  let store = openWorkStore(directory)
+  const request = { ...mediaRequest(), access: createAttempt(store, 'interrupted-output') }
+  const config = mediaServiceConfigSchema.parse({ providers: { image: pin } })
+  const authority = { current: () => true, artifactAllowed: () => false }
+  let jobs = store.createMediaJobs(registry, config, authority)
+  onTestFinished(async () => { await jobs.close(); await registry.close(); store.close() })
+  const ref = { access: request.access, operationId: request.operationId }
+  accepted(jobs.enqueue(request))
+  await jobs.step()
+  const id = accepted(jobs.inspect(ref)).handle!.handleId
+  const bytes = fixture.complete(id, imageSpec)
+  await jobs.step()
+  fixture.faults.interruptView = true
+  await jobs.step()
+  expect(accepted(jobs.inspect(ref))).toMatchObject({ state: 'collecting', reason: 'provider_unavailable' })
+  expect(store.mediaLeaseHeld()).toBe(true)
+
+  await jobs.close()
+  store.close()
+  store = openWorkStore(directory)
+  jobs = store.createMediaJobs(registry, config, authority)
+  expect(store.mediaLeaseHeld()).toBe(true)
+  fixture.faults.interruptView = false
+  await jobs.step()
+  expect(accepted(jobs.inspect(ref))).toMatchObject({ state: 'succeeded',
+    outputs: [{ contentHash: createHash('sha256').update(bytes).digest('hex') }] })
+  expect(store.mediaLeaseHeld()).toBe(false)
+  expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([id])
+})
