@@ -36,7 +36,7 @@ export interface ActionRoute {
   /** Check payload shape, resource ownership and disclosure in the trusted action scope without I/O. */
   readonly permitsPayload: (payload: Action['payload'], action: Action) => boolean
   /** Start the authorized operation synchronously, before returning to the event loop. */
-  readonly handoff: (action: Action) => undefined
+  readonly handoff: (action: Action, current: () => boolean) => undefined
 }
 
 export interface ActionGateOptions {
@@ -291,7 +291,8 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     return { ok: true as const, state, effect }
   }
 
-  function review(input: unknown, requestInput: unknown, ownerToken: unknown): ActionDecision {
+  function review(input: unknown, requestInput: unknown, ownerToken: unknown,
+    prepare?: (db: DatabaseSync, proposal: Proposal, at: UtcInstant) => DenialCode | undefined): ActionDecision {
     const proposal = canonicalizeAction(input)
     const request = requestSchema.safeParse(requestInput)
     if (!proposal || !request.success) return deny('invalid_input')
@@ -305,9 +306,18 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
       const at = now()
       const current = currentPolicy(action)
       if (!current) return deny('permission_denied')
-      const work = checkWork(db, proposal, reviewable)
-      if (!work.ok) return deny(work.code)
       const existing = readProposal(db, action.operationId)
+      if (!existing && prepare) {
+        if (request.data.expiresAt <= at) return deny('expired')
+        if (db.prepare('SELECT 1 FROM action_approvals WHERE request_id = ?').get(request.data.requestId)) return deny('already_decided')
+        const denied = prepare(db, proposal, at)
+        if (denied) return deny(denied)
+      }
+      const work = checkWork(db, proposal, reviewable)
+      if (!work.ok) {
+        if (prepare && !existing) throw new StorageError('invalid_input', 'Prepared work did not match the exact action')
+        return deny(work.code)
+      }
       if (existing) {
         if (existing.canonical !== canonical) return deny('action_changed')
         if (existing.verifiedAt !== current.account.verifiedAt) return deny('permission_denied')
@@ -331,7 +341,10 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
         return { decision: 'allow', grantId: grant.grant.id }
       }
       if (request.data.expiresAt <= at) return deny('expired')
-      if (work.effect.status !== 'prepared') return deny('already_claimed')
+      if (work.effect.status !== 'prepared') {
+        if (prepare) throw new StorageError('invalid_input', 'Prepared action has an invalid effect phase')
+        return deny('already_claimed')
+      }
       if (db.prepare('SELECT 1 FROM action_approvals WHERE request_id = ?').get(request.data.requestId)) {
         return deny('already_decided')
       }
@@ -363,6 +376,24 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
         owner.deviceId, owner.verifiedAt)
       return { decision: 'ask', action, approval, version: 0 }
     }))
+  }
+
+  function inspect(ownerToken: unknown, taskId: TaskId, kind: string) {
+    const owner = identity.resolveOwner(ownerToken)
+    if (!owner) return undefined
+    return access(db => {
+      const row = db.prepare(`SELECT operation_id FROM action_proposals
+        WHERE owner_id = ? AND profile_id = ? AND task_id = ? AND (canonical ->> '$.kind') = ?
+        ORDER BY rowid DESC LIMIT 1`).get(owner.ownerId, owner.profileId, taskId, kind)
+      if (!row) return undefined
+      const operationId = operationIdSchema.parse(row.operation_id)
+      const proposal = readProposal(db, operationId)
+      const entry = readApproval(db, operationId)
+      if (!proposal || !entry || !approvalMatches(entry, proposal)) return corrupt()
+      if (!isApprover(entry, owner)) return undefined
+      const grant = readGrant(db, operationId)?.grant
+      return { action: proposal.action, digest: proposal.digest, approval: entry.approval, version: entry.version, grant }
+    })
   }
 
   /** Show pending reviews only to the original owner client and the exact assigned device. */
@@ -562,7 +593,8 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
       db.prepare('INSERT INTO action_dispatches (operation_id, grant_id, claimed_at) VALUES (?, ?, ?)')
         .run(action.operationId, grant.id, at)
       writeEffect(db, work.effect, 'dispatching', grant.id)
-      return { ok: true as const, action, expiresAt: grant.expiresAt, approvedAt: grant.approvalEvidence.approvedAt }
+      return { ok: true as const, action, expiresAt: grant.expiresAt, approvedAt: grant.approvalEvidence.approvedAt,
+        enrollment: saved.verifiedAt, responder: approval.mobile ?? approval.primary }
     }))
     if (!claim.ok) return claim
     // A synchronous commit may cross the expiry boundary. Leave its one-use
@@ -571,7 +603,21 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
       const handoffAt = now()
       if (handoffAt >= claim.expiresAt || handoffAt < claim.approvedAt) return fail('expired')
       // No await sits between COMMIT and the trusted adapter's start.
-      const started: unknown = route.handoff(claim.action)
+      const current = () => access(db => {
+        if (!permit(db) || !routeFor(claim.action)) return false
+        const policy = currentPolicy(claim.action)
+        if (policy?.account.verifiedAt !== claim.enrollment) return false
+        const devices = policy.profile.verifiedDevices.filter(device => device.deviceId === claim.responder.deviceId)
+        if (devices.length !== 1 || devices[0]?.verifiedAt !== claim.responder.verifiedAt) return false
+        const grant = readGrant(db, claim.action.operationId)
+        const at = now()
+        if (!grant || grant.grant.id !== grantId.data || grant.grant.revokedAt !== undefined
+          || at < claim.approvedAt || at >= claim.expiresAt) return false
+        const work = checkWork(db, proposed, dispatchable)
+        return work.ok && work.state.task.version === expectedVersion.data && work.effect.status === 'dispatching'
+          && work.effect.grantId === grantId.data
+      })
+      const started: unknown = route.handoff(claim.action, current)
       if (started !== undefined) {
         void Promise.resolve(started).catch(() => undefined)
         return fail('outcome_uncertain')
@@ -582,7 +628,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     }
   }
 
-  return Object.freeze({ review, pending, assignMobileReview, respond, revoke, dispatch })
+  return Object.freeze({ review, inspect, pending, assignMobileReview, respond, revoke, dispatch })
 }
 
 function writeEffect(db: DatabaseSync, effect: Effect, status: 'authorized' | 'dispatching', grantId: GrantId): void {

@@ -18,7 +18,7 @@ import {
   type ProfileId,
   type UtcInstant,
 } from '../domain/model.js'
-import { canonicalizeAction, matchesActionBinding, type ActionBinding } from '../policy/grants.js'
+import { canonicalizeAction, matchesActionBinding, type Action, type ActionBinding } from '../policy/grants.js'
 import { recoveryMode } from '../storage/recovery-state.js'
 import { StorageError, transaction } from '../storage/schema.js'
 import type { WorkRef } from '../storage/store.js'
@@ -47,7 +47,7 @@ export type EffectLookupRequest = Readonly<z.infer<z.ZodObject<typeof receiptIde
 export interface EffectLookupRoute extends Scope {
   readonly binding: ActionBinding
   /** Read-only provider lookup. A failure reply must definitively rule out acceptance. */
-  lookup(request: EffectLookupRequest): unknown | Promise<unknown>
+  lookup(request: EffectLookupRequest, action: Action): unknown | Promise<unknown>
 }
 
 export interface EffectRecoveryOptions {
@@ -195,7 +195,7 @@ export function createEffectRecovery(access: DatabaseAccess, options: EffectReco
     try {
       let reply: ReturnType<typeof matchReply>
       try {
-        reply = matchReply(await route.lookup(lookup.request), lookup.request)
+        reply = matchReply(await route.lookup(lookup.request, lookup.action), lookup.request)
       } catch {
         reply = undefined
       }

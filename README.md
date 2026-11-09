@@ -20,6 +20,7 @@ The [personal memory evidence](docs/evidence/PA-012.md) covers owner controls, p
 The [goal planning evidence](docs/evidence/PA-014.md) covers revisions, Worker drafts, task prerequisites and on-demand review.
 The [local knowledge evidence](docs/evidence/PA-015.md) covers explicit roots, incremental indexing and source revocation.
 The [GitHub read connector evidence](docs/evidence/PA-016.md) covers live readback, scoped cursors, and MCP capability revalidation.
+The [reviewed draft evidence](docs/evidence/PA-017.md) records local verification and the live test requirement.
 The [budget and attention evidence](docs/evidence/PA-013.md) covers model claims, resource ceilings, notification policy, and scoped usage.
 The [proactive evidence](docs/evidence/PA-019.md) covers rule replay, staged review, private briefs and local notice limits.
 The reviewed skills evidence covers accepted examples, held-out evaluation, exact activation, reuse and rollback. [PA-020 evidence](docs/evidence/PA-020.md)
@@ -258,6 +259,30 @@ node --input-type=module -e 'import { inspectMcpReadFingerprint } from "./packag
 ```
 
 The facade exposes `dshpa_github_inspect`, `dshpa_github_issues` and `dshpa_github_comments`. Inspect receives empty arguments and returns its independently bound `binding` in `structuredContent`. Page tools receive `binding`, `operation`, `page`, `limit`, and `issue` for comments. They return structured `binding`, `operation`, `page`, `items`, `hasNext`, and `issue` for comments. Rows carry numeric `id` and `number`, `kind` (`issue`, `pull`, or `comment`), `author`, optional numeric `authorId`, UTC millisecond `createdAt` and `updatedAt`, `text`, and `title` for issues and pulls. Use a facade whose own GitHub account and permissions are restricted to the selected repository. The connector sends no GitHub credential to MCP and checks the tool fingerprint before and after calls. [MCP transports](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) · [MCP tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+
+### Approve a draft in a dedicated GitHub test repository
+
+Configure `githubDraft` under `config.inbox` on the `dshpa` row. Set the exact test repository and account IDs, one active dshpa project, and the allowed base branch.
+
+```yaml
+githubDraft:
+  dedicatedTestRepository: true
+  binding:
+    account: { id: 12345, login: your-test-login }
+    repository: { id: 123456, owner: your-test-org, name: your-dedicated-test-repository }
+  projectId: your-dshpa-project-id
+  base: main
+```
+
+Load `DSHPA_GITHUB_WRITE_TOKEN` from your secret store into the trusted host. Its permissions must cover only the dedicated test repository and allow branch creation and draft pull requests. Keep Git available on the host. The connector verifies the API account and repository, and uses a private bare Git workspace to prepare one new Markdown file. [GitHub HTTPS authentication](https://docs.github.com/en/get-started/git-basics/about-remote-repositories) · [GitHub draft PR API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#create-a-pull-request)
+
+The isolated Git transport preserves the host's proxy route and CA trust environment settings. It does not inherit unrelated credentials, arbitrary Git configuration or TLS verification bypasses.
+
+Select a queued task in the configured project and open **GitHub test draft**. Prepare the title, body and file. In **Today**, review the exact repository, base and head refs and commits, content, and SHA-256 digests. Approve the exact action, refresh the draft status, then select **Publish approved test draft**. The one-use grant controls a new branch and one draft PR. The provider receipt becomes an artifact for task acceptance.
+
+If a dispatch is interrupted, use **Look up provider receipt**. Lookup checks the immutable marker, repository, actor, approved branches, commits, title and body. A missing or ambiguous result remains uncertain. The connector does not replay it or delete a remote branch.
+
+For live acceptance, explicitly supply `DSHPA_GITHUB_DRAFT_LIVE=1`, the same config as JSON in `DSHPA_GITHUB_DRAFT_LIVE_CONFIG`, and the scoped write token. Run `pnpm exec vitest run tests/e2e/github-live.spec.ts` only when authorized to leave one test branch and draft in that repository. The opt-in test refuses the project repository.
 
 ### Set compute and attention limits
 

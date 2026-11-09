@@ -365,5 +365,20 @@
   "suggestions.notUseful": "Not useful",
   "suggestions.openBrief": "Open private brief",
   "suggestions.notice": "Prepared brief",
-  "suggestions.revalidate": "The goal, source or assessment route changed. Save the rule again before replay."
+  "suggestions.revalidate": "The goal, source or assessment route changed. Save the rule again before replay.",
+  "draft.heading": "GitHub test draft",
+  "draft.testOnly": "Prepare one Markdown file for the configured test repository.",
+  "draft.status": "Refresh draft status",
+  "draft.title": "Draft pull request title",
+  "draft.body": "Draft pull request body",
+  "draft.content": "New Markdown file content",
+  "draft.prepare": "Prepare exact draft",
+  "draft.loading": "Checking draft evidence…",
+  "draft.failed": "The draft operation could not finish.",
+  "draft.review": "Review the exact action in Today. Refresh after approval.",
+  "draft.receipt": "Provider receipt",
+  "draft.revoked": "The write grant was revoked.",
+  "draft.dispatch": "Publish approved test draft",
+  "draft.revoke": "Revoke draft grant",
+  "draft.lookup": "Look up provider receipt"
 }

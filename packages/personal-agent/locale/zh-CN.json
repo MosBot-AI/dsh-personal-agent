@@ -365,5 +365,20 @@
   "suggestions.notUseful": "无用",
   "suggestions.openBrief": "打开私有简报",
   "suggestions.notice": "已准备简报",
-  "suggestions.revalidate": "目标、来源或评估路由已变化。请重新保存规则后再回放。"
+  "suggestions.revalidate": "目标、来源或评估路由已变化。请重新保存规则后再回放。",
+  "draft.heading": "GitHub 测试草稿",
+  "draft.testOnly": "为配置的测试仓库准备一个 Markdown 文件。",
+  "draft.status": "刷新草稿状态",
+  "draft.title": "草稿 PR 标题",
+  "draft.body": "草稿 PR 正文",
+  "draft.content": "新 Markdown 文件内容",
+  "draft.prepare": "准备准确草稿",
+  "draft.loading": "正在核对草稿证据…",
+  "draft.failed": "草稿操作未能完成。",
+  "draft.review": "在今日核对准确动作。审批后请刷新。",
+  "draft.receipt": "提供者回执",
+  "draft.revoked": "写入授权已撤销。",
+  "draft.dispatch": "发布已批准的测试草稿",
+  "draft.revoke": "撤销草稿授权",
+  "draft.lookup": "查找提供者回执"
 }

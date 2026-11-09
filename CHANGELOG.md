@@ -28,6 +28,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Add versioned goal plans, owner-reviewed Worker drafts, durable task prerequisites and on-demand weekly review.
 - Add read-only local knowledge search over configured roots, with bounded incremental indexing and revision-checked source pages.
 - Add an owner-bound GitHub read connector with scoped pagination, rate-limit backoff and an optional capability-pinned MCP transport.
+- Add exact approval and read-only reconciliation for draft pull requests in an explicitly configured test repository.
 - Reserve and reconcile model costs before dispatch, enforce compute limits and a separate heavy GPU queue, and expose scoped usage and attention decisions in the local inbox.
 - Reconcile native schedule wakes with versioned routine intent and show deduplicated local reminders and scoped task wakes in the inbox.
 - Add opt-in goal-bound proactive rules with replay, owner-reviewed staging, private briefs and granted local notices.

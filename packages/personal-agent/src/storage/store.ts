@@ -40,6 +40,7 @@ import {
   type Task,
   type TaskId,
   type UtcInstant,
+  versionSchema,
 } from '../domain/model.js'
 import { ROUTINE_SOURCE, type RoutineRef, type RoutineScope } from '../domain/routines.js'
 import {
@@ -321,7 +322,30 @@ class WorkStore {
   }
 
   createActionGate(options: ActionGateOptions) {
-    return createActionGate(operation => this.access(operation), options, dispatchPermitted)
+    const gate = createActionGate(operation => this.access(operation), options, dispatchPermitted)
+    return Object.freeze({ ...gate,
+      prepareOwnerAction: (input: unknown, request: unknown, ownerToken: unknown, version: unknown) => {
+        const expectedVersion = versionSchema.safeParse(version)
+        if (!expectedVersion.success) return { decision: 'deny' as const, code: 'invalid_input' as const }
+        return gate.review(input, request, ownerToken, (db, { action, digest }, at) => {
+          const state = this.loadWork(db, action)
+          if (!state) return 'not_found'
+          if (state.task.version !== expectedVersion.data) return 'version_conflict'
+          if (state.attempt.startedAt !== undefined || state.attempt.scope !== undefined || state.attempt.worker !== undefined
+            || state.task.status !== 'queued' || hasIncompletePrerequisite(db, state.task)) return 'permission_denied'
+          if (state.attempt.id !== action.attemptId || state.attempt.generation !== action.generation
+            || state.attempt.mandate.policyVersion !== action.policyVersion) return 'stale_attempt'
+          const started = transitionWork(state, { type: 'start', expectedVersion: expectedVersion.data, at,
+            attemptId: action.attemptId, generation: action.generation, executor: 'owner-external-action',
+            scope: { capabilities: [action.kind], dataScope: [...action.dataScope] } })
+          if (!started.ok) return 'invalid_input'
+          const effect = effectSchema.parse({ operationId: action.operationId, taskId: action.taskId, attemptId: action.attemptId,
+            generation: action.generation, intent: action.kind, payloadDigest: digest, status: 'prepared' })
+          this.persist(db, state, started, 'start', at, { effects: [effect] }, recordEncoder())
+          return undefined
+        })
+      },
+    })
   }
 
   createInferenceLedger(options?: Parameters<typeof createInferenceLedger>[2], expectedBudget?: BudgetService) {
