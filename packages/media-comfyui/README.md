@@ -41,3 +41,16 @@ media:
 Trusted host components use `dshpaMedia.enqueue`, `inspect` and `cancel` with the exact current task and attempt scope. Requests use an approved workflow version, model, fixed output specification and prompt. This provider supports prompt-based generation. Reference-image intake, creation screens and artifact delivery belong to the subsequent creation workflows.
 
 SQLite stores the prepared prompt ID, request and workflow digests, and seed before sending. The provider reads queue/history on the pinned instance after a disconnect. If neither can prove the outcome, the job holds the media lease and waits for reconciliation. Keep ComfyUI history and output files while jobs remain unsettled. The final record contains verified output metadata and SHA-256. Bytes stay in the configured ComfyUI output directory. Video duration may differ by up to 100 ms from its requested spec.
+
+## Verify recovery against an existing instance
+
+Run this check only when a loopback ComfyUI 0.44.0 instance, its local models and an approved workflow are ready. Put the provider configuration from the table above in a JSON file with exactly one workflow. Omit the plugin row's `instanceId` and `configRevision`. Run separately with an image configuration and a video configuration to verify both modalities.
+
+```sh
+pnpm build
+DSHPA_COMFYUI_LIVE_CONFIG=/absolute/path/to/provider.json pnpm test:media-live
+```
+
+The test sends one real render with a synthetic prompt. A temporary relay verifies the committed request and prompt ID, waits for ComfyUI to accept the prompt, then drops the reply. After the submitting process exits, a separate caller reopens the same WorkStore and polls the pinned job for up to ten minutes. The test checks the original prompt ID, one submission and an independent SHA-256 of the returned bytes. It prints the prompt ID and verified output metadata.
+
+ComfyUI keeps its output files. If the check fails after attempting submission, it reports the location of the isolated WorkStore for reconciliation. An unset configuration skips this check.

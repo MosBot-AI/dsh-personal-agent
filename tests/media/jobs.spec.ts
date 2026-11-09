@@ -7,35 +7,12 @@ import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { expect, it, onTestFinished } from 'vitest'
-import {
-  attemptIdSchema, clientIdSchema, deviceIdSchema, mandateRefSchema, ownerIdSchema, profileIdSchema,
-  projectSchema, taskIdSchema, utcInstantSchema,
-} from '../../packages/personal-agent/src/domain/model.js'
 import { mediaServiceConfigSchema } from '../../packages/personal-agent/src/media/jobs.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
-import { openWorkStore, type WorkStore } from '../../packages/personal-agent/src/storage/store.js'
-import { accepted, comfyFixture, imageSpec, mediaRequest } from './fixture.js'
-
-function createAttempt(store: WorkStore, label: string) {
-  const fixture = mediaRequest()
-  const scope = { ownerId: ownerIdSchema.parse(fixture.access.ownerId), profileId: profileIdSchema.parse(fixture.access.profileId) }
-  const actor = { ...scope, role: 'owner' as const, clientId: clientIdSchema.parse('local'),
-    deviceId: deviceIdSchema.parse('local'), policyVersion: 'media-test' }
-  const project = projectSchema.parse({ ...scope, id: 'project-' + label, kind: 'project', title: 'Media fixture',
-    purpose: 'Exercise media recovery', resourceRefs: [], status: 'active', successCriteria: ['Read back output'], planRevision: 1, milestones: [] })
-  store.insertProject(project)
-  const taskId = taskIdSchema.parse('task-' + label)
-  const result = store.applyCommand({ type: 'work.create', commandId: 'create-' + label,
-    payload: { projectId: project.id, requestedOutcome: 'Render media', constraints: [],
-      acceptance: { criteria: ['Verify output'], requiresArtifact: false, requiresReceipt: false } } },
-  {
-    actor, at: utcInstantSchema.parse('2026-11-08T08:00:00.000Z'), projectId: project.id, newTaskId: taskId,
-    newAttempt: { id: attemptIdSchema.parse('attempt-' + label),
-      mandate: mandateRefSchema.parse({ ...scope, id: 'mandate-' + label, policyVersion: actor.policyVersion }) },
-  })
-  if (!result.ok) throw new Error(result.code)
-  return { ...scope, taskId, attemptId: result.state.attempt.id, generation: result.state.attempt.generation }
-}
+import { openWorkStore } from '../../packages/personal-agent/src/storage/store.js'
+import { accepted, comfyFixture, imageSpec, mediaRequest, videoSpec } from './fixture.js'
+import { verifyComfyRecovery } from './fixtures/media-recovery.js'
+import { createAttempt } from './work-fixture.js'
 
 it('recovers the simulated prompt and fixture PNG digest after a dropped response and caller restart', async () => {
   const fixture = await comfyFixture()
@@ -216,4 +193,15 @@ it('releases the media lease when a finished prompt has a missing output', async
   expect(nextStatus.state).toBe('rendering')
   expect(nextStatus.handle?.handleId).not.toBe(firstId)
   expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([firstId, nextStatus.handle?.handleId])
+})
+
+it.each([imageSpec, videoSpec])('checks the acceptance relay against a simulated $modality upstream', async spec => {
+  const upstream = await comfyFixture()
+  upstream.watchSubmit(({ prompt_id }) => upstream.complete(prompt_id, spec))
+  const evidence = await verifyComfyRecovery({
+    ...upstream.config, workflows: upstream.config.workflows.filter(workflow => workflow.spec.modality === spec.modality),
+  })
+  expect(evidence.submissions).toBe(1)
+  expect(upstream.submissions.map(request => request.prompt_id)).toEqual([evidence.promptId])
+  expect(evidence.outputs).toHaveLength(1)
 })
