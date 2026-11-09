@@ -34,7 +34,7 @@ export async function comfyFixture() {
   const running = new Map<string, unknown[]>()
   const history = new Map<string, unknown>()
   const outputs = new Map<string, Buffer>()
-  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false, viewStatus: 200, interruptView: false, stallView: false }
+  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false, viewStatus: 200, interruptView: false, stallView: false, loseCancelResponse: false }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url!, 'http://fixture')
     const path = url.pathname
@@ -94,7 +94,9 @@ export async function comfyFixture() {
         }
         return json(response, { cancelled: false })
       }
-      return json(response, { cancelled: pending.delete(id) })
+      const removed = pending.delete(id)
+      if (faults.loseCancelResponse) return request.socket.destroy()
+      return json(response, { cancelled: removed })
     }
     return json(response, {}, 404)
   })

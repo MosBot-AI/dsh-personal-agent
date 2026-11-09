@@ -54,3 +54,11 @@ DSHPA_COMFYUI_LIVE_CONFIG=/absolute/path/to/provider.json pnpm test:media-live
 The test sends one real render with a synthetic prompt. A temporary relay verifies the committed request and prompt ID, waits for ComfyUI to accept the prompt, then drops the reply. After the submitting process exits, a separate caller reopens the same WorkStore and polls the pinned job for up to ten minutes. The test checks the original prompt ID, one submission and an independent SHA-256 of the returned bytes. It prints the prompt ID and verified output metadata.
 
 ComfyUI keeps its output files. If the check fails after attempting submission, it reports the location of the isolated WorkStore for reconciliation. An unset configuration skips this check.
+
+## Database upgrade and rollback
+
+The integrated Core uses WorkStore schema 16: mobile enrollment remains migration 014, mobile reviews remain 015 and media jobs are 016. Opening a v13 or mobile-v14/v15 store takes an owner-private `.v13.bak`, `.v14.bak` or `.v15.bak` snapshot before upgrading. The original media-only v14 from PR #70 is recognized by its exact media table, constraints and indexes; its jobs, prepared handles, cancellation flags and leases remain intact while the missing mobile tables are added. Unknown or mixed v14 layouts are rejected without relabeling the database. Do not edit `PRAGMA user_version` to bypass this check.
+
+Older builds cannot open v16 directly. Rollback requires the matching pre-upgrade snapshot and source build; keep post-backup external outcomes for reconciliation. The normal backup-restore path upgrades recognized snapshots into a fresh directory, clears prior mobile credentials and leaves dispatch disabled in restore mode. A restored unresolved media lease remains held.
+
+Cancellation during output collection is durable. A cancellable reader is aborted, and late output cannot turn the job into success. The media lease is released only after the active collector settles; an uncertain render retains its lease until provider readback proves a terminal outcome.

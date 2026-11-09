@@ -66,7 +66,7 @@ it('aborts an in-flight output read and retains the lease until the collector se
 })
 
 it('retries a real response-body timeout after restart without submitting another render', async () => {
-  const f = await collectingFixture(150)
+  const f = await collectingFixture(500)
   f.fixture.faults.stallView = true
   await f.jobs.step()
   expect(accepted(f.jobs.inspect(f.ref))).toMatchObject({ state: 'collecting', reason: 'provider_unavailable' })
