@@ -7,6 +7,8 @@ import type { MobileDeviceLedger } from '../api/devices.js'
 import { knowledgeRequestSchemas, type LocalKnowledge } from '../connectors/local-knowledge.js'
 import { connectorRequestSchemas, type ReadConnector } from '../connectors/registry.js'
 import { proactiveRequests, type ProactiveService } from '../runtime/proactive.js'
+import { githubDraftRequests, type GitHubDraftService } from '../connectors/github-draft.js'
+import { DRAFT_ACTION, DRAFT_EXECUTOR } from '../connectors/github-draft-model.js'
 import { contextEvidencePointerSchema } from '../context/checkpoint.js'
 import type { LocalContext } from '../context/local-context.js'
 import { memoryRequestSchemas, type LocalMemory } from '../context/memory.js'
@@ -106,6 +108,7 @@ const requestSchema = z.discriminatedUnion('type', [
   ...knowledgeRequestSchemas,
   ...connectorRequestSchemas,
   ...proactiveRequests,
+  ...githubDraftRequests,
   ...routineRequestSchemas,
   z.strictObject({ type: z.enum(['resident_status', 'resident_backup']) }),
   z.strictObject({ type: z.literal('resident_audit'), afterSequence: versionSchema.optional() }),
@@ -138,6 +141,7 @@ export interface InboxServiceOptions {
   readonly proactive?: ProactiveService
   readonly githubRead?: { readonly connector: ReadConnector; readonly scope: Pick<OwnerIdentity, 'ownerId' | 'profileId'>;
     readonly projectId?: ProjectId }
+  readonly githubDraft?: { readonly projectId: ProjectId; readonly service: GitHubDraftService }
   readonly now?: () => UtcInstant
 }
 
@@ -166,7 +170,12 @@ function updated(result: ExecutorResult): InboxResponse {
 }
 
 function nativeReleased(state: WorkState): boolean {
-  return state.attempt.startedAt === undefined || state.attempt.worker?.releasedAt !== undefined
+  return state.attempt.startedAt === undefined || state.attempt.worker?.releasedAt !== undefined || isDraftWork(state)
+}
+
+function isDraftWork(state: WorkState): boolean {
+  return state.attempt.executor === DRAFT_EXECUTOR && state.attempt.worker === undefined
+    && state.attempt.scope?.capabilities.length === 1 && state.attempt.scope.capabilities[0] === DRAFT_ACTION
 }
 
 function computeWait(state: WorkState) {
@@ -188,9 +197,10 @@ export function createInboxService(options: InboxServiceOptions) {
   const now = options.now ?? (() => utcInstantSchema.parse(new Date().toISOString()))
 
   function ownerCanAccept(ref: WorkRef, state: WorkState, owner: OwnerIdentity): boolean {
-    return state.task.status === 'verifying' && state.attempt.worker?.releasedAt !== undefined
-      && state.attempt.mandate.policyVersion === owner.policyVersion && !state.task.acceptance.requiresReceipt
-      && (state.attempt.scope?.capabilities.length ?? 0) === 0 && state.attempt.artifactIds.length > 0
+    const draft = options.githubDraft?.projectId === state.task.projectId && isDraftWork(state)
+    return state.task.status === 'verifying' && (draft || state.attempt.worker?.releasedAt !== undefined)
+      && state.attempt.mandate.policyVersion === owner.policyVersion && state.attempt.artifactIds.length > 0
+      && (draft || (!state.task.acceptance.requiresReceipt && (state.attempt.scope?.capabilities.length ?? 0) === 0))
       && !store.hasUnsettledEffects(ref, state.attempt.id)
   }
 
@@ -256,6 +266,7 @@ export function createInboxService(options: InboxServiceOptions) {
       ...(options.knowledge ? { knowledgeConfigured: true } : {}),
       ...(options.githubRead ? { githubRead: { projectId: options.githubRead.projectId } } : {}),
       ...(options.proactive ? { proactiveConfigured: true, proactiveNotices: options.proactive.notices() } : {}),
+      ...(options.githubDraft ? { githubDraft: { projectId: options.githubDraft.projectId } } : {}),
       ...(recoveryMode === 'normal' ? {} : { recoveryMode }),
       sessions,
       projects: store.listInboxProjects(owner).map(({ id, title, purpose, kind }) => ({ id, title, purpose, kind })),
@@ -355,6 +366,7 @@ export function createInboxService(options: InboxServiceOptions) {
     if (store.recoveryMode() === 'restore' && request.type !== 'snapshot' && request.type !== 'artifact'
       && request.type !== 'context_recall' && request.type !== 'context_search' && request.type !== 'context_checkpoint'
       && request.type !== 'project_plan' && request.type !== 'project_review'
+      && request.type !== 'github_draft_inspect' && request.type !== 'github_draft_reconcile'
       && request.type !== 'cancel' && request.type !== 'resident_status' && request.type !== 'resident_audit') return failure('recovery_required')
 
     try {
@@ -414,6 +426,12 @@ export function createInboxService(options: InboxServiceOptions) {
             && (connector.projectId === undefined || store.getProject(owner, connector.projectId)?.status === 'active')
           return await connector.connector.handle(request, permitted, signal)
         }
+        case 'github_draft_prepare':
+        case 'github_draft_inspect':
+        case 'github_draft_dispatch':
+        case 'github_draft_reconcile':
+        case 'github_draft_revoke': return await options.githubDraft?.service.handle(ownerToken, request, signal)
+          ?? failure('resource_unavailable')
         case 'save_plan': {
           if ((request.projectId === undefined) !== (request.expectedRevision === undefined)) return failure('invalid_input')
           const { type: _type, ...change } = request
@@ -554,12 +572,15 @@ export function createInboxService(options: InboxServiceOptions) {
           : executor ? executor.pause(command, context)
             : state.task.status === 'queued' ? store.applyCommand(command, context) : undefined
         if (result?.ok) options.invalidateResources?.(ref)
+        if (result?.ok && request.type === 'cancel' && isDraftWork(result.state)) options.githubDraft?.service.cancel(ownerToken, ref)
         return result ? updated(result) : failure('runtime_not_quiescent')
       }
 
       if (request.expectedVersion !== state.task.version) return failure('version_conflict')
       if (request.type === 'accept_result') {
         if (!ownerCanAccept(ref, state, owner)) return failure('invalid_transition')
+        const effectOperationId = isDraftWork(state) ? actionGate?.inspect(ownerToken, ref.taskId, DRAFT_ACTION)?.action.operationId : undefined
+        if (isDraftWork(state) && !effectOperationId) return failure('acceptance_unsatisfied')
         const verifier = store.createVerifier({
           now,
           authorizeCommit: () => identity.resolveOwner(ownerToken) !== undefined,
@@ -567,7 +588,7 @@ export function createInboxService(options: InboxServiceOptions) {
             criterion, satisfied: true, evidence: 'The authenticated owner accepted the sealed result through the native inbox.',
           })),
         })
-        return updated(await verifier.verify(ref, { expectedVersion: request.expectedVersion }))
+        return updated(await verifier.verify(ref, { expectedVersion: request.expectedVersion, effectOperationId }))
       }
       if (!executor || !worker) return failure('resource_unavailable')
       if (state.attempt.mandate.policyVersion !== owner.policyVersion) return failure('policy_changed')

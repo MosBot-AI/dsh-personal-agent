@@ -20,6 +20,7 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 [目标计划证据](docs/evidence/PA-014-zh.md)覆盖修订、Worker 草稿、任务前置依赖及按需回顾。
 [本地知识证据](docs/evidence/PA-015-zh.md)覆盖显式目录、增量索引及来源撤权。
 [GitHub 只读连接器证据](docs/evidence/PA-016-zh.md)覆盖真实回读、限定范围的游标及 MCP 能力复核。
+[草稿审批证据](docs/evidence/PA-017-zh.md)记录本地验证及真实验收条件。
 [预算与通知证据](docs/evidence/PA-013-zh.md)覆盖模型领取、资源上限、通知策略及限定范围的用量。
 [主动工作证据](docs/evidence/PA-019-zh.md)覆盖规则回放、分阶段评审、私有简报及本地提示限制。
 已评审技能的证据涵盖已验收样例、留出评测、确切版本启用、复用及回滚。[PA-020 证据](docs/evidence/PA-020-zh.md)
@@ -258,6 +259,30 @@ node --input-type=module -e 'import { inspectMcpReadFingerprint } from "./packag
 ```
 
 门面公开 `dshpa_github_inspect`、`dshpa_github_issues` 和 `dshpa_github_comments`。检查工具接收空参数，并在 `structuredContent` 中返回独立绑定的 `binding`。分页工具接收 `binding`、`operation`、`page`、`limit`，评论还接收 `issue`。它们返回结构化的 `binding`、`operation`、`page`、`items`、`hasNext`，评论还返回 `issue`。每行包含数字 `id` 和 `number`、`kind`（`issue`、`pull` 或 `comment`）、`author`、可选的数字 `authorId`、UTC 毫秒格式的 `createdAt` 和 `updatedAt`、`text`，Issue 和 PR 还包含 `title`。门面的 GitHub 账号和权限应限制在所选仓库。连接器不会向 MCP 发送 GitHub 凭据，并在调用前后核对工具指纹。[MCP 传输](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) · [MCP 工具](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+
+### 审批专用 GitHub 测试仓库的草稿
+
+在 `dshpa` 条目的 `config.inbox` 下配置 `githubDraft`。填写准确的测试仓库和账号 ID、一个活跃的 dshpa 项目及允许的基准分支。
+
+```yaml
+githubDraft:
+  dedicatedTestRepository: true
+  binding:
+    account: { id: 12345, login: your-test-login }
+    repository: { id: 123456, owner: your-test-org, name: your-dedicated-test-repository }
+  projectId: your-dshpa-project-id
+  base: main
+```
+
+从秘密存储将 `DSHPA_GITHUB_WRITE_TOKEN` 注入受信任的宿主。权限必须仅覆盖专用测试仓库，并允许创建分支和草稿 PR。宿主需要可用的 Git。连接器核对 API 账号和仓库，并在私有裸 Git 工作区中准备一个新 Markdown 文件。[GitHub HTTPS 认证](https://docs.github.com/en/get-started/git-basics/about-remote-repositories) · [GitHub 草稿 PR API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#create-a-pull-request)
+
+隔离 Git 传输保留主机的代理路由和 CA 信任环境配置，不继承其他凭据、任意 Git 配置或禁用 TLS 验证的选项。
+
+选中配置项目中一个排队任务，打开 **GitHub 测试草稿**，准备标题、正文和文件。在**今日**核对准确的仓库、基准和源分支及提交、内容和 SHA-256 摘要。审批准确动作，刷新草稿状态，再选择**发布已批准的测试草稿**。一次性授权控制一个新分支和一个草稿 PR。提供者回执会成为可验收的任务产物。
+
+若派发中断，使用**查找提供者回执**。查证核对不可变标记、仓库、账号、批准的分支和提交、标题与正文。查无确证或结果有歧义时，状态仍不确定。连接器不会重放该操作，也不会删除远端分支。
+
+真实验收需显式设置 `DSHPA_GITHUB_DRAFT_LIVE=1`，在 `DSHPA_GITHUB_DRAFT_LIVE_CONFIG` 中以 JSON 提供同一配置，并加载范围受限的写入凭据。只有获准在该仓库保留一个测试分支和草稿时，才执行 `pnpm exec vitest run tests/e2e/github-live.spec.ts`。该显式开启的测试会拒绝项目仓库。
 
 ### 设置计算与通知限额
 

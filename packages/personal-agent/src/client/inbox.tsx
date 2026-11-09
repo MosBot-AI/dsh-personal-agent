@@ -10,6 +10,7 @@ import { LocalKnowledge } from './knowledge.js'
 import { GitHubRead } from './github-read.js'
 import { Suggestions } from './suggestions.js'
 import { ReviewedSkills } from './skills.js'
+import { GitHubDraft } from './github-draft.js'
 import { Projects, TaskPlanning } from './projects.js'
 
 type Updated = Extract<InboxResponse, { kind: 'updated' }>
@@ -485,6 +486,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
         {task && writable && <TaskPlanning key={`${connectionKey}:${task.id}:${task.version}`} task={task} tasks={snapshot?.tasks ?? []}
           writable={!snapshot?.recoveryMode} busy={mutations.current.has('task-plan')}
           mutate={(key, request, acknowledge) => { void mutate(key, request, acknowledge) }} t={t} />}
+        {task && writable && snapshot?.githubDraft?.projectId === task.projectId && <GitHubDraft
+          key={`${connectionKey}:${task.id}`} task={task} t={t} port={port} readable={writable} writable={!snapshot.recoveryMode}
+          current={() => connection.getSnapshot() === connectionKey} refresh={() => { void refresh() }} />}
         {task ? <TaskDetail task={task} project={snapshot?.projects.find(project => project.id === task.projectId)}
           workerConfigured={snapshot?.workerConfigured === true && !snapshot.recoveryMode} t={t} writable={writable}
           canOpenSession={writable && snapshot?.sessions.some(session => session.id === task.sessionId) === true}

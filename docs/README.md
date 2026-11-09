@@ -37,6 +37,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Goal planning evidence](evidence/PA-014.md) | Plan revisions, task prerequisites, Worker drafts, and on-demand review |
 | [Local knowledge evidence](evidence/PA-015.md) | Explicit roots, incremental search, and revision-checked sources |
 | [GitHub read connector evidence](evidence/PA-016.md) | Live account and repository binding, scoped cursors, and MCP revalidation |
+| [Reviewed draft evidence](evidence/PA-017.md) | Exact approval and readback, with live test acceptance pending |
 | [Schedule evidence](evidence/PA-018.md) | Versioned routine intent, native wake reconciliation, and logical occurrences |
 | [Proactive work evidence](evidence/PA-019.md) | Replay, owner-reviewed staging, private briefs, and local notices |
 | [Reviewed skill evidence](evidence/PA-020.md) | Accepted examples, held-out evaluation, explicit activation, and rollback |

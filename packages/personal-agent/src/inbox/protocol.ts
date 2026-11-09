@@ -5,6 +5,7 @@ import type { ProjectPlanInput } from '../domain/projects.js'
 import type { ConnectorBinding, ConnectorRecord } from '../connectors/registry.js'
 import type { ProactiveDraftInput, ProactiveMode } from '../domain/proactive.js'
 import type { ProactiveService } from '../runtime/proactive.js'
+import type { DraftInput, DraftPayload } from '../connectors/github-draft-model.js'
 
 export const INBOX_RPC_ENDPOINT = 'dshpa/inbox'
 
@@ -167,6 +168,7 @@ export interface InboxSnapshot {
   readonly githubRead?: { readonly projectId?: string }
   readonly proactiveConfigured?: boolean
   readonly proactiveNotices?: readonly { id: string; at: string; summary: string }[]
+  readonly githubDraft?: { readonly projectId: string }
   readonly recoveryMode?: 'reconciling' | 'restore'
   readonly sessions: readonly InboxSession[]
   readonly projects: readonly InboxProject[]
@@ -201,6 +203,10 @@ export type InboxRequest =
       grant?: 'read_source' | 'surface_private_brief' }
   | { type: 'proactive_feedback'; candidateId: string; useful: boolean }
   | { type: 'proactive_artifact'; candidateId: string }
+  | ({ type: 'github_draft_prepare'; commandId: string; draft: DraftInput } & TaskControl)
+  | { type: 'github_draft_inspect'; taskId: string }
+  | ({ type: 'github_draft_dispatch'; operationId: string } & TaskControl)
+  | { type: 'github_draft_reconcile' | 'github_draft_revoke'; taskId: string; operationId: string }
   | { type: 'create_project'; commandId: string; title: string; purpose: string }
   | { type: 'create_task'; commandId: string; projectId: string; sessionId: string; outcome: string }
   | { type: 'save_plan'; commandId: string; projectId?: string; expectedRevision?: number; draft: ProjectPlanInput; rationale: string }
@@ -253,6 +259,8 @@ export type InboxResponse =
   | { ok: true; kind: 'connector_page'; binding: ConnectorBinding; fingerprint: string;
       items: readonly ConnectorRecord[]; nextCursor?: string }
   | Extract<ReturnType<ProactiveService['handle']>, { ok: true }>
+  | { ok: true; kind: 'github_draft'; draft: { payload: Omit<DraftPayload, 'preparedAt'> & { preparedAt: string };
+      digest: string; approval: string; effect: string; revoked: boolean; receipt?: string } | null }
   | { ok: true; kind: 'project_plan'; plan: InboxPlan }
   | { ok: true; kind: 'project_review'; projects: readonly InboxReviewProject[]; needsPriority: boolean; at: string }
   | { ok: true; kind: 'memory_records'; confirmed: readonly MemoryActiveRecord[]; inferred: readonly MemoryActiveRecord[] }

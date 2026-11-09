@@ -11,6 +11,9 @@ import { createMobileApprovals } from '../api/approvals.js'
 import { mobileHttpConfigSchema, startMobileHttp } from '../api/mobile-http.js'
 import { createLocalKnowledge, localKnowledgeConfigSchema } from '../connectors/local-knowledge.js'
 import { createGitHubReadTransport } from '../connectors/github.js'
+import { createGitHubDraftRuntime, createGitHubDraftService, githubDraftAccount, type GitHubDraftRuntime } from '../connectors/github-draft.js'
+import { DRAFT_SOURCE, githubDraftConfigSchema } from '../connectors/github-draft-model.js'
+import type { DraftProvider } from '../connectors/github-write.js'
 import { createMcpReadTransport, mcpLoopbackUrlSchema } from '../connectors/mcp.js'
 import { connectorBindingSchema, createReadConnector } from '../connectors/registry.js'
 import { createLocalContext, localContextConfigSchema } from '../context/local-context.js'
@@ -70,6 +73,7 @@ export const localInboxConfigSchema = z.strictObject({
   context: localContextConfigSchema.optional(),
   memory: localMemoryConfigSchema.optional(),
   knowledge: localKnowledgeConfigSchema.optional(),
+  githubDraft: githubDraftConfigSchema.optional(),
   githubRead: z.strictObject({
     binding: connectorBindingSchema,
     projectId: projectIdSchema.max(256).optional(),
@@ -239,6 +243,7 @@ async function readInboxEnvelope(request: Request) {
 export interface LocalInboxOptions {
   readonly verifiedAccounts?: Profile['verifiedAccounts']
   readonly actionRoutes?: readonly ActionRoute[]
+  readonly githubDraftProvider?: DraftProvider
   readonly authorizeRoutedInput?: (state: WorkState, event: SourceEvent) => boolean
   readonly authorizeEventWake?: (state: WorkState, event: SourceEvent) => boolean
   readonly allowAttentionDelivery?: (request: AttentionExternalRequest) => boolean
@@ -274,6 +279,7 @@ export function activateLocalInbox(
   let executor: WorkerExecutor | undefined
   let resident: ResidentOperations | undefined
   let mobileHttp: ReturnType<typeof startMobileHttp> | undefined
+  let draftRuntime: GitHubDraftRuntime | undefined
   let detachResident: (() => void) | undefined
   let detachInbox: (() => Promise<void>) | undefined
   let startup: Promise<void> | undefined
@@ -285,7 +291,8 @@ export function activateLocalInbox(
     const profile = profileSchema.parse({
       id: local.profileId,
       ownerId: local.ownerId,
-      verifiedAccounts: options.verifiedAccounts ?? config.sourceAccounts ?? [],
+      verifiedAccounts: [...(options.verifiedAccounts ?? config.sourceAccounts ?? []).filter(account => account.sourceInstanceId !== DRAFT_SOURCE),
+        ...(config.githubDraft ? [githubDraftAccount(config.githubDraft, local.verifiedAt)] : [])],
       verifiedDevices: [{ deviceId: local.deviceId, verifiedAt: local.verifiedAt }],
       policyVersion: 'local-web-1',
     })
@@ -405,7 +412,7 @@ export function activateLocalInbox(
     const routing = Object.freeze({
       bindSource(authenticatedMetadata: unknown) {
         const source = sourceBindingSchema.safeParse(authenticatedMetadata)
-        return source.success && source.data.sourceInstanceId !== ROUTINE_SOURCE
+        return source.success && source.data.sourceInstanceId !== ROUTINE_SOURCE && source.data.sourceInstanceId !== DRAFT_SOURCE
           ? identity.bindSource({ ...source.data, ownerId: local.ownerId, profileId: local.profileId }) : undefined
       },
       releaseSource(token: SourceToken) { identity.release(token) },
@@ -413,8 +420,12 @@ export function activateLocalInbox(
       status: eventRouter.status,
       snapshot: eventRouter.snapshot,
     })
-    const actionGate = store.createActionGate({ identity, routes: options.actionRoutes ?? [] })
-    const recovery = createRecovery(store, { readSession: createSessionReadback(ctx) })
+    const githubDraft = config.githubDraft
+    draftRuntime = githubDraft && createGitHubDraftRuntime(githubDraft, scope, options.githubDraftProvider)
+    const actionGate = store.createActionGate({ identity, routes: [...(options.actionRoutes ?? []), ...(draftRuntime ? [draftRuntime.route] : [])] })
+    const recovery = createRecovery(store, { readSession: createSessionReadback(ctx), effects: draftRuntime ? { routes: [draftRuntime.lookup] } : undefined })
+    const draft = githubDraft && draftRuntime ? { projectId: githubDraft.projectId,
+      service: createGitHubDraftService({ config: githubDraft, runtime: draftRuntime, store, gate: actionGate, recovery, identity, scope }) } : undefined
     const schedule = config.routines && options.schedule ? createScheduleAdapter({
       store, native: options.schedule,
       currentAuthority(requested) {
@@ -452,6 +463,7 @@ export function activateLocalInbox(
         devices: mobileDevices, approvals: mobileApprovals, origin: mobile.origin, available: mobileHttp.available,
       } : undefined,
       githubRead: connector && { connector, scope, projectId: github?.projectId },
+      githubDraft: draft,
       configureAttention: (_owner, policy, expectedVersion) => {
         const result = attention.configure(scope, policy, expectedVersion)
         if (result.ok) proactive?.invalidate()
@@ -536,13 +548,14 @@ export function activateLocalInbox(
       async dispose() {
         const operations = resident?.close()
         const mobileClosed = mobileHttp?.close()
+        const drafts = draftRuntime?.close()
         identity.release(token)
         knowledge?.close()
         connector?.close()
         const detached = remove()
         try {
           eventRouter.close()
-          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close(), media?.close(), mobileClosed])
+          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close(), media?.close(), mobileClosed, drafts])
           if (!workersReleased || !gpuReleased) throw new Error('Inbox compute cleanup remains unverified')
         } finally {
           try { detachResident?.() } finally { await detached }
@@ -552,6 +565,7 @@ export function activateLocalInbox(
       },
     })
   } catch (error) {
+    void draftRuntime?.close()
     try {
       router?.close()
     } finally {

@@ -24,6 +24,7 @@ const probe = fileURLToPath(new URL('./fixtures/local-flow-probe.mjs', import.me
 const contextProbe = fileURLToPath(new URL('./fixtures/context-flow-probe.mjs', import.meta.url))
 const memoryProbe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
 const projectProbe = fileURLToPath(new URL('./fixtures/project-flow-probe.mjs', import.meta.url))
+const githubDraftProbe = fileURLToPath(new URL('./fixtures/github-draft-flow-probe.mjs', import.meta.url))
 const proactiveProbe = fileURLToPath(new URL('./fixtures/proactive-flow-probe.mjs', import.meta.url))
 const nativeSessionId = 'pa008-native-chat'
 const fixtureProjectId = 'pa008-fixture-project'
@@ -88,6 +89,53 @@ describe('published DSH Web local inbox', () => {
     expect(await inbox({ type: 'proactive_mode', ruleId, expectedVersion: 3, mode: 'prepare', grant: 'read_source' }))
       .toEqual({ ok: false, code: 'observation_required' })
     expect(await inbox({ type: 'snapshot' })).toMatchObject({ snapshot: { proactiveNotices: [], usage: { calls: 1 } } })
+  }, 25_000)
+
+  it('previews, approves and reads back an exact draft through the authenticated owner carrier', async () => {
+    const host = await openWebHost(githubDraftProbe)
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const result = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(result.status === 200 && result.result?.ok, host.diagnostics())
+      return result.result.value
+    }
+    const taskId = updated(await inbox({ type: 'create_task', commandId: 'draft-web-task', projectId: 'draft-fixture-project',
+      sessionId: 'draft-fixture-session', outcome: 'Verify exact draft readback.' })).taskId
+    assert.ok(taskId)
+    const snapshot = async () => {
+      const result = await inbox({ type: 'snapshot' })
+      assert.ok(result.ok && result.kind === 'snapshot')
+      return result.snapshot
+    }
+    const task = async () => {
+      const result = (await snapshot()).tasks.find(item => item.id === taskId)
+      assert.ok(result)
+      return result
+    }
+    const request = { type: 'github_draft_prepare', taskId, expectedVersion: (await task()).version, commandId: 'prepare-web-draft',
+      draft: { title: 'Test draft', body: 'Exact approved body.', content: '# Exact draft\n' } } as const
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, request)).toMatchObject({ status: 401 })
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, request, await host.exchange(true))).toMatchObject({ status: 403 })
+    const prepared = await inbox(request)
+    assert.ok(prepared.ok && prepared.kind === 'github_draft' && prepared.draft)
+    const { operationId } = prepared.draft.payload
+    const approval = (await snapshot()).approvals.find(item => item.taskId === taskId)
+    assert.ok(approval)
+    expect(approval.preview).toContain('Exact approved body.')
+    expect(approval.preview).toContain(prepared.draft.payload.contentDigest)
+    const dispatch = { type: 'github_draft_dispatch', taskId, operationId, expectedVersion: (await task()).version } as const
+    expect(await inbox(dispatch)).toEqual({ ok: false, code: 'permission_denied' })
+    const approve = { type: 'approval', requestId: approval.id, expectedVersion: approval.version, decision: 'approve' } as const
+    expect(await inbox({ ...approve, digest: 'f'.repeat(64) })).toEqual({ ok: false, code: 'action_changed' })
+    updated(await inbox({ ...approve, digest: approval.digest }))
+    expect(await inbox(dispatch)).toMatchObject({ ok: true, kind: 'github_draft' })
+    const result = await waitForTask(task, item => item.status === 'verifying', 'test draft readback', host.diagnostics)
+    expect(await inbox({ type: 'github_draft_inspect', taskId })).toMatchObject({ draft: {
+      effect: 'confirmed', receipt: 'https://github.com/TestOrg/DedicatedTest/pull/9',
+    } })
+    expect(await inbox(dispatch)).toMatchObject({ ok: false })
+    updated(await inbox({ type: 'accept_result', taskId, expectedVersion: result.version }))
+    expect(await task()).toMatchObject({ status: 'completed' })
   }, 25_000)
 
   it('reads only the pinned GitHub MCP facade through the authenticated owner carrier', async () => {

@@ -186,6 +186,18 @@ function isInboxResponse(value: unknown): value is InboxResponse {
   if (typeof value.kind === 'string' && value.kind.startsWith('skill_')) return skillResponseSchema.safeParse(value).success
   if (value.kind === 'proactive_state') return isProactiveState(value)
   if (value.kind === 'proactive_artifact') return typeof value.candidateId === 'string' && typeof value.text === 'string' && value.text.length <= 1024
+  if (value.kind === 'github_draft') {
+    if (value.draft === null) return true
+    const draft = value.draft
+    if (!isRecord(draft) || !isRecord(draft.payload) || typeof draft.revoked !== 'boolean'
+      || typeof draft.digest !== 'string' || typeof draft.approval !== 'string' || typeof draft.effect !== 'string'
+      || (draft.receipt !== undefined && typeof draft.receipt !== 'string')) return false
+    const payload = draft.payload
+    return payload.draft === true && isRecord(payload.repository) && isCount(payload.repository.id)
+      && [payload.repository.owner, payload.repository.name, payload.operationId, payload.base, payload.baseSha, payload.head,
+        payload.headSha, payload.path, payload.title, payload.body, payload.content, payload.contentDigest, payload.preparedAt]
+        .every(field => typeof field === 'string')
+  }
   if (value.kind === 'connector_status' || value.kind === 'connector_page') {
     if (!isConnectorBinding(value.binding) || typeof value.fingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(value.fingerprint)) return false
     if (value.kind === 'connector_status') return true
@@ -246,6 +258,7 @@ function isInboxResponse(value: unknown): value is InboxResponse {
           && typeof item.summary === 'string' && item.summary.length <= 1024)))
       && (snapshot.githubRead === undefined || (isRecord(snapshot.githubRead)
         && (snapshot.githubRead.projectId === undefined || typeof snapshot.githubRead.projectId === 'string')))
+      && (snapshot.githubDraft === undefined || (isRecord(snapshot.githubDraft) && typeof snapshot.githubDraft.projectId === 'string'))
       && (snapshot.usage === undefined || isUsage(snapshot.usage))
       && (snapshot.schedules === undefined || isSchedules(snapshot.schedules))
   }

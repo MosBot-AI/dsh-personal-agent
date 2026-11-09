@@ -108,6 +108,42 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('requires the exact approved draft before offering publication', async () => {
+    const work = task('draft-task')
+    const digest = 'd'.repeat(64)
+    const operationId = `github-draft-${'a'.repeat(64)}`
+    const payload = { operationId, repository: { id: 42, owner: 'TestOrg', name: 'DedicatedTest' }, base: 'main', baseSha: 'a'.repeat(40),
+      head: `dshpa-draft/${'a'.repeat(64)}`, headSha: 'b'.repeat(40), path: 'draft.md', title: 'Test draft',
+      body: '<img src=x onerror=alert(1)>', content: '# New file', contentDigest: 'e'.repeat(64), preparedAt: verifiedAt, draft: true as const }
+    let prepared = false
+    let approved = false
+    const port = vi.fn<InboxPort>(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot({ githubDraft: { projectId: project.id },
+        tasks: [prepared ? { ...work, status: 'running', version: 2 } : work], approvals: prepared && !approved ? [{
+          id: operationId, taskId: work.id, version: 0, digest, expiresAt: '2099-01-01T00:00:00.000Z', kind: 'github.draft_pull_request',
+          accountId: 'github:17', resourceRef: 'github:42:TestOrg/DedicatedTest', dataScope: ['github-test-draft'], preview: JSON.stringify(payload),
+        }] : [],
+      }) }
+      if (request.type === 'github_draft_prepare') prepared = true
+      if (request.type === 'approval') { approved = request.digest === digest; return { ok: true, kind: 'updated' } }
+      return { ok: true, kind: 'github_draft', draft: { payload, digest, approval: approved ? 'approved' : 'pending',
+        effect: request.type === 'github_draft_dispatch' ? 'dispatching' : approved ? 'authorized' : 'prepared', revoked: false } }
+    })
+    const { node } = await mount(port)
+    await click(taskButton(node, work.outcome))
+    await fill(field(node, 'Draft pull request title'), payload.title)
+    await fill(field(node, 'Draft pull request body'), payload.body)
+    await fill(field(node, 'New Markdown file content'), payload.content)
+    await click(button(node, 'Prepare exact draft'))
+    expect(node.querySelector('img')).toBeNull()
+    expect([...node.querySelectorAll('button')].some(item => item.textContent === 'Publish approved test draft')).toBe(false)
+    await click(button(node, 'Approve exact action'))
+    await click(button(node, 'Refresh draft status'))
+    await click(button(node, 'Publish approved test draft'))
+    expect(port.mock.calls.map(([request]) => request)).toContainEqual({ type: 'github_draft_dispatch', taskId: work.id,
+      operationId, expectedVersion: 2 })
+  })
+
   it('keeps GitHub pages on their exact read scope and renders issue text literally', async () => {
     const binding = { account: { id: 7, login: 'Owner' }, repository: { id: 42, owner: 'Org', name: 'Repo' } }
     const cursor = 'c2bcbb6d-3db1-45e1-b79a-7fc9c2e0db16'
