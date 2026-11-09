@@ -58,5 +58,7 @@ jobs:
             "$DSHPA_CHROME_PATH" --version
           fi
           dbus-run-session -- npm exec --yes --package=pnpm@11.28.5 -- pnpm test:mobile
+      - name: Verify native media recovery with a simulated provider
+        run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:media-host
       - name: Verify Linux headless resident profile
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:resident
