@@ -1,6 +1,11 @@
+import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { once } from 'node:events'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { expect, it, onTestFinished } from 'vitest'
 import {
   attemptIdSchema, clientIdSchema, deviceIdSchema, mandateRefSchema, ownerIdSchema, profileIdSchema,
@@ -32,7 +37,7 @@ function createAttempt(store: WorkStore, label: string) {
   return { ...scope, taskId, attemptId: result.state.attempt.id, generation: result.state.attempt.generation }
 }
 
-it('recovers the original prompt and artifact digest after a lost submit response and caller restart', async () => {
+it('recovers the simulated prompt and fixture PNG digest after a dropped response and caller restart', async () => {
   const fixture = await comfyFixture()
   const directory = join(fixture.directory, 'work')
   let store = openWorkStore(directory)
@@ -104,6 +109,59 @@ it('recovers the original prompt and artifact digest after a lost submit respons
   expect(accepted(jobs.cancel({ access: next.access, operationId: next.operationId })).state).toBe('cancelled')
   expect(fixture.cancelled).toEqual([])
 })
+
+it('reconciles the committed sending marker after the submitting process is killed before receipt', async () => {
+  const fixture = await comfyFixture()
+  const directory = join(fixture.directory, 'work')
+  const store = openWorkStore(directory)
+  const { registry, pin } = await fixture.register()
+  const request = { ...mediaRequest(), access: createAttempt(store, 'crash') }
+  const ref = { access: request.access, operationId: request.operationId }
+  const jobs = store.createMediaJobs(registry, mediaServiceConfigSchema.parse({ providers: { image: pin } }),
+    { current: () => true, artifactAllowed: () => false })
+  try {
+    expect(accepted(jobs.enqueue(request)).state).toBe('queued')
+  } finally {
+    await jobs.close()
+    await registry.close()
+    store.close()
+  }
+
+  const probe = fileURLToPath(new URL('./fixtures/media-caller.mjs', import.meta.url))
+  const input = join(fixture.directory, 'caller.json')
+  writeFileSync(input, JSON.stringify({ directory, config: fixture.config, ref }), { mode: 0o600 })
+  const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }
+  const admitted = Promise.withResolvers<string>()
+  fixture.faults.holdResponse = true
+  fixture.watchSubmit(submission => admitted.resolve(submission.prompt_id))
+
+  const sender = spawn(process.execPath, [probe, input, '1'], { env, stdio: ['ignore', 'ignore', 'pipe'] })
+  let stderr = ''
+  sender.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk })
+  const senderClosed = once(sender, 'close')
+  onTestFinished(async () => {
+    if (sender.exitCode === null && sender.signalCode === null) sender.kill('SIGKILL')
+    await senderClosed
+  })
+  const id = await Promise.race([admitted.promise, senderClosed.then(([code, signal]) => {
+    throw new Error(`Caller exited before the backend accepted the prompt (${code ?? signal}). ${stderr}`)
+  })])
+  expect(sender.kill('SIGKILL')).toBe(true)
+  expect(await senderClosed).toEqual([null, 'SIGKILL'])
+
+  const reader = new DatabaseSync(join(directory, DATABASE_FILENAME), { readOnly: true })
+  try {
+    const row = reader.prepare('SELECT state, prepared FROM media_jobs').get()
+    expect(row?.state).toBe('submitting')
+    expect(JSON.parse(String(row?.prepared)).handle.handleId).toBe(id)
+  } finally { reader.close() }
+
+  const bytes = fixture.complete(id, imageSpec)
+  const { stdout } = await promisify(execFile)(process.execPath, [probe, input, '2'], { env, timeout: 10_000 })
+  expect(JSON.parse(stdout)).toMatchObject({ ok: true, value: { state: 'succeeded', handle: { handleId: id },
+    outputs: [{ mediaType: 'image/png', contentHash: createHash('sha256').update(bytes).digest('hex') }] } })
+  expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([id])
+}, 15_000)
 
 it('keeps a rate-limited preparation queued and cancels the waiting job without a backend mutation', async () => {
   const fixture = await comfyFixture()
