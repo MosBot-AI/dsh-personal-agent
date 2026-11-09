@@ -321,7 +321,7 @@ export function activateLocalInbox(
     const attention = store.createAttention({ allowExternal: options.allowAttentionDelivery })
     const gpu = createGpuQueue(config.gpu ?? {}, ref => {
       if (ref.ownerId !== scope.ownerId || ref.profileId !== scope.profileId || !store.canDispatch()
-        || (config.media && store.mediaLeaseHeld())) return false
+        || store.mediaLeaseHeld()) return false
       const state = store.getWork(ref)
       return Boolean(state && state.task.generation === ref.generation && state.attempt.id === ref.attemptId
         && state.attempt.generation === ref.generation && ['queued', 'running', 'waiting_resource'].includes(state.task.status))

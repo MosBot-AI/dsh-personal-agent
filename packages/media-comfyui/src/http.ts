@@ -21,7 +21,11 @@ export async function readBounded(response: Response, limit: number): Promise<Bu
   let size = 0
   try {
     for (;;) {
-      const { done, value } = await reader.read()
+      // A 200 response does not guarantee its body arrived intact. Transport
+      // failures remain retryable; bounds and decoded-media failures do not.
+      const { done, value } = await reader.read().catch(() => {
+        throw new BackendError('provider_unavailable')
+      })
       if (done) return Buffer.concat(chunks, size)
       size += value.byteLength
       if (size > limit) throw new BackendError('invalid_result')
