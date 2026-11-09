@@ -180,3 +180,40 @@ it('keeps a rate-limited preparation queued and cancels the waiting job without 
   expect(fixture.submissions).toEqual([])
   expect(fixture.cancelled).toEqual([])
 })
+
+it('releases the media lease when a finished prompt has a missing output', async () => {
+  const fixture = await comfyFixture()
+  const { registry, pin } = await fixture.register()
+  const store = openWorkStore(join(fixture.directory, 'work'))
+  const first = { ...mediaRequest(), access: createAttempt(store, 'missing-output') }
+  const next = { ...mediaRequest(), access: createAttempt(store, 'next-output') }
+  const jobs = store.createMediaJobs(registry, mediaServiceConfigSchema.parse({ providers: { image: pin } }),
+    { current: () => true, artifactAllowed: () => false })
+  onTestFinished(async () => { await jobs.close(); await registry.close(); store.close() })
+
+  const ref = { access: first.access, operationId: first.operationId }
+  expect(accepted(jobs.enqueue(first)).state).toBe('queued')
+  expect(accepted(jobs.enqueue(next)).state).toBe('queued')
+  await jobs.step()
+  const firstId = accepted(jobs.inspect(ref)).handle!.handleId
+  fixture.complete(firstId, imageSpec)
+  await jobs.step()
+
+  fixture.faults.viewStatus = 503
+  await jobs.step()
+  expect(accepted(jobs.inspect(ref))).toMatchObject({ state: 'collecting', reason: 'provider_unavailable' })
+  expect(store.mediaLeaseHeld()).toBe(true)
+  expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([firstId])
+
+  fixture.faults.viewStatus = 404
+  await jobs.step()
+  expect(accepted(jobs.inspect(ref))).toMatchObject({ state: 'failed', reason: 'invalid_result' })
+  expect(store.mediaLeaseHeld()).toBe(false)
+  expect(accepted(jobs.enqueue(first)).state).toBe('failed')
+
+  await jobs.step()
+  const nextStatus = accepted(jobs.inspect({ access: next.access, operationId: next.operationId }))
+  expect(nextStatus.state).toBe('rendering')
+  expect(nextStatus.handle?.handleId).not.toBe(firstId)
+  expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([firstId, nextStatus.handle?.handleId])
+})

@@ -33,7 +33,7 @@ export async function comfyFixture() {
   const running = new Map<string, unknown[]>()
   const history = new Map<string, unknown>()
   const outputs = new Map<string, Buffer>()
-  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false }
+  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false, viewStatus: 200 }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url!, 'http://fixture')
     const path = url.pathname
@@ -48,6 +48,7 @@ export async function comfyFixture() {
       return json(response, history.has(id) && !faults.missing ? { [id]: history.get(id) } : {})
     }
     if (path === '/view') {
+      if (faults.viewStatus !== 200) return json(response, {}, faults.viewStatus)
       const bytes = outputs.get(url.searchParams.get('filename') ?? '')
       if (!bytes) return json(response, {}, 404)
       response.end(bytes)
