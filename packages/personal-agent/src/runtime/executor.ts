@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import {
-  artifactIdSchema, computeWaitPrefix, generationSchema, indefiniteWait, nonEmptyTextSchema, sessionIdSchema, taskIdSchema,
+  artifactIdSchema, computeWaitPrefix, desktopCapabilityPrefix, desktopWaitPrefix, generationSchema, indefiniteWait, nonEmptyTextSchema, sessionIdSchema, taskIdSchema,
   utcInstantSchema, versionSchema, waitAllowsWake, WORKER_INPUT_LIMIT, type SourceEventId, type UtcInstant,
 } from '../domain/model.js'
 import type { WorkEvent, WorkState } from '../domain/transitions.js'
 import type { StoredCommandContext, StoredWorkResult, WorkRef, WorkStore } from '../storage/store.js'
 import { confirmOwnedCancellation } from './cancel.js'
 import { computeLimitsSchema, type ComputeIssue, type ComputeLimits, type WorkerComputeOptions } from './compute.js'
+import type { DesktopGrant } from './desktop-control.js'
+import type { DesktopWait } from './desktop.js'
 import { makeWorkerInput, type WorkerInputIntent } from './input-journal.js'
 import type { NativeWorker, NativeWorkerInput, NativeWorkerRuntime, WorkerObservation } from './native-worker.js'
 import { allowsWorkerData, resolveWorkerDirectory, workerPresetSchema, type WorkerPreset } from './presets.js'
@@ -82,6 +84,8 @@ interface Entry {
   readonly attemptId: WorkState['attempt']['id']
   readonly generation: number
   readonly abort: AbortController
+  readonly desktop?: DesktopGrant
+  detachDesktop?: () => void
   opening?: Promise<NativeWorker>
   native?: NativeWorker
   cleanup?: Promise<boolean>
@@ -231,7 +235,7 @@ class WorkerExecutor {
     }
   }
 
-  async launch(ref: WorkRef, input: unknown, contextSources?: readonly SourceEventId[]): Promise<ExecutorResult> {
+  async launch(ref: WorkRef, input: unknown, contextSources?: readonly SourceEventId[], desktop?: DesktopGrant): Promise<ExecutorResult> {
     if (this.closed) return { ok: false, code: 'closed' }
     const decoded = launchSchema.safeParse(input)
     if (!decoded.success) return { ok: false, code: 'invalid_input' }
@@ -252,6 +256,10 @@ class WorkerExecutor {
     if (!cwd) return { ok: false, code: 'permission_denied' }
     const sessionId = nativeSessionId(state)
     const { worker: saved, sessionId: savedSession, scope: savedScope } = state.attempt
+    const capabilities = savedScope?.capabilities ?? []
+    const desktopCapability = desktop ? desktopCapabilityPrefix + desktop.application : undefined
+    if ((saved && (capabilities.length !== (desktop ? 1 : 0) || capabilities[0] !== desktopCapability))
+      || desktop?.signal.aborted) return { ok: false, code: 'permission_denied' }
     if (savedSession !== undefined && !saved) return { ok: false, code: 'permission_denied' }
     if (saved) {
       if (saved.inputHistory.includes(requested.input.cursor)) return { ok: false, code: 'duplicate_input' }
@@ -263,7 +271,7 @@ class WorkerExecutor {
         return { ok: false, code: 'permission_denied' }
       }
     }
-    return this.startNative(ref, state, preset, cwd, requested.dataScope, requested.input, contextSources)
+    return this.startNative(ref, state, preset, cwd, requested.dataScope, requested.input, contextSources, undefined, desktop)
   }
 
   /** Resume only the exact parked Worker after trusted event admission. */
@@ -311,7 +319,7 @@ class WorkerExecutor {
 
   private async startNative(
     ref: WorkRef, state: WorkState, preset: WorkerPreset, cwd: string, dataScope: readonly string[], input: WorkerInput,
-    contextSources?: readonly SourceEventId[], wake?: SubscribedWake,
+    contextSources?: readonly SourceEventId[], wake?: SubscribedWake, desktop?: DesktopGrant,
   ): Promise<ExecutorResult> {
     const { store, runtime } = this.options
     if (!this.historyAuthorized(ref, state)) return { ok: false, code: 'permission_denied' }
@@ -329,6 +337,7 @@ class WorkerExecutor {
       attemptId: state.attempt.id,
       generation: state.attempt.generation,
       abort: new AbortController(),
+      desktop,
       cursor: input.cursor,
       routed: wake?.routed,
       version: state.task.version,
@@ -342,7 +351,7 @@ class WorkerExecutor {
         executor: 'native-dsh',
         agentId: wake ? state.attempt.agentId : undefined,
         sessionId,
-        scope: { capabilities: [], dataScope: [...dataScope] },
+        scope: { capabilities: desktop ? [desktopCapabilityPrefix + desktop.application] : [], dataScope: [...dataScope] },
         worker: {
           presetId: preset.id, cwd, provider: preset.provider, model: preset.model, inputCursor: input.cursor,
           inputHistory: [...(saved?.inputHistory ?? []), input.cursor],
@@ -370,7 +379,7 @@ class WorkerExecutor {
       if (entry.routed && !authorized(entry.routed.authorize)) throw new Error('Subscribed wake authority changed')
       return runtime.open({
         sessionId, cwd, provider: preset.provider, model: preset.model,
-        resume: saved !== undefined, signal: entry.abort.signal,
+        resume: saved !== undefined, signal: entry.abort.signal, desktop,
         isCurrent: () => this.current(entry) !== undefined && (!entry.routed || authorized(entry.routed.authorize)),
         authorizeContext: this.options.authorizeContextHistory && (() => {
           const current = this.current(entry)
@@ -394,6 +403,26 @@ class WorkerExecutor {
         } } : {}),
       })
     })
+    let delivered = false
+    const abandonInput = () => {
+      if (!delivered) store.observeWorkerInput(ref, { ...journal, status: 'intent' }, 'missing', this.now())
+    }
+    if (desktop) {
+      const lost = () => {
+        try {
+          const current = this.current(entry)
+          if (!current) return
+          abandonInput()
+          this.waitForDesktop(entry, current, desktop.takenOver() ? 'desktop_taken_over' : 'desktop_lease_lost')
+        } catch {
+          entry.failure = 'Desktop authority changed before safe task admission.'
+          void this.retire(entry)
+        }
+      }
+      desktop.signal.addEventListener('abort', lost, { once: true })
+      entry.detachDesktop = () => desktop.signal.removeEventListener('abort', lost)
+      if (desktop.signal.aborted) lost()
+    }
     try {
       const worker = await entry.opening
       entry.native = worker
@@ -401,6 +430,17 @@ class WorkerExecutor {
         void this.retire(entry)
         return { ok: false, code: 'stale_attempt' }
       }
+      if (desktop) {
+        const reason = worker.probeDesktop ? await worker.probeDesktop() : 'driver_unavailable'
+        const current = this.current(entry)
+        if (!current) return started
+        if (reason) {
+          abandonInput()
+          this.waitForDesktop(entry, current, reason)
+          return started
+        }
+      }
+      delivered = true
       await worker.followup(this.nativeInput(entry.ref, journal, entry.routed))
       void this.observe(entry, worker, input)
       return started
@@ -585,6 +625,11 @@ class WorkerExecutor {
         void this.retire(entry)
         return
       }
+      const desktopWait = entry.desktop?.waiting()
+      if (desktopWait) {
+        this.waitForDesktop(entry, state, desktopWait)
+        return
+      }
       const computeIssue = worker.readComputeIssue?.()
       if (computeIssue) {
         this.waitForCompute(entry, state, computeIssue)
@@ -694,6 +739,25 @@ class WorkerExecutor {
     } catch { /* Diagnostics are separate from Worker admission. */ }
   }
 
+  private waitForDesktop(entry: Entry, state: WorkState, reason: DesktopWait | 'desktop_taken_over' | 'desktop_lease_lost'): void {
+    const prompts = {
+      driver_unavailable: 'Reconnect the native desktop provider.',
+      permission_required: 'Review macOS Accessibility and application consent.',
+      screen_locked: 'Unlock the local macOS session.',
+      target_unavailable: 'Review the approved application and its current window.',
+      desktop_taken_over: 'The owner took control of the desktop.',
+      desktop_lease_lost: 'The desktop lease expired or was released.',
+    }
+    entry.issue = reason
+    const result = this.options.store.applyEvent(entry.ref, {
+      type: 'wait', ...fence(state, this.now()),
+      wait: { reason: 'environment', referenceId: desktopWaitPrefix + reason,
+        resumeCondition: `${prompts[reason]} Explicitly continue with a new desktop observation.` },
+    })
+    if (!result.ok) entry.failure = 'The desktop environment wait could not be committed.'
+    void this.retire(entry)
+  }
+
   private waitForCompute(entry: Entry, state: WorkState, issue: ComputeIssue): void {
     entry.issue = issue.code
     const base = fence(state, this.now())
@@ -740,6 +804,7 @@ class WorkerExecutor {
   private retire(entry: Entry): Promise<boolean> {
     if (entry.cleanup) return entry.cleanup
     entry.retiring = true
+    entry.detachDesktop?.()
     entry.cleanup = Promise.resolve().then(() => this.finish(entry)).catch(() => {
       entry.issue = 'quiescence_unverified'
       return false
@@ -779,6 +844,7 @@ class WorkerExecutor {
         return false
       }
     }
+    entry.desktop?.finish()
     if (this.entries.get(entry.ref.taskId) === entry) this.entries.delete(entry.ref.taskId)
     return true
   }

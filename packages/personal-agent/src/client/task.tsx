@@ -140,12 +140,12 @@ export function TaskDetail(props: TaskDetailProps) {
       {task.sessionId && <button type="button" disabled={!props.canOpenSession} onClick={() => {
         if (task.sessionId) props.openSession(task.sessionId)
       }}>{t('action.openConversation')}</button>}
-      {task.status === 'queued' && <button type="button" className="dshpa-primary"
+      {task.status === 'queued' && !task.desktopApplication && <button type="button" className="dshpa-primary"
         disabled={disabled || !props.workerConfigured || task.runtime !== 'inactive'}
         onClick={() => props.submit({ type: 'start', ...control, cursor: requestId() })}>{t('action.start')}</button>}
       {!stopped && task.status !== 'paused' && <button type="button" disabled={disabled}
         onClick={() => props.submit({ type: 'pause', ...control, commandId: requestId() })}>{t('action.pause')}</button>}
-      {(task.status === 'paused' && task.canResumeCompute !== false || task.canResumeCompute === true) && <button type="button" className="dshpa-primary"
+      {!task.desktopApplication && (task.status === 'paused' && task.canResumeCompute !== false || task.canResumeCompute === true) && <button type="button" className="dshpa-primary"
         disabled={disabled || task.runtime !== 'inactive' || !props.workerConfigured}
         onClick={() => props.submit({ type: 'resume', ...control, commandId: requestId() })}>{t('action.resume')}</button>}
       {!stopped && <button type="button" className="dshpa-danger" disabled={disabled}

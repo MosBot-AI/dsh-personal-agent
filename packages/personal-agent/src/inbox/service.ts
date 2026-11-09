@@ -21,6 +21,9 @@ import {
   attemptIdSchema,
   commandIdSchema,
   computeWaitPrefix,
+  desktopApplication,
+  desktopApplicationSchema,
+  desktopWaitPrefix,
   conversationIdSchema,
   conversationSchema,
   deviceIdSchema,
@@ -48,6 +51,7 @@ import {
 import type { WorkState } from '../domain/transitions.js'
 import { comparePlanPriority, projectPlanDraftSchema, taskPrerequisitesSchema, type ProjectPlanInput } from '../domain/projects.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
+import type { DesktopControl, DesktopGrant } from '../runtime/desktop-control.js'
 import type { ExecutorResult, WorkerExecutor } from '../runtime/executor.js'
 import { workerInputSchema } from '../runtime/reports.js'
 import type { ResidentOperations } from '../runtime/resident-operations.js'
@@ -81,6 +85,9 @@ const requestSchema = z.discriminatedUnion('type', [
     sessionId: sessionIdSchema, outcome: nonEmptyTextSchema.max(4_096),
   }),
   z.strictObject({ type: z.literal('start'), ...control, cursor: workerCursorSchema }),
+  z.strictObject({ type: z.literal('desktop_start'), ...control, cursor: workerCursorSchema, application: desktopApplicationSchema }),
+  z.strictObject({ type: z.literal('desktop_takeover'), taskId: taskIdSchema, leaseId: z.uuid() }),
+  z.strictObject({ type: z.literal('desktop_release'), taskId: taskIdSchema, leaseId: z.uuid() }),
   z.strictObject({ type: z.literal('save_plan'), commandId: command, projectId: projectIdSchema.optional(),
     expectedRevision: versionSchema.optional(), draft: projectPlanDraftSchema, rationale: nonEmptyTextSchema.max(4096) }),
   z.strictObject({ type: z.literal('project_plan'), projectId: projectIdSchema }),
@@ -119,6 +126,7 @@ const nativeSessionSchema = z.strictObject({ id: sessionIdSchema, label: nonEmpt
 export interface InboxServiceOptions {
   readonly store: WorkStore
   readonly executor?: WorkerExecutor
+  readonly desktop?: DesktopControl
   readonly identity: IdentityBoundary
   readonly resolveSession: (sessionId: SessionId) => boolean | Promise<boolean>
   readonly listSessions?: () => readonly InboxSession[] | Promise<readonly InboxSession[]>
@@ -185,6 +193,17 @@ function computeWait(state: WorkState) {
     ? task.wait : undefined
 }
 
+function desktopStartable(state: WorkState, at: UtcInstant): boolean {
+  const { task, attempt } = state
+  if (!nativeReleased(state)) return false
+  if (!desktopApplication(attempt.scope)) return task.status === 'queued' && attempt.startedAt === undefined
+  if (task.status === 'queued') return true
+  const eligibleWait = task.wait?.referenceId.startsWith(desktopWaitPrefix) || computeWait(state)
+  return (task.status === 'paused' && !task.wait
+    || ((task.status === 'waiting_environment' || task.status === 'waiting_resource' || task.status === 'paused') && Boolean(eligibleWait)))
+    && waitAllowsWake(task.wait, at)
+}
+
 function terminal(state: WorkState): boolean {
   return state.task.status === 'completed' || state.task.status === 'cancelled' || state.task.status === 'failed'
 }
@@ -198,14 +217,17 @@ export function createInboxService(options: InboxServiceOptions) {
 
   function ownerCanAccept(ref: WorkRef, state: WorkState, owner: OwnerIdentity): boolean {
     const draft = options.githubDraft?.projectId === state.task.projectId && isDraftWork(state)
+    const localScope = (state.attempt.scope?.capabilities.length ?? 0) === 0
+      || desktopApplication(state.attempt.scope) !== undefined
     return state.task.status === 'verifying' && (draft || state.attempt.worker?.releasedAt !== undefined)
       && state.attempt.mandate.policyVersion === owner.policyVersion && state.attempt.artifactIds.length > 0
-      && (draft || (!state.task.acceptance.requiresReceipt && (state.attempt.scope?.capabilities.length ?? 0) === 0))
+      && (draft || (!state.task.acceptance.requiresReceipt && localScope))
       && !store.hasUnsettledEffects(ref, state.attempt.id)
   }
 
   function projectTask(owner: OwnerIdentity, state: WorkState, progress?: InboxTask['progress']): InboxTask {
     const { task } = state
+    const application = desktopApplication(state.attempt.scope)
     const wait = computeWait(state)
     const ref = refFor(owner, task.id)
     const conversation = task.conversationId === undefined ? undefined : store.getConversation(owner, task.conversationId)
@@ -232,6 +254,8 @@ export function createInboxService(options: InboxServiceOptions) {
         prompt: task.wait.resumeCondition, ...(task.wait.notBefore === undefined || task.wait.notBefore === indefiniteWait
           ? {} : { notBefore: task.wait.notBefore }) } }),
       artifacts,
+      ...(application ? { desktopApplication: application } : {}),
+      ...(options.desktop && desktopStartable(state, now()) ? { canStartDesktop: true } : {}),
       canAccept: artifacts.length === candidates.length && ownerCanAccept(ref, state, owner),
       ...(wait ? { canResumeCompute: nativeReleased(state) && wait.notBefore !== indefiniteWait } : {}),
       deliveries: store.listInboxDeliveries(ref).map(delivery => ({ id: delivery.id, status: delivery.status })),
@@ -262,6 +286,7 @@ export function createInboxService(options: InboxServiceOptions) {
       workerConfigured: executor !== undefined && worker !== undefined,
       ...(options.mobile ? { mobileConfigured: true } : {}),
       ...(mobileReviewers ? { mobileReviewers } : {}),
+      ...(options.desktop ? { desktopTargets: options.desktop.targets, desktopActivities: options.desktop.activity(owner) } : {}),
       ...(options.memory ? { memoryConfigured: true } : {}),
       ...(options.knowledge ? { knowledgeConfigured: true } : {}),
       ...(options.githubRead ? { githubRead: { projectId: options.githubRead.projectId } } : {}),
@@ -563,6 +588,12 @@ export function createInboxService(options: InboxServiceOptions) {
         } }
       }
 
+      if (request.type === 'desktop_takeover' || request.type === 'desktop_release') {
+        if (!options.desktop) return failure('resource_unavailable')
+        return options.desktop.control(owner, ref, request.leaseId, request.type === 'desktop_takeover' ? 'takeover' : 'release')
+          ? { ok: true, kind: 'updated', taskId: ref.taskId } : failure('stale_lease')
+      }
+
       const at = now()
       const context = { actor: owner, at, projectId: state.task.projectId, conversationId: conversation.id }
       if (request.type === 'pause' || request.type === 'cancel') {
@@ -592,14 +623,20 @@ export function createInboxService(options: InboxServiceOptions) {
       }
       if (!executor || !worker) return failure('resource_unavailable')
       if (state.attempt.mandate.policyVersion !== owner.policyVersion) return failure('policy_changed')
-      if ((state.attempt.scope?.capabilities.length ?? 0) > 0) return failure('permission_denied')
+      const application = desktopApplication(state.attempt.scope)
+      if ((state.attempt.scope?.capabilities.length ?? 0) > 0 && !application) return failure('permission_denied')
 
       if (request.type === 'redirect') return updated(executor.redirect(ref, request.expectedVersion, { cursor: request.cursor, text: request.text }))
       if (!nativeReleased(state)) return failure('runtime_not_quiescent')
 
       switch (request.type) {
-        case 'start': {
-          if (state.task.status !== 'queued') return failure('invalid_transition')
+        case 'start':
+        case 'desktop_start': {
+          const desktop = request.type === 'desktop_start' ? options.desktop : undefined
+          if (request.type === 'desktop_start') {
+            if (!desktop) return failure('resource_unavailable')
+            if (!desktopStartable(state, at) || (application && application !== request.application)) return failure('invalid_transition')
+          } else if (application || state.task.status !== 'queued') return failure('invalid_transition')
           if (!executor.canStart(ref, worker.presetId)) return failure('budget_exceeded')
           const assembly = options.context
           const currentInput = () => {
@@ -616,14 +653,43 @@ export function createInboxService(options: InboxServiceOptions) {
           const prepared = assembly ? await assembly.prepare(ref, ownerToken, state, request.cursor, currentInput)
             : { ok: true as const, text: currentInput()?.text ?? state.task.requestedOutcome, sources: undefined }
           if (!prepared.ok) return failure(prepared.code)
+          if (signal?.aborted || identity.resolveOwner(ownerToken) !== owner) return failure('permission_denied')
           const cwd = state.attempt.worker?.cwd ?? join(worker.cwd, stableId('workspace', owner.ownerId, owner.profileId, ref.taskId))
           if (state.attempt.worker === undefined) mkdirSync(cwd, { recursive: true, mode: 0o700 })
-          const result = await executor.launch(ref, {
-            expectedVersion: request.expectedVersion, ...worker, cwd, input: { cursor: request.cursor, text: prepared.text },
-          }, prepared.sources)
-          return result.ok ? { ok: true, kind: 'updated', taskId: ref.taskId } : failure(result.code)
+          let grant: DesktopGrant | undefined
+          let expectedVersion = request.expectedVersion
+          if (desktop && request.type === 'desktop_start') {
+            if (!store.canDispatch()) return failure('recovery_required')
+            if (executor.query(ref).active) return failure('runtime_not_quiescent')
+            const exact = store.getWork(ref)
+            if (exact?.task.version !== expectedVersion || exact.attempt.id !== state.attempt.id) return failure('version_conflict')
+            const admitted = desktop.acquire(owner, ownerToken, ref, exact, request.application)
+            if (!admitted.ok) return failure(admitted.code)
+            grant = admitted.grant
+          }
+          try {
+            if (grant && state.task.status !== 'queued') {
+              const admit = { policyVersion: owner.policyVersion, grantsCurrent: true, budgetAvailable: true,
+                conditionSatisfied: true, runtimeQuiescent: true }
+              const wait = state.task.wait
+              const resumed = state.task.status === 'paused' ? store.applyEvent(ref, {
+                type: 'resume', at: now(), expectedVersion, ...admit,
+              }) : wait && store.applyEvent(ref, {
+                type: 'wake', at: now(), expectedVersion, attemptId: state.attempt.id, generation: state.attempt.generation,
+                reason: wait.reason, referenceId: wait.referenceId, ...admit,
+              })
+              if (!resumed?.ok) return failure(resumed?.code ?? 'invalid_transition')
+              expectedVersion = resumed.state.task.version
+            }
+            return updated(await executor.launch(ref, {
+              expectedVersion, ...worker, cwd, input: { cursor: request.cursor, text: prepared.text },
+            }, prepared.sources, grant))
+          } finally {
+            if (grant && !executor.query(ref).active) grant.finish()
+          }
         }
         case 'resume': {
+          if (application) return failure('permission_denied')
           const wait = computeWait(state)
           if (wait && !waitAllowsWake(wait, at)) return failure('condition_unmet')
           if (wait && state.task.status === 'waiting_resource') return updated(store.applyEvent(ref, {

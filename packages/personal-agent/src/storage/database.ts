@@ -102,6 +102,22 @@ function writeQuarantineMarker(directory: string, marker: string): void {
   }
 }
 
+/** A single-user desktop reservation shared by every local profile. */
+export function reserveLocalDesktop(): (() => void) | undefined {
+  const uid = process.getuid?.()
+  if (uid === undefined) return undefined
+  const directory = `/tmp/dshpa-desktop-${uid}`
+  try {
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    if (!privateEntry(directory, 'directory')) return undefined
+    const lock = acquireWriter(join(directory, WRITER_LOCK_FILENAME))
+    return () => lock.close()
+  } catch (error) {
+    if (error instanceof StorageError && error.code === 'busy') return undefined
+    throw error
+  }
+}
+
 /** Open one synchronous store. The writer guard covers validation, migration, and quarantine. */
 export function openStorageDatabase(directory: string): StorageDatabase {
   const root = resolve(directory)
