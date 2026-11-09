@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { InboxArtifact, InboxPort, InboxRequest, InboxResponse, InboxSnapshot, InboxTask } from '../inbox/protocol.js'
 import type { MessageKey, Translate } from './copy.js'
+import { DesktopActivityCard, DesktopLaunch } from './desktop.js'
 import { ApprovalCard, requestId, TaskDetail, TaskStatus } from './task.js'
 import { Usage } from './usage.js'
 import { MobileDevices } from './mobile-devices.js'
@@ -61,8 +62,10 @@ function noticeFor(code: string): MessageKey {
     case 'not_found': return 'notice.notFound'
     case 'version_conflict':
     case 'stale_attempt':
+    case 'stale_lease':
     case 'action_changed': return 'notice.conflict'
     case 'capacity': return 'notice.capacity'
+    case 'resource_busy': return 'desktop.busy'
     case 'budget_exceeded':
     case 'context_budget_exceeded':
     case 'context_budget_unavailable':
@@ -420,6 +423,9 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
     {snapshot?.recoveryMode && <p className="dshpa-banner" role="status">
       {t(snapshot.recoveryMode === 'restore' ? 'notice.restore' : 'notice.recovery')}
     </p>}
+    {snapshot?.desktopActivities?.map(activity => <DesktopActivityCard key={activity.leaseId} activity={activity} t={t}
+      disabled={!writable || Boolean(snapshot.recoveryMode) || mutations.current.has(`desktop-control:${activity.leaseId}`)}
+      submit={request => { void mutate(`desktop-control:${activity.leaseId}`, request) }} viewTask={chooseTask} />)}
     {memory.notice && <p className="dshpa-banner" role="status">{t(memory.notice)}</p>}
     <div className="dshpa-columns">
       <section className="dshpa-today">
@@ -489,6 +495,10 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
         {task && writable && snapshot?.githubDraft?.projectId === task.projectId && <GitHubDraft
           key={`${connectionKey}:${task.id}`} task={task} t={t} port={port} readable={writable} writable={!snapshot.recoveryMode}
           current={() => connection.getSnapshot() === connectionKey} refresh={() => { void refresh() }} />}
+        {task && snapshot?.desktopTargets && <DesktopLaunch key={task.id} task={task} t={t}
+          targets={snapshot.desktopTargets} activities={snapshot.desktopActivities ?? []}
+          disabled={!writable || Boolean(snapshot.recoveryMode) || !snapshot.workerConfigured || mutations.current.has(`task:${task.id}`)}
+          submit={submitTask} />}
         {task ? <TaskDetail task={task} project={snapshot?.projects.find(project => project.id === task.projectId)}
           workerConfigured={snapshot?.workerConfigured === true && !snapshot.recoveryMode} t={t} writable={writable}
           canOpenSession={writable && snapshot?.sessions.some(session => session.id === task.sessionId) === true}

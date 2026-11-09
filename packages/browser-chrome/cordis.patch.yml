@@ -1,0 +1,6 @@
+- insert:
+    - id: browser-use
+      name: '@deepseek-ai/dsh-browser-use'
+    - id: dshpa-browser-chrome
+      name: '@mosbot-ai/dshpa-browser-chrome'
+      disabled: true

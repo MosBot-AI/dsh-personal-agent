@@ -1,3 +1,4 @@
+import type { DesktopActivity, DesktopTarget } from '../domain/model.js'
 import type { SkillRequestInput, SkillResponse } from '../context/skill-contract.js'
 import type { Delivery, TaskStatus } from '../domain/model.js'
 import type { MemoryActiveRecord, MemoryScope } from '@mosbot-ai/dshpa-plugin-api'
@@ -80,6 +81,8 @@ export interface InboxTask {
   readonly verifiedAt?: string
   readonly canAccept?: boolean
   readonly canResumeCompute?: boolean
+  readonly desktopApplication?: string
+  readonly canStartDesktop?: boolean
   readonly progress?: { readonly summary: string; readonly at: string }
   readonly prerequisites?: readonly { id: string; completed: boolean }[]
   readonly proposal?: { readonly cursor: string; readonly steps: readonly string[] }
@@ -163,6 +166,8 @@ export interface InboxSnapshot {
   readonly workerConfigured: boolean
   readonly mobileConfigured?: boolean
   readonly mobileReviewers?: readonly Pick<MobileDeviceSummary, 'deviceId' | 'label'>[]
+  readonly desktopTargets?: readonly DesktopTarget[]
+  readonly desktopActivities?: readonly DesktopActivity[]
   readonly memoryConfigured?: boolean
   readonly knowledgeConfigured?: boolean
   readonly githubRead?: { readonly projectId?: string }
@@ -190,6 +195,8 @@ export type InboxRequest =
   | { type: 'mobile_pair'; label: string }
   | { type: 'mobile_revoke'; deviceId: string }
   | { type: 'mobile_review'; requestId: string; expectedVersion: number; digest: string; deviceId: string | null }
+  | ({ type: 'desktop_start'; cursor: string; application: string } & TaskControl)
+  | { type: 'desktop_takeover' | 'desktop_release'; taskId: string; leaseId: string }
   | { type: 'knowledge_status' }
   | { type: 'knowledge_search'; rootId?: string; query: string; limit?: number }
   | { type: 'knowledge_read'; ref: KnowledgeSource['ref']; revision: string; offset?: number; maxBytes?: number }

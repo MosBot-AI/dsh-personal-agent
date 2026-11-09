@@ -36,6 +36,8 @@ import { computeLimitsSchema } from '../runtime/compute.js'
 import { createGpuQueue, gpuConfigSchema } from '../runtime/gpu-queue.js'
 import type { AttentionExternalRequest } from '../runtime/attention.js'
 import type { HostAdapter } from '../runtime/host-adapter.js'
+import { createDesktopControl, desktopConfigSchema, type DesktopControl } from '../runtime/desktop-control.js'
+import { createResourceLeases } from '../runtime/resource-leases.js'
 import { createRecovery } from '../runtime/recovery.js'
 import { createResidentOperations, residentConfigSchema, type ResidentOperations } from '../runtime/resident-operations.js'
 import { attachResidentWeb, type ResidentAppReady, type ResidentListener } from '../runtime/resident-web.js'
@@ -45,6 +47,7 @@ import { createRouter, type EventRouter } from '../runtime/router.js'
 import { createDshRoutingAssessor } from '../runtime/routing-model.js'
 import { createProactive, type ProactiveService } from '../runtime/proactive.js'
 import { createScheduleAdapter } from '../runtime/schedule-adapter.js'
+import { reserveLocalDesktop } from '../storage/database.js'
 import { StorageError } from '../storage/schema.js'
 import { openWorkStore, type WorkStore } from '../storage/store.js'
 import { INBOX_RPC_ENDPOINT, type InboxSession, type InboxUsage } from './protocol.js'
@@ -82,6 +85,7 @@ export const localInboxConfigSchema = z.strictObject({
   }).optional(),
   gpu: gpuConfigSchema.optional(),
   media: mediaServiceConfigSchema.optional(),
+  desktop: desktopConfigSchema.optional(),
   worker: z.strictObject({
     provider: nonEmptyTextSchema.max(256),
     model: nonEmptyTextSchema.max(256),
@@ -277,6 +281,8 @@ export function activateLocalInbox(
   let proactive: ProactiveService | undefined
   let media: MediaJobService | undefined
   let executor: WorkerExecutor | undefined
+  let desktop: DesktopControl | undefined
+  let removeDesktopGuard: (() => void) | undefined
   let resident: ResidentOperations | undefined
   let mobileHttp: ReturnType<typeof startMobileHttp> | undefined
   let draftRuntime: GitHubDraftRuntime | undefined
@@ -375,6 +381,35 @@ export function activateLocalInbox(
     const connector = github && createReadConnector({ binding: github.binding, projectId: github.projectId,
       transport: github.transport.kind === 'github' ? createGitHubReadTransport({ binding: github.binding })
         : createMcpReadTransport({ binding: github.binding, url: github.transport.url, expectedFingerprint: github.transport.fingerprint }) })
+    if (config.desktop) {
+      const tools = ctx.get('tools')
+      if (!worker || !tools) throw new Error('Desktop workflows require the local Worker and native tools services')
+      const controls = createDesktopControl({
+        store, identity, config: config.desktop,
+        leases: createResourceLeases({ reserve: target => target.kind === 'desktop' ? reserveLocalDesktop() : () => {} }),
+        native: () => {
+          const provider = ctx.get('computerUse') as { providerName?: string } | undefined
+          return provider?.providerName === 'dsh-cua' ? tools.executable('cua') : undefined
+        },
+        bindBrowser: (profile, agent, signal) => {
+          const chrome = ctx.get('dshpaBrowserChrome') as {
+            bind?: (owner: typeof agent, origin: string, signal: AbortSignal) => boolean
+          } | undefined
+          return chrome?.bind?.(agent, new URL(profile.startUrl).origin, signal) === true
+        },
+        nativeBrowser: (profile, name, execution) => {
+          const provider = ctx.get('browserUse') as { providerName?: string } | undefined
+          const chrome = ctx.get('dshpaBrowserChrome') as { origins?: readonly string[] } | undefined
+          return provider?.providerName === 'chrome-devtools-mcp' && execution.agent
+            && chrome?.origins?.includes(new URL(profile.startUrl).origin)
+            ? tools.executable(name, execution.agent) : undefined
+        },
+      })
+      desktop = controls
+      removeDesktopGuard = tools.guard(call =>
+        controls.allows(tools.executable(call.name, call.agent, call.toolSet)) && call.parent === undefined
+          ? undefined : 'This desktop deployment admits only owner-leased native tools.')
+    }
     if (worker) mkdirSync(config.workRoot, { recursive: true, mode: 0o700 })
     executor = worker ? host.createWorkerExecutor({
       store,
@@ -455,7 +490,7 @@ export function activateLocalInbox(
       mobileHttp = startMobileHttp(mobile, mobileDevices, store.mobileFeed(scope), mobileApprovals)
     }
     const service = createInboxService({
-      store, executor, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
+      store, executor, desktop, identity, actionGate, router: eventRouter, ...nativeSessions(ctx, context !== undefined),
       worker: worker && { presetId: 'local-model', cwd: config.workRoot, dataScope: worker.dataScope },
       routines: schedule && createRoutineInbox(store, schedule),
       resident, context, memory, knowledge, proactive,
@@ -555,23 +590,26 @@ export function activateLocalInbox(
         const detached = remove()
         try {
           eventRouter.close()
-          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close(), media?.close(), mobileClosed, drafts])
+          const [workersReleased, gpuReleased] = await Promise.all([executor?.close() ?? true, gpu.close(), schedule?.close(), operations, proactive?.close(), media?.close(), mobileClosed, drafts, desktop?.close()])
           if (!workersReleased || !gpuReleased) throw new Error('Inbox compute cleanup remains unverified')
         } finally {
           try { detachResident?.() } finally { await detached }
         }
         await startupRecovery
+        removeDesktopGuard?.()
         store.close()
       },
     })
   } catch (error) {
-    void draftRuntime?.close()
+    const draftsClosed = draftRuntime?.close()
+    const desktopClosed = desktop?.close()
     try {
       router?.close()
+      removeDesktopGuard?.()
     } finally {
       detachResident?.()
-      if (startup || schedules || resident || detachInbox || proactive || media || mobileHttp) {
-        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.(), proactive?.close(), media?.close(), mobileHttp?.close()])
+      if (startup || schedules || resident || detachInbox || proactive || media || mobileHttp || desktopClosed || draftsClosed) {
+        void Promise.allSettled([startup, schedules?.close(), resident?.close(), detachInbox?.(), proactive?.close(), media?.close(), mobileHttp?.close(), desktopClosed, draftsClosed])
           .then(() => store.close()).catch(() => undefined)
       }
       else store.close()

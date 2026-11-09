@@ -33,6 +33,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Reconcile native schedule wakes with versioned routine intent and show deduplicated local reminders and scoped task wakes in the inbox.
 - Add opt-in goal-bound proactive rules with replay, owner-reviewed staging, private briefs and granted local notices.
 - Add project-scoped Markdown skills with accepted examples, held-out evaluation, explicit version approval and rollback.
+- Add opt-in macOS accessibility workflows with exact application leases, owner takeover and explicit continuation in Today.
+- Add an optional isolated Chrome provider with explicit browser profile and tab leases, with a network allowlist bound to each task before browser launch.
 - Operate a single resident profile with local readiness, diagnostic watchdogs, warm schedule recovery, online backup retention, and metadata audit export.
 - Add versioned capability plugin contracts, a lifecycle registry, policy-wrapped consumers, and independently loadable memory and mock media examples.
 - Add versioned model-routing contracts and a native DSH boundary for pinned, budget-gated inference attempts.

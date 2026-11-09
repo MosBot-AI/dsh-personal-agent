@@ -142,6 +142,44 @@ describe('native Inbox client', () => {
     await click(button(node, 'Publish approved test draft'))
     expect(port.mock.calls.map(([request]) => request)).toContainEqual({ type: 'github_draft_dispatch', taskId: work.id,
       operationId, expectedVersion: 2 })
+    })
+
+  it('starts desktop work from an explicit app selection and exposes takeover outside the selected task', async () => {
+    const application = 'com.apple.TextEdit'
+    const leaseId = '67f19c5a-b331-47a9-aad0-f8fdb871cb01'
+    let work = task('desktop', { canStartDesktop: true })
+    let activity: NonNullable<InboxSnapshot['desktopActivities']>[number] | undefined
+    const other = task('background')
+    const port = vi.fn<InboxPort>(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: snapshot({
+        desktopTargets: [{ application }], desktopActivities: activity ? [activity] : [], tasks: [work, other],
+      }) }
+      if (request.type === 'desktop_start') {
+        work = { ...work, status: 'running', runtime: 'active', canStartDesktop: false, desktopApplication: application }
+        activity = { taskId: work.id, application, leaseId, phase: 'automation', inFlight: true }
+      } else if (request.type === 'desktop_takeover' && activity) {
+        activity = { ...activity, phase: 'human', inFlight: false }
+        work = { ...work, version: 4, status: 'waiting_environment', runtime: 'inactive', canStartDesktop: true }
+      } else throw new Error(`Unexpected ${request.type}`)
+      return { ok: true, kind: 'updated', taskId: work.id }
+    })
+    const { node } = await mount(port)
+    await click(taskButton(node, work.outcome))
+    expect(button(node, 'Authorize and start desktop work').disabled).toBe(true)
+    await fill(field(node, 'Approved application'), application)
+    await click(button(node, 'Authorize and start desktop work'))
+    expect(port.mock.calls.map(([request]) => request)).toContainEqual({
+      type: 'desktop_start', taskId: work.id, expectedVersion: 1, cursor: expect.any(String), application,
+    })
+    await click(taskButton(node, other.outcome))
+    await click(button(node, 'Take over desktop'))
+    expect(port.mock.calls.map(([request]) => request)).toContainEqual({ type: 'desktop_takeover', taskId: work.id, leaseId })
+    expect(node.textContent).toContain('You have desktop control')
+    await click(taskButton(node, work.outcome))
+    await click(button(node, 'Continue with a new desktop lease'))
+    expect(port.mock.calls.map(([request]) => request)).toContainEqual({
+      type: 'desktop_start', taskId: work.id, expectedVersion: 4, cursor: expect.any(String), application,
+    })
   })
 
   it('keeps GitHub pages on their exact read scope and renders issue text literally', async () => {

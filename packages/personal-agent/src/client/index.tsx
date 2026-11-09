@@ -1,3 +1,4 @@
+import { desktopActivitySchema, desktopTargetSchema } from '../domain/model.js'
 import { skillResponseSchema } from '../context/skill-contract.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -250,6 +251,10 @@ function isInboxResponse(value: unknown): value is InboxResponse {
       && (snapshot.mobileReviewers === undefined || (Array.isArray(snapshot.mobileReviewers) && snapshot.mobileReviewers.length <= 16
         && snapshot.mobileReviewers.every(device => isRecord(device) && typeof device.deviceId === 'string' && typeof device.label === 'string')))
       && (snapshot.mobileConfigured === undefined || typeof snapshot.mobileConfigured === 'boolean')
+      && (snapshot.desktopTargets === undefined || (Array.isArray(snapshot.desktopTargets)
+        && snapshot.desktopTargets.length <= 24 && snapshot.desktopTargets.every(value => desktopTargetSchema.safeParse(value).success)))
+      && (snapshot.desktopActivities === undefined || (Array.isArray(snapshot.desktopActivities)
+        && snapshot.desktopActivities.length <= 9 && snapshot.desktopActivities.every(value => desktopActivitySchema.safeParse(value).success)))
       && (snapshot.memoryConfigured === undefined || typeof snapshot.memoryConfigured === 'boolean')
       && (snapshot.knowledgeConfigured === undefined || typeof snapshot.knowledgeConfigured === 'boolean')
       && (snapshot.proactiveConfigured === undefined || typeof snapshot.proactiveConfigured === 'boolean')

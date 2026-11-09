@@ -4,6 +4,7 @@ import {
   attemptIdSchema,
   attemptSchema,
   attemptScopeSchema,
+  desktopCapabilityPrefix,
   generationSchema,
   mandateRefSchema,
   nonEmptyTextSchema,
@@ -240,6 +241,9 @@ function startWork(state: WorkState, event: Extract<WorkEvent, { type: 'start' |
       || history.some((cursor, index) => worker.inputHistory[index] !== cursor)
       || worker.inputHistory.at(-1) !== worker.inputCursor) return reject('invalid_input')
   }
+  const previousCapabilities = attempt.scope?.capabilities ?? []
+  if (previousCapabilities.some(label => label.startsWith(desktopCapabilityPrefix))
+    && !sameLabels(previousCapabilities, event.scope?.capabilities ?? [])) return reject('permission_denied')
   if (attempt.worker && (!worker || event.sessionId !== attempt.sessionId
     || worker.presetId !== attempt.worker.presetId || worker.cwd !== attempt.worker.cwd
     || worker.provider !== attempt.worker.provider || worker.model !== attempt.worker.model)) return reject('invalid_input')

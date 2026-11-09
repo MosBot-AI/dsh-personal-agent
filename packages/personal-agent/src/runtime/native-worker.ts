@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-token-meter'
 import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
-import { freezeMessage, isAgentLoopRequest, LlmError, MessageId } from '@deepseek-ai/dsh-llm'
+import { freezeMessage, isAgentLoopRequest, LlmError, MessageId, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId as nativeSessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { WORKER_INPUT_LIMIT, type SessionId } from '../domain/model.js'
 import { createPrivateWorkers } from '../policy/private-worker.js'
@@ -10,6 +10,8 @@ import {
   computeCooldown, computeDenied, meteredStream, providerComputeIssue, recordProviderCooldown,
   type ComputeIssue, type NativeWorkerCompute,
 } from './compute.js'
+import type { DesktopGrant } from './desktop-control.js'
+import type { DesktopWait } from './desktop.js'
 import { workerMessageDigest } from './recovery-session.js'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -37,6 +39,7 @@ export interface NativeWorker {
   whenIdle(): Promise<void>
   readReport(): string | undefined
   readComputeIssue?(): ComputeIssue | undefined
+  probeDesktop?(): Promise<DesktopWait | undefined>
   stop(): Promise<boolean>
 }
 
@@ -56,6 +59,7 @@ export interface NativeWorkerRuntime {
     readonly authorizeContext?: () => boolean
     readonly contextWindow?: () => number | undefined
     readonly compute?: NativeWorkerCompute
+    readonly desktop?: DesktopGrant
     readonly onObservation?: (observation: WorkerObservation) => void
   }): Promise<NativeWorker>
 }
@@ -292,6 +296,8 @@ function installComputeGate(
   compute: NativeWorkerCompute, active: () => boolean, onIssue: (issue?: ComputeIssue) => void,
 ) {
   const { limits, budget } = compute
+  const tool = input.desktop?.tool
+  const allowedTool = tool && { name: tool.name, description: tool.description, parameters: tool.parameters }
   let deadline: NodeJS.Timeout | undefined
   let deadlineAt = 0
   let step: { turn: number; unattended: boolean; claimed: boolean } | undefined
@@ -301,6 +307,7 @@ function installComputeGate(
     step = undefined
   }
   const available = () => active() && performance.now() < deadlineAt
+    && (!input.desktop || (!input.desktop.signal.aborted && !input.desktop.waiting()))
   const deny = (code: string) => (async function* () {
     onIssue({ code })
     yield computeDenied(code)
@@ -321,13 +328,13 @@ function installComputeGate(
       const estimate = request.messages.reduce((total, message) => total + meter.estimateMessage(message.id !== undefined ? message : {
         role: 'user', content: message.content, id: MessageId('dshpa-context-measurement'),
         source: { kind: 'dshpa-work-input', cursor: 'measurement' },
-      }), Buffer.byteLength(request.system ?? '') + 64)
+      }), Buffer.byteLength(request.system ?? '') + (allowedTool ? Buffer.byteLength(JSON.stringify(allowedTool)) : 0) + 64)
       if (!Number.isSafeInteger(estimate) || estimate + limits.maxOutputTokens > window) return deny('context_budget_exceeded')
     }
     const scope = compute.scope(step.unattended)
     if (!scope) return deny('permission_denied')
     step.claimed = true
-    return meteredStream({ budget, request, limits, scope, onIssue, current: available,
+    return meteredStream({ budget, request, limits, scope, onIssue, current: available, allowedTool,
       next: () => authorized(input.authorizeContext) ? next() : deny('permission_denied') })
   }, { prepend: true }), 'dshpa: metered native requests')
   agentCtx.on('session/event', (session, event) => {
@@ -383,6 +390,7 @@ export function createNativeWorkerRuntime(
       let issue: ComputeIssue | undefined
       let sends = 0
       let admittedInput = false
+      let desktopReady = false
       const minted = new Map<string, MintedInput>()
       const sent = new Set<string>()
       const digestKey = input.onObservation ? randomBytes(32) : undefined
@@ -411,6 +419,7 @@ export function createNativeWorkerRuntime(
           }
         }
         checkLaunch()
+        input.desktop?.bind?.(agent)
         const admitCompute = input.compute && installComputeGate(
           ctx, agentCtx, agent, input, input.compute, active, setIssue,
         )
@@ -439,6 +448,7 @@ export function createNativeWorkerRuntime(
             }
           }
           const mayDisclose = () => contextCurrent() && inputs.every(message => authorized(message.authorize))
+            && (!input.desktop || (desktopReady && !input.desktop.signal.aborted && !input.desktop.waiting()))
           if (!owned || (inputs.length === 0 && !admittedInput) || !active()
             || !matchesRoute(input, modelSelection) || !mayDisclose()) {
             return { kind: 'reject' }
@@ -464,7 +474,7 @@ export function createNativeWorkerRuntime(
           }
         })
         return { commit: checkLaunch }
-      })
+      }, input.desktop && [input.desktop.tool])
       const id = nativeSessionId(input.sessionId)
       const agentOptions = { provider: input.provider, model: input.model, maxTokens: input.compute?.limits.maxOutputTokens }
       const handle = input.resume
@@ -510,7 +520,36 @@ export function createNativeWorkerRuntime(
         }
       }
 
+      async function probeDesktop(): Promise<DesktopWait | undefined> {
+        const desktop = input.desktop
+        if (!desktop) return 'driver_unavailable'
+        assertActive()
+        async function check(arguments_: unknown): Promise<boolean> {
+          if (!desktop || desktop.signal.aborted) return false
+          const batch = await ctx.get('tools')?.execute({
+            agent,
+            calls: [{ type: 'tool-call', id: ToolCallId(`dshpa-probe-${randomBytes(16).toString('hex')}`),
+              name: desktop.tool.name, arguments: JSON.stringify(arguments_) }],
+            signal: AbortSignal.any([input.signal, desktop.signal, AbortSignal.timeout(12_000)]),
+          })
+          const result = batch?.results[0]?.result
+          const value = result?.isError === false ? result.value : undefined
+          return value !== null && typeof value === 'object' && 'ok' in value && value.ok === true
+            && !desktop.signal.aborted && desktop.waiting() === undefined
+        }
+        try {
+          desktopReady = true
+          for (const request of desktop.probes(input.resume)) {
+            if (await check(request)) continue
+            desktopReady = false
+            break
+          }
+        } catch { desktopReady = false }
+        return desktopReady ? undefined : desktop.waiting() ?? 'driver_unavailable'
+      }
+
       return Object.freeze<NativeWorker>({
+        probeDesktop: input.desktop && probeDesktop,
         followup: input => deliver('followup', input),
         steer: input => deliver('steer', input),
         flush: () => flushSession(agent.session),
