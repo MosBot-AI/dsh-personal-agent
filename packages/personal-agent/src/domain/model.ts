@@ -217,6 +217,26 @@ export const mandateRefSchema = z.strictObject({
   policyVersion: nonEmptyTextSchema,
 }).readonly()
 
+export const desktopApplicationSchema = z.string().regex(/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u).max(256)
+export const desktopTargetSchema = z.strictObject({ application: desktopApplicationSchema, startUrl: z.url().max(2048).optional() })
+export type DesktopTarget = z.infer<typeof desktopTargetSchema>
+export const desktopActivitySchema = desktopTargetSchema.extend({
+  taskId: z.string().min(1), leaseId: z.uuid(),
+  phase: z.enum(['automation', 'human', 'draining']), inFlight: z.boolean(),
+})
+export type DesktopActivity = z.infer<typeof desktopActivitySchema>
+
+export const desktopCapabilityPrefix = 'dshpa-desktop:'
+export const desktopWaitPrefix = 'dshpa-desktop-wait:'
+
+export function desktopApplication(scope?: { readonly capabilities: readonly string[] }): string | undefined {
+  const capability = scope?.capabilities[0]
+  if (scope?.capabilities.length === 1 && capability?.startsWith(desktopCapabilityPrefix)) {
+    return desktopApplicationSchema.safeParse(capability.slice(desktopCapabilityPrefix.length)).data
+  }
+  return undefined
+}
+
 export const attemptScopeSchema = z.strictObject({ capabilities: textListSchema, dataScope: textListSchema })
 export const workerCursorSchema = z.string().max(256).regex(/^[^\s\p{Cc}]+$/u)
 export const WORKER_INPUT_LIMIT = 64

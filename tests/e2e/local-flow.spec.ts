@@ -21,6 +21,7 @@ import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/dat
 import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/local-flow-probe.mjs', import.meta.url))
+const desktopProbe = fileURLToPath(new URL('./fixtures/desktop-flow-probe.mjs', import.meta.url))
 const contextProbe = fileURLToPath(new URL('./fixtures/context-flow-probe.mjs', import.meta.url))
 const memoryProbe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
 const projectProbe = fileURLToPath(new URL('./fixtures/project-flow-probe.mjs', import.meta.url))
@@ -53,6 +54,97 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it('parks unavailable desktop work, fences input on takeover, and continues on a fresh lease', async () => {
+    const host = await openWebHost(desktopProbe, { patch: [
+      '- id: dshpa', '  config:', '    inbox:',
+      "      storageDirectory: !!js dshHomePath('desktop-inbox')",
+      '      workRoot: !!js process.cwd()', '      worker:', '        provider: pa031-desktop-fixture',
+      '        model: desktop-worker', '        concurrency: 2', '        unmetered: true',
+      '      desktop:', '        applications: [com.apple.TextEdit]',
+      '        browserProfiles:', '          - id: unavailable', '            startUrl: https://unavailable.example.test/',
+    ] })
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const reply = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(reply.status === 200 && reply.result?.ok, JSON.stringify(reply))
+      return reply.result.value
+    }
+    async function snapshot() {
+      const reply = await inbox({ type: 'snapshot' })
+      assert.ok(reply.ok && reply.kind === 'snapshot')
+      return reply.snapshot
+    }
+    const projectId = updated(await inbox({ type: 'create_project', commandId: 'pa031-project',
+      title: 'Desktop', purpose: 'Verify desktop lease handling.' })).projectId
+    assert.ok(projectId)
+    const task = async (name: string) => {
+      const id = updated(await inbox({ type: 'create_task', projectId, commandId: name,
+        sessionId: 'pa031-primary', outcome: name })).taskId
+      assert.ok(id)
+      return id
+    }
+    const taskId = await task('pa031-interactive')
+    const backgroundId = await task('pa031-background-task')
+    async function read(id = taskId) {
+      const row = (await snapshot()).tasks.find(item => item.id === id)
+      assert.ok(row)
+      return row
+    }
+    const unavailableBrowser = await task('pa031-unavailable-browser')
+    const browserTarget = (await snapshot()).desktopTargets?.find(target => target.startUrl === 'https://unavailable.example.test/')
+    assert.ok(browserTarget)
+    updated(await inbox({ type: 'desktop_start', taskId: unavailableBrowser, expectedVersion: (await read(unavailableBrowser)).version,
+      cursor: 'pa031-browser-missing', application: browserTarget.application }))
+    const browserWait = await waitForTask(() => read(unavailableBrowser), row => row.status === 'waiting_environment' && row.runtime === 'inactive',
+      'released missing browser provider wait', host.diagnostics)
+    expect(browserWait.wait?.referenceId).toBe('dshpa-desktop-wait:driver_unavailable')
+    const application = 'com.apple.TextEdit'
+    const start = async (cursor: string, selected = application) => inbox({ type: 'desktop_start', taskId,
+      expectedVersion: (await read()).version, cursor, application: selected })
+    expect(await start('pa031-denied', 'com.apple.Terminal')).toEqual({ ok: false, code: 'permission_denied' })
+    updated(await start('pa031-missing'))
+    const parked = await waitForTask(read, row => row.status === 'waiting_environment' && row.runtime === 'inactive',
+      'released permission wait', host.diagnostics)
+    expect(parked, host.diagnostics()).toMatchObject({ desktopApplication: application, canStartDesktop: true,
+      wait: { referenceId: 'dshpa-desktop-wait:permission_required' } })
+    expect((await snapshot()).desktopActivities?.[0]).toBeUndefined()
+    expect(await inbox({ type: 'start', taskId, expectedVersion: parked.version, cursor: 'pa031-bypass' }))
+      .toEqual({ ok: false, code: 'invalid_transition' })
+    updated(await start('pa031-click'))
+    let activity = (await snapshot()).desktopActivities?.[0]
+    const deadline = performance.now() + 5_000
+    while (!activity?.inFlight && performance.now() < deadline) {
+      await delay(25)
+      activity = (await snapshot()).desktopActivities?.[0]
+    }
+    assert.ok(activity?.inFlight, `${JSON.stringify(await read())}\n${host.diagnostics()}`)
+    const background = await read(backgroundId)
+    updated(await inbox({ type: 'start', taskId: backgroundId, expectedVersion: background.version, cursor: 'pa031-background' }))
+    const takeover = { type: 'desktop_takeover', taskId, leaseId: activity.leaseId } as const
+    expect(await host.rpc(INBOX_RPC_ENDPOINT, takeover, await host.exchange(true))).toMatchObject({ status: 403 })
+    expect(await inbox({ ...takeover, leaseId: randomUUID() })).toEqual({ ok: false, code: 'stale_lease' })
+    updated(await inbox(takeover))
+    expect((await snapshot()).desktopActivities?.[0]).toMatchObject({ phase: 'human', leaseId: activity.leaseId })
+    const taken = await waitForTask(read, row => row.status === 'waiting_environment' && row.runtime === 'inactive',
+      'released takeover wait', host.diagnostics)
+    expect(taken.wait?.referenceId).toBe('dshpa-desktop-wait:desktop_taken_over')
+    await waitForTask(() => read(backgroundId), row => row.status === 'verifying' && row.runtime === 'inactive',
+      'background result during desktop hold', host.diagnostics)
+    updated(await start('pa031-resume'))
+    const candidate = await waitForTask(read, row => row.status === 'verifying' && row.runtime === 'inactive',
+      'fresh observed desktop result', host.diagnostics)
+    expect(await inbox(takeover)).toEqual({ ok: false, code: 'stale_lease' })
+    updated(await inbox({ type: 'accept_result', taskId, expectedVersion: candidate.version }))
+    expect(await read()).toMatchObject({ status: 'completed', artifacts: [expect.objectContaining({ mediaType: 'text/markdown' })] })
+    const db = new DatabaseSync(join(host.root, 'home', 'desktop-inbox', DATABASE_FILENAME), { readOnly: true })
+    try {
+      for (const cursor of ['pa031-missing', 'pa031-browser-missing']) {
+        expect(db.prepare('SELECT status FROM worker_inputs WHERE cursor = ?').get(cursor)?.status).toBe('not_delivered')
+      }
+    }
+    finally { db.close() }
+  }, 30_000)
+
   it('replays a scoped source and records a budgeted native observation without surfacing a notice', async () => {
     const host = await openWebHost(proactiveProbe)
     const cookie = await host.exchange()

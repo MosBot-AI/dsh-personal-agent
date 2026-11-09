@@ -58,6 +58,11 @@ jobs:
             "$DSHPA_CHROME_PATH" --version
           fi
           dbus-run-session -- npm exec --yes --package=pnpm@11.28.5 -- pnpm test:mobile
+      - name: Verify task browser origin isolation and takeover
+        run: |
+          export DSHPA_TEST_CHROME="$(command -v google-chrome)"
+          "$DSHPA_TEST_CHROME" --version
+          dbus-run-session -- npm exec --yes --package=pnpm@11.28.5 -- pnpm exec vitest run tests/e2e/browser-live.spec.ts tests/e2e/browser-multiorigin.spec.ts tests/e2e/cross-pr.spec.ts
       - name: Verify native media recovery with a simulated provider
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:media-host
       - name: Verify Linux headless resident profile

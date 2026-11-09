@@ -26,6 +26,7 @@ dshpa 是基于 DeepSeek Harness 的个人智能体项目，目标是常驻用�
 已评审技能的证据涵盖已验收样例、留出评测、确切版本启用、复用及回滚。[PA-020 证据](docs/evidence/PA-020-zh.md)
 [调度证据](docs/evidence/PA-018-zh.md)覆盖例行任务意图、原生唤醒对账，以及去重后的提醒和任务唤醒。
 [常驻宿主证据](docs/evidence/PA-021-zh.md)覆盖生命周期、诊断、在线备份和恢复。
+桌面和浏览器证据覆盖应用与标签页租约、原生 Chrome 验证及待验收的 macOS 输入。[PA-031 证据](docs/evidence/PA-031-zh.md)
 [能力插件证据](docs/evidence/PA-038-zh.md)覆盖带版本注册、限定范围的消费者和独立免密钥示例。
 
 原生路由边界证据覆盖固定请求选择、重试保持选择及经预算准入的推理 Session。[PA-040 证据](docs/evidence/PA-040-zh.md)
@@ -113,6 +114,41 @@ mobile:
 在已认证的本机 **待办** 面板中打开 **移动访问**，给设备命名并生成配对码。在手机上打开配置的 HTTPS 源地址，五分钟内输入配对码。配对的浏览器可以查看已关联会话的任务，断线后可以重新获取更新。在本机面板选择 **撤销** 可终止对应设备的访问。配对会生成有效期三十天的安全浏览器凭据，恢复 WorkStore 备份会清除旧移动凭据。移动页面提供应用清单，供支持的浏览器添加到主屏幕。
 
 若要在手机上审批精确动作，请在本机 **待办** 的审批卡片选择已注册设备，并选择 **移交到设备**。审批移交期间只有该设备可以答复。手机显示账户、资源、披露范围、摘要及完整载荷。选择 **撤回审批** 可把未决审批交回原本机客户端。批准会为现有动作门禁记录一次性授权，执行由可信协调器负责。 [验证证据](docs/evidence/PA-022-zh.md)
+### 运行经授权的 macOS 桌面任务
+
+在本地 Web Profile 中安装固定版本的 DSH 电脑操作服务和 macOS 提供者。
+
+```sh
+pnpm exec dsh plugin --profile dshpa-web add @deepseek-ai/dsh-computer-use@0.2.2-rc.1 @deepseek-ai/dsh-experimental-cua-macos@0.2.2-rc.1
+```
+
+在 Profile 覆盖文件中，把以下提供者和现有 DSH 基础服务一同挂载。基础 Profile 提供本地子进程服务。
+
+```yaml
+- insert:
+    - id: computer-use
+      name: '@deepseek-ai/dsh-computer-use'
+    - id: desktop-cua
+      name: '@deepseek-ai/dsh-experimental-cua-macos'
+      config:
+        agentPreset: false
+```
+
+启用 Worker，并在 `config.inbox` 中添加精确的应用白名单。使用专用 Profile，只批准适合已配置模型和桌面范围的应用。
+
+```yaml
+desktop:
+  applications: [com.apple.TextEdit]
+  leaseMs: 300000
+```
+
+在**今日**选择待执行任务和应用，然后点击**授权并开始桌面工作**。宿主在调用模型前检查原生驱动、解锁状态和辅助功能权限。DSH 执行应用授权检查。Worker 可以读取所选应用的辅助功能状态，并基于新观察执行 AX 点击或写入值。读取的状态可进入已配置模型的上下文。
+
+**接管桌面**会立即阻止新的自动化输入。已经发出的操作收尾后，原生 Worker 释放计算槽位。**使用新租约继续桌面工作**会取得新授权，并要求重新观察。每位本地用户的共享保留会在不同 Profile 之间串行化桌面工作流。锁屏、缺少权限或驱动不可用时，任务进入环境等待。桌面部署只允许使用获租约的模型工具。操作系统沙箱需要另行配置能够强制隔离的执行后端。
+
+### 运行隔离浏览器任务
+
+可选 Chrome Bundle 为任务提供受租约保护的浏览器 Profile 和标签页。今日会在启动前显示已批准的起始 URL。模型可在所分配的来源内观察和操作隔离标签页。[Chrome 提供者配置](packages/browser-chrome/README-zh.md)
 
 ### 路由可信适配器的事件
 

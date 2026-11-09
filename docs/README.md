@@ -38,10 +38,12 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Local knowledge evidence](evidence/PA-015.md) | Explicit roots, incremental search, and revision-checked sources |
 | [GitHub read connector evidence](evidence/PA-016.md) | Live account and repository binding, scoped cursors, and MCP revalidation |
 | [Reviewed draft evidence](evidence/PA-017.md) | Exact approval and readback, with live test acceptance pending |
+| [Draft/browser integration evidence](evidence/PR-063-066.md) | Concurrent same-host draft and browser acceptance, with live gates pending |
 | [Schedule evidence](evidence/PA-018.md) | Versioned routine intent, native wake reconciliation, and logical occurrences |
 | [Proactive work evidence](evidence/PA-019.md) | Replay, owner-reviewed staging, private briefs, and local notices |
 | [Reviewed skill evidence](evidence/PA-020.md) | Accepted examples, held-out evaluation, explicit activation, and rollback |
 | [Resident host evidence](evidence/PA-021.md) | Startup and shutdown, health, provider waits, backup and restore |
+| [Desktop and browser lease evidence](evidence/PA-031.md) | Application and tab leases, native browser verification, and pending macOS input acceptance |
 | [Capability plugin evidence](evidence/PA-038.md) | Public API, lifecycle registry, policy consumers and local examples |
 | [Local media execution evidence](evidence/PA-033.md) | Durable jobs, scoped cancellation, and ComfyUI fault recovery |
 | [Native routing boundary evidence](evidence/PA-040.md) | Versioned contracts, DSH selection, retries, and new request series |

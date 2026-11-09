@@ -1,4 +1,4 @@
-import { contentHasFile, contentHasImage, LlmError, type GenerateOptions, type LlmFailure, type StreamChunk, type TokenUsage } from '@deepseek-ai/dsh-llm'
+import { contentHasFile, contentHasImage, LlmError, type GenerateOptions, type LlmFailure, type StreamChunk, type TokenUsage, type ToolSchema } from '@deepseek-ai/dsh-llm'
 import { z } from 'zod'
 import type { BudgetRequest, BudgetService } from './budget.js'
 
@@ -45,11 +45,15 @@ const FRAMING_BYTES_PER_MESSAGE = 64
 export function conservativeRequestBounds(
   request: GenerateOptions,
   limits: ComputeLimits,
+  allowedTool?: ToolSchema,
 ): { upperInputTokens: number; upperOutputTokens: number } | undefined {
   const output = request.maxTokens
+  const tools = request.tools ?? []
+  const schema = tools.length === 0 ? '' : JSON.stringify(tools[0])
   if (typeof output !== 'number' || !Number.isSafeInteger(output) || output < 1
-    || output > limits.maxOutputTokens || (request.tools?.length ?? 0) > 0) return undefined
-  let bytes = Buffer.byteLength(request.system ?? '') + FRAMING_BYTES_PER_MESSAGE
+    || output > limits.maxOutputTokens || tools.length > 1
+    || (tools.length === 1 && (allowedTool === undefined || schema !== JSON.stringify(allowedTool)))) return undefined
+  let bytes = Buffer.byteLength(request.system ?? '') + Buffer.byteLength(schema) + FRAMING_BYTES_PER_MESSAGE
   for (const message of request.messages) {
     if (contentHasFile(message.content) || contentHasImage(message.content)) return undefined
     bytes += Buffer.byteLength(JSON.stringify(message)) + FRAMING_BYTES_PER_MESSAGE
@@ -84,6 +88,7 @@ interface MeteredStream {
   readonly next: () => AsyncIterable<StreamChunk>
   readonly onIssue: (issue: ComputeIssue) => void
   readonly current?: () => boolean
+  readonly allowedTool?: ToolSchema
 }
 
 const DEFAULT_PROVIDER_COOLDOWN_MS = 60_000
@@ -138,10 +143,10 @@ export function recordProviderCooldown(
 
 /** The sole next() call is downstream of the synchronous durable claim. */
 export async function* meteredStream({
-  budget, request, limits, scope, next, onIssue, current,
+  budget, request, limits, scope, next, onIssue, current, allowedTool,
 }: MeteredStream): AsyncIterable<StreamChunk> {
   const allowed = () => request.signal?.aborted !== true && (current === undefined || current() === true)
-  const bounds = conservativeRequestBounds(request, limits)
+  const bounds = conservativeRequestBounds(request, limits, allowedTool)
   if (!bounds || !allowed()) {
     onIssue({ code: 'compute_limit' })
     yield computeDenied('compute_limit')

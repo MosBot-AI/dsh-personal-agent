@@ -1,9 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentOptions, AgentSetup, CreateAgentOptions, ResumeAgentOptions } from '@deepseek-ai/dsh-agent'
-import type { ToolsService } from '@deepseek-ai/dsh-tools'
-import { executeToolBatch, ToolExecutionPipeline } from '@deepseek-ai/dsh-tools/pipeline'
-
-const DENIAL = 'Tools are disabled for private workers'
+import type { ToolDefinition, ToolsService } from '@deepseek-ai/dsh-tools'
+import { installLocalExecutor } from './local-executor.js'
 
 export interface PrivateWorkerCreateOptions extends Pick<CreateAgentOptions, 'sessionId' | 'agentOptions' | 'signal'> {
   readonly meta?: Pick<NonNullable<CreateAgentOptions['meta']>, 'cwd'>
@@ -28,21 +26,6 @@ function modelOptions(options: AgentOptions | undefined): AgentOptions | undefin
   return { provider, model, reasoningEffort, maxTokens }
 }
 
-function installPrivatePolicy(ctx: Context): void {
-  const tools = requireTools(ctx)
-  tools.restrict({ allow: [] })
-  tools.guard(() => DENIAL)
-  ctx.on('tools/pre-execute', async () => ({ kind: 'deny', reason: DENIAL }), { prepend: true })
-
-  // The native batch still settles and journals model calls. Never resolve
-  // registered definitions or a preset executor's reserved code transport.
-  const pipeline = new ToolExecutionPipeline(ctx, { get: () => undefined })
-  tools.setExecutor({
-    describe: () => ({ schemas: [] }),
-    execute: input => executeToolBatch(input, pipeline, () => 1),
-  })
-}
-
 /**
  * Trusted coordinator entry point. Bind resume IDs to this work and check
  * model disclosure authority, including any recorded model choice on resume.
@@ -50,9 +33,10 @@ function installPrivatePolicy(ctx: Context): void {
 export function createPrivateWorkers(
   ctx: Context,
   prepare?: AgentSetup,
+  approvedTools?: readonly ToolDefinition[],
 ): Readonly<PrivateWorkers> {
   function setup(agentCtx: Context, agent: Agent) {
-    installPrivatePolicy(agentCtx)
+    installLocalExecutor(agentCtx, agent, approvedTools)
     return prepare?.(agentCtx, agent)
   }
   return Object.freeze<PrivateWorkers>({

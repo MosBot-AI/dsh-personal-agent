@@ -26,6 +26,7 @@ The [proactive evidence](docs/evidence/PA-019.md) covers rule replay, staged rev
 The reviewed skills evidence covers accepted examples, held-out evaluation, exact activation, reuse and rollback. [PA-020 evidence](docs/evidence/PA-020.md)
 The [schedule evidence](docs/evidence/PA-018.md) covers routine intent, native wake reconciliation, and deduplicated reminders and task wakes.
 The [resident host evidence](docs/evidence/PA-021.md) covers lifecycle, diagnostics, online backups, and restore.
+The desktop and browser evidence covers application and tab leases, native Chrome verification and pending macOS input acceptance. [PA-031 evidence](docs/evidence/PA-031.md)
 The [capability plugin evidence](docs/evidence/PA-038.md) covers versioned registration, scoped consumers, and independent keyless examples.
 
 The native routing boundary evidence covers fixed request selection, retry pinning, and budget-gated inference Sessions. [PA-040 evidence](docs/evidence/PA-040.md)
@@ -113,6 +114,41 @@ Use a dedicated HTTPS origin on your reverse proxy and forward it to `http://127
 In the authenticated local **Today** panel, open **Mobile access**, name the device, and create a pairing code. Open the configured HTTPS origin on the phone and enter the code within five minutes. The paired browser can view conversation-linked tasks and reconnect to their updates. Use **Revoke** in the local panel to terminate that device's access. Pairing creates a 30-day secure browser credential, and restoring a WorkStore backup clears previous mobile credentials. The mobile page provides an app manifest for browsers that support home-screen installation.
 
 To review an exact action on a phone, select the enrolled device on its local **Today** approval card and choose **Send review to device**. Only that device can respond while the review is assigned. The phone shows the account, resource, disclosure scope, digest and exact payload. **Recall review** returns a pending decision to the original local client. Approving records a one-use grant for the existing action gate. It leaves execution to the trusted coordinator. [Verification evidence](docs/evidence/PA-022.md)
+### Run an authorized macOS desktop task
+
+In the local Web profile, install the pinned DSH Computer Use service and macOS provider.
+
+```sh
+pnpm exec dsh plugin --profile dshpa-web add @deepseek-ai/dsh-computer-use@0.2.2-rc.1 @deepseek-ai/dsh-experimental-cua-macos@0.2.2-rc.1
+```
+
+Mount the providers in the profile overlay beside the existing DSH base services. The base profile supplies the local subprocess service.
+
+```yaml
+- insert:
+    - id: computer-use
+      name: '@deepseek-ai/dsh-computer-use'
+    - id: desktop-cua
+      name: '@deepseek-ai/dsh-experimental-cua-macos'
+      config:
+        agentPreset: false
+```
+
+Enable a Worker and add an exact application allowlist to `config.inbox`. Use a dedicated profile and approve only applications suitable for the configured model and desktop scope.
+
+```yaml
+desktop:
+  applications: [com.apple.TextEdit]
+  leaseMs: 300000
+```
+
+In **Today**, choose a queued task and application, then select **Authorize and start desktop work**. The host checks the native driver and unlocked Accessibility access before spending a model call. DSH applies its application consent. The Worker can read the selected application’s accessibility state and perform AX click or value updates against a fresh observation. The selected state can enter the configured model’s context.
+
+**Take over desktop** fences new automated input immediately. The native Worker releases its compute slot after started operations settle. **Continue with a new desktop lease** obtains a new grant and requires fresh observations. The local per-user reservation serializes desktop workflows across profiles. A lock, missing permissions, or an unavailable driver puts the task in an environment wait. The desktop deployment admits only its leased model tool. OS sandboxing requires a separate execution backend with an enforced isolation boundary.
+
+### Run an isolated browser task
+
+The optional Chrome bundle gives a task a leased browser profile and tab. Today shows the approved starting URL before launch. The model can observe and operate the isolated tab within its assigned origin. [Chrome provider setup](packages/browser-chrome/README.md)
 
 ### Route events from trusted adapters
 
