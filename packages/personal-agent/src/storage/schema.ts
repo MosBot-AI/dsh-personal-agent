@@ -25,9 +25,10 @@ import { migration012 } from './migrations/012.js'
 import { migration013 } from './migrations/013.js'
 import { migration014 } from './migrations/014.js'
 import { migration015 } from './migrations/015.js'
+import { migration016 } from './migrations/016.js'
 
 export const APPLICATION_ID = 0x44534850 // DSHP
-export const SCHEMA_VERSION = 15
+export const SCHEMA_VERSION = 16
 export const V1_BACKUP_SUFFIX = '.v1.bak'
 export const V2_BACKUP_SUFFIX = '.v2.bak'
 export const V3_BACKUP_SUFFIX = '.v3.bak'
@@ -42,6 +43,7 @@ export const V11_BACKUP_SUFFIX = '.v11.bak'
 export const V12_BACKUP_SUFFIX = '.v12.bak'
 export const V13_BACKUP_SUFFIX = '.v13.bak'
 export const V14_BACKUP_SUFFIX = '.v14.bak'
+export const V15_BACKUP_SUFFIX = '.v15.bak'
 
 export type StorageErrorCode =
   | 'busy'
@@ -127,14 +129,15 @@ const schema12Tables = [...schema11Tables, 'reviewed_skills', 'skill_revisions',
 const schema13Tables = [...schema12Tables, 'inference_attempts', 'inference_quota_observations', 'inference_quota_blocks']
 const schema14Tables = [...schema13Tables, 'mobile_devices']
 const schema15Tables = [...schema14Tables, 'mobile_approval_reviews']
+const schema16Tables = [...schema15Tables, 'media_jobs']
 const sourceTables = {
-  1: schema1Tables, 2: schema2Tables, 3: schema3Tables, 4: schema4Tables, 5: schema5Tables, 6: schema6Tables, 7: schema7Tables, 8: schema8Tables, 9: schema9Tables, 10: schema10Tables, 11: schema11Tables, 12: schema12Tables, 13: schema13Tables, 14: schema14Tables,
+  1: schema1Tables, 2: schema2Tables, 3: schema3Tables, 4: schema4Tables, 5: schema5Tables, 6: schema6Tables, 7: schema7Tables, 8: schema8Tables, 9: schema9Tables, 10: schema10Tables, 11: schema11Tables, 12: schema12Tables, 13: schema13Tables, 14: schema14Tables, 15: schema15Tables,
 }
 const backupSuffixes = {
   1: V1_BACKUP_SUFFIX, 2: V2_BACKUP_SUFFIX, 3: V3_BACKUP_SUFFIX, 4: V4_BACKUP_SUFFIX, 5: V5_BACKUP_SUFFIX, 6: V6_BACKUP_SUFFIX,
-  7: V7_BACKUP_SUFFIX, 8: V8_BACKUP_SUFFIX, 9: V9_BACKUP_SUFFIX, 10: V10_BACKUP_SUFFIX, 11: V11_BACKUP_SUFFIX, 12: V12_BACKUP_SUFFIX, 13: V13_BACKUP_SUFFIX, 14: V14_BACKUP_SUFFIX,
+  7: V7_BACKUP_SUFFIX, 8: V8_BACKUP_SUFFIX, 9: V9_BACKUP_SUFFIX, 10: V10_BACKUP_SUFFIX, 11: V11_BACKUP_SUFFIX, 12: V12_BACKUP_SUFFIX, 13: V13_BACKUP_SUFFIX, 14: V14_BACKUP_SUFFIX, 15: V15_BACKUP_SUFFIX,
 }
-const migrations = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014, migration015]
+const migrations = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014, migration015, migration016]
 
 function requireTables(db: DatabaseSync, required: readonly string[]): void {
   const tables = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name))
@@ -196,13 +199,13 @@ export function migrateSchema(db: DatabaseSync): void {
     const applicationId = db.prepare('PRAGMA application_id').get()?.application_id
     const version = db.prepare('PRAGMA user_version').get()?.user_version
     if (applicationId === APPLICATION_ID && version === SCHEMA_VERSION) {
-      requireTables(db, schema15Tables)
+      requireTables(db, schema16Tables)
       requireRecoveryAdmission(db)
       return
     }
 
     const isUpgrade = applicationId === APPLICATION_ID
-      && (version === 1 || version === 2 || version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11 || version === 12 || version === 13 || version === 14)
+      && (version === 1 || version === 2 || version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11 || version === 12 || version === 13 || version === 14 || version === 15)
     const isEmpty = applicationId === 0 && version === 0
       && db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get() === undefined
     if (!isUpgrade && !isEmpty) {

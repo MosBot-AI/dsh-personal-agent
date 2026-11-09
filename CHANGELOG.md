@@ -33,6 +33,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Add versioned model-routing contracts and a native DSH boundary for pinned, budget-gated inference attempts.
 - Add deterministic task difficulty routing with configured pools, bounded semantic estimation and verified quality escalation.
 - Add Core-owned shared inference quotas, bounded fallback, durable resource waits and cold fee recovery.
+- Add opt-in durable image and video jobs with a loopback ComfyUI provider, restart reconciliation and verified output metadata.
 - Map 43 implementation tasks into GitHub Project and English Issues with native dependencies, reporting protocol, live readiness and acceptance-gated Actions reconciliation.
 
 - Specify configurable model routing with difficulty-based model/effort selection, quota-aware fallbacks, an optional LiteLLM adapter and implementation/evaluation tasks.
