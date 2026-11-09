@@ -54,7 +54,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 - Add WorkStore migration support for scoped mobile device credentials. Restoring an older backup clears mobile pairing codes and credentials.
 - Refine the existing DSH-native plan into dependency-driven release stages, keeping local operation central and defining explicit plugin migration and recovery requirements.
-- Upgrade the work database to schema 14 for media jobs. The migration retains a private v13 backup. Use that backup to return to a schema-13 build.
+- Upgrade the work database to schema 16 for media jobs after the mobile v14/v15 migrations. Preserve source-version backups, support the original media-only v14 without losing jobs or leases, and use the matching pre-upgrade backup to return to an older build.
 
 ### Fixed
 

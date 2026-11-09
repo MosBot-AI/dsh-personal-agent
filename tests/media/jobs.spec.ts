@@ -240,3 +240,37 @@ it('retries an interrupted output body without releasing the lease or rendering 
   expect(store.mediaLeaseHeld()).toBe(false)
   expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([id])
 })
+
+
+it('keeps an unproven cancelled render leased after a lost cancel reply and a cold reopen', async () => {
+  const fixture = await comfyFixture()
+  const { registry, pin } = await fixture.register()
+  const directory = join(fixture.directory, 'work')
+  let store = openWorkStore(directory)
+  const request = { ...mediaRequest(), access: createAttempt(store, 'cancel-receipt') }
+  const next = { ...mediaRequest(), operationId: 'next', access: createAttempt(store, 'after-cancel-receipt') }
+  const ref = { access: request.access, operationId: request.operationId }
+  const config = mediaServiceConfigSchema.parse({ providers: { image: pin } })
+  const authority = { current: () => true, artifactAllowed: () => false }
+  let jobs = store.createMediaJobs(registry, config, authority)
+  onTestFinished(async () => { await jobs.close(); await registry.close(); store.close() })
+  accepted(jobs.enqueue(request))
+  accepted(jobs.enqueue(next))
+  await jobs.step()
+  const id = accepted(jobs.inspect(ref)).handle!.handleId
+  fixture.faults.loseCancelResponse = true
+  accepted(jobs.cancel(ref))
+  await jobs.step()
+  expect(accepted(jobs.inspect(ref)).state).toBe('unknown')
+  expect(store.mediaLeaseHeld()).toBe(true)
+  await jobs.close()
+  store.close()
+  store = openWorkStore(directory)
+  jobs = store.createMediaJobs(registry, config, authority)
+  await jobs.step()
+  expect(accepted(jobs.inspect(ref)).state).toBe('unknown')
+  expect(store.mediaLeaseHeld()).toBe(true)
+  expect(accepted(jobs.inspect({ access: next.access, operationId: next.operationId })).state).toBe('queued')
+  expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([id])
+  expect(fixture.cancelled).toEqual([id])
+})

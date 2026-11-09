@@ -9,7 +9,7 @@ import {
   rmSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 import { migration001 } from './migrations/001.js'
 import { migration002 } from './migrations/002.js'
 import { migration003 } from './migrations/003.js'
@@ -146,6 +146,23 @@ function requireTables(db: DatabaseSync, required: readonly string[]): void {
   }
 }
 
+/** Recognize the exact media-only v14 shipped on the original PA-033 branch. */
+function isMediaOnlyV14(db: DatabaseSync): boolean {
+  const tables = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name))
+  if (!tables.has('media_jobs')) return false
+  const signature = (connection: DatabaseSync) => JSON.stringify(connection.prepare(`
+    SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE tbl_name = 'media_jobs' ORDER BY type, name
+  `).all().map(row => ({ ...row, sql: typeof row.sql === 'string' ? row.sql.trim().replace(/\s+/gu, ' ') : row.sql })))
+  const expected = new DatabaseSync(':memory:')
+  try {
+    expected.exec(migration016)
+    if (tables.has('mobile_devices') || tables.has('mobile_approval_reviews') || signature(db) !== signature(expected)) {
+      throw new StorageError('unsupported_schema', 'The v14 media schema is not a recognized branch snapshot')
+    }
+  } finally { expected.close() }
+  return true
+}
+
 function requireRecoveryAdmission(db: DatabaseSync): void {
   const mode = db.prepare('SELECT mode FROM runtime_recovery WHERE id = 1').get()?.mode
   if (mode !== 'normal' && mode !== 'reconciling' && mode !== 'restore') {
@@ -212,7 +229,8 @@ export function migrateSchema(db: DatabaseSync): void {
       throw new StorageError('unsupported_schema', 'The database has an unsupported application or schema version')
     }
     if (isUpgrade) {
-      requireTables(db, sourceTables[version])
+      const mediaOnlyV14 = version === 14 && isMediaOnlyV14(db)
+      requireTables(db, mediaOnlyV14 ? [...schema13Tables, 'media_jobs'] : sourceTables[version])
       if (version >= 4) requireRecoveryAdmission(db)
       if (db.prepare('PRAGMA foreign_key_check').get() !== undefined) {
         throw new StorageError('corrupt', 'SQLite foreign key check failed before migration')
@@ -221,7 +239,14 @@ export function migrateSchema(db: DatabaseSync): void {
     }
 
     transaction(db, () => {
-      for (const migration of migrations.slice(version)) db.exec(migration)
+      if (version === 14 && isMediaOnlyV14(db)) {
+        // The media table and its leases already exist. Add only the missing
+        // mobile migrations; never drop/recreate jobs or relabel an old file.
+        db.exec(migration014)
+        db.exec(migration015)
+      } else {
+        for (const migration of migrations.slice(version)) db.exec(migration)
+      }
       if (isEmpty) db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
       if (db.prepare('PRAGMA foreign_key_check').get() !== undefined) {
         throw new StorageError('migration_failed', 'SQLite foreign key check failed during migration')

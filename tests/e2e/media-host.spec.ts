@@ -79,7 +79,8 @@ it('loads the native media bundle and recovers its job after a host restart agai
   expect(fixture.submissions.map(request => request.prompt_id)).toEqual([originalId])
 }, 60_000)
 
-it.each([true, false])('honors a persisted media lease (%s) with media disabled in the next host', async held => {
+it.each(['submitting', 'unknown', 'rendering', 'collecting', 'queued'])('honors a persisted media lease state %s with media disabled in the next host', async state => {
+  const held = state !== 'queued'
   const fixture = await comfyFixture()
   const { registry, pin } = await fixture.register()
   const leaseProbe = fileURLToPath(new URL('./fixtures/media-lease-probe.mjs', import.meta.url))
@@ -100,7 +101,11 @@ it.each([true, false])('honors a persisted media lease (%s) with media disabled 
     { current: () => true, artifactAllowed: () => false })
   try {
     expect(jobs.enqueue({ ...mediaRequest(), access }).ok).toBe(true)
-    if (held) await jobs.step()
+    if (held) {
+      await jobs.step()
+      const db = new DatabaseSync(join(storage, DATABASE_FILENAME))
+      try { db.prepare('UPDATE media_jobs SET state = ?').run(state) } finally { db.close() }
+    }
     expect(store.mediaLeaseHeld()).toBe(held)
     writeFileSync(join(storage, 'local-inbox-identity.json'), JSON.stringify({ ownerId: access.ownerId, profileId: access.profileId,
       deviceId: 'native-media-device', verifiedAt: new Date().toISOString() }), { mode: 0o600 })

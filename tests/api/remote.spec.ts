@@ -9,6 +9,7 @@ import {
 } from '../../packages/personal-agent/src/domain/model.js'
 import { createIdentityBoundary } from '../../packages/personal-agent/src/policy/identity.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
+import { SCHEMA_VERSION } from '../../packages/personal-agent/src/storage/schema.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import { openWorkStore, type WorkStore } from '../../packages/personal-agent/src/storage/store.js'
 
@@ -36,7 +37,7 @@ function fixture() {
     reopenAsV14() {
       store.close()
       const db = new DatabaseSync(join(directory, DATABASE_FILENAME))
-      try { db.exec('DROP TABLE mobile_approval_reviews; PRAGMA user_version = 14') }
+      try { db.exec('DROP TABLE mobile_approval_reviews; DROP TABLE media_jobs; PRAGMA user_version = 14') }
       finally { db.close() }
       store = openWorkStore(directory)
     },
@@ -115,7 +116,7 @@ it('preserves a v14 device credential when upgrading to the approval schema', ()
   expect(f.ledger.authenticate(enrolled.credential)).toEqual(enrolled.device)
   const db = new DatabaseSync(join(f.directory, DATABASE_FILENAME), { readOnly: true })
   try {
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(15)
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(SCHEMA_VERSION)
     expect(db.prepare('SELECT count(*) AS count FROM mobile_approval_reviews').get()?.count).toBe(0)
   } finally { db.close() }
 })
