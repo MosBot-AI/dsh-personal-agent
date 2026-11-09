@@ -40,3 +40,16 @@
 E05 有委派动作门禁及本地 HTTPS 审批证据。E07 和 E13 有限定范围的回环网络证据，以及桌面 Chrome 移动模拟下的浏览器证据。复测浏览器用例时，先运行 `pnpm build`，再运行 `DSHPA_CHROME_PATH=/absolute/path/to/chrome pnpm test:mobile`。CI 在已安装时选择 `google-chrome`。实际部署的 HTTPS 源地址、实体手机浏览器、添加到主屏幕及手机断线重连仍待验收。
 
 真机验收请使用[已配置的 HTTPS 源地址](../../README-zh.md#启用移动任务视图)。在本机收件箱发起手机配对，核对两端的同一任务与精确审批，再验证受控审批答复、刷新、断线重连及设备撤销。目标浏览器支持安装时，验证从主屏幕打开。记录宿主修订、手机系统和浏览器版本及实际结果。证据中应排除配对码与 Cookie 值。
+
+## Linux 独立评审修复
+
+2026-11-09（UTC），在 Debian 13 x86_64、Node.js 24.14.1、pnpm 11.28.5、DSH 0.2.2-rc.1 和 Chromium 154.0.8037.92 上，独立验证了基于 `7a4e2feda1d293e192d13f0369d4124aa6709dbb` 的 PR。原始隔离 Chromium 完成了 TLS 握手，但在 `Page.navigate` 超时。一次性 Linux 浏览器 profile 现使用 `--password-store=basic`，避免依赖已解锁的桌面密钥环。该改动仅影响测试进程；TLS 证书固定、浏览器沙箱及生产 Cookie 保留原有检查。尚未证实桌面密钥环内部的具体原因。
+
+新增两个真实浏览器回归，在一次性 SQLite 数据库中使配对码、活动设备凭据及已显示的审批过期。它们验证拒绝配对、设备过期后清除私有内容并返回 HTTP 401、审批过期后不产生授权，以及已撤回的审批消失。测试不修改机器时钟或生产记录。
+
+- `pnpm check`：类型检查、构建、285 项测试及计划校验通过。
+- `DSHPA_CHROME_PATH=/usr/bin/chromium pnpm exec vitest run tests/e2e/local-flow.spec.ts tests/e2e/resident.spec.ts tests/e2e/mobile.spec.ts`：17 项通过，包括 10 项本地 Web、两项常驻宿主、两项移动协议及三项真实桌面浏览器用例。运行这些原生套件前须先构建工作区。
+- `python3 -m unittest discover -s tests/coordination -p 'test_*.py'`：12 项通过。
+- `git diff --check`：通过。
+
+所有浏览器用例均使用隔离 profile 的桌面 Chromium。已部署 HTTPS、实体手机浏览器、主屏幕启动及手机重连仍未完成验收。用户知识库 `/Users/charleypeng/Documents/llmwiki` 和固定的本地上游源码 checkout 不可用；未据此推断历史决策，也未声称源码路径校验通过。
