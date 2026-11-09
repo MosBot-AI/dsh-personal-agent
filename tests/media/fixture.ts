@@ -4,7 +4,7 @@ import { createServer, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { onTestFinished } from 'vitest'
-import type { MediaSpec } from '../../packages/plugin-api/src/media.js'
+import type { MediaProvider, MediaSpec } from '../../packages/plugin-api/src/media.js'
 import { comfyMediaProvider } from '../../packages/media-comfyui/src/index.js'
 import { createCapabilityRegistry } from '../../packages/personal-agent/src/runtime/capability-registry.js'
 
@@ -29,11 +29,12 @@ export async function comfyFixture() {
   const submissions: Submission[] = []
   const cancelled: string[] = []
   let onSubmit: ((submission: Submission) => void) | undefined
+  let onView: (() => void) | undefined
   const pending = new Map<string, unknown[]>()
   const running = new Map<string, unknown[]>()
   const history = new Map<string, unknown>()
   const outputs = new Map<string, Buffer>()
-  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false, viewStatus: 200, interruptView: false }
+  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false, viewStatus: 200, interruptView: false, stallView: false }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url!, 'http://fixture')
     const path = url.pathname
@@ -51,6 +52,12 @@ export async function comfyFixture() {
       if (faults.viewStatus !== 200) return json(response, {}, faults.viewStatus)
       const bytes = outputs.get(url.searchParams.get('filename') ?? '')
       if (!bytes) return json(response, {}, 404)
+      onView?.()
+      if (faults.stallView) {
+        response.writeHead(200, { 'content-length': bytes.length })
+        response.write(bytes.subarray(0, 8))
+        return
+      }
       if (faults.interruptView) {
         response.writeHead(200, { 'content-length': bytes.length })
         response.write(bytes.subarray(0, 8))
@@ -115,9 +122,17 @@ export async function comfyFixture() {
   return {
     directory, config, faults, submissions, cancelled, pending, running,
     watchSubmit(callback: (submission: Submission) => void) { onSubmit = callback },
-    async register(configRevision = 1) {
+    watchView(callback: () => void) { onView = callback },
+    async register(configRevision = 1, overrides: { timeoutMs?: number } = {}, decorate?: (provider: MediaProvider) => MediaProvider) {
       const registry = createCapabilityRegistry()
-      const registration = registry.registrar.register(comfyMediaProvider, { instanceId: 'fixture', configRevision }, config)
+      const definition = {
+        ...comfyMediaProvider,
+        async start(settings: Parameters<typeof comfyMediaProvider.start>[0], context: Parameters<typeof comfyMediaProvider.start>[1]) {
+          const result = await comfyMediaProvider.start(settings, context)
+          return result.ok ? { ok: true as const, value: decorate?.(result.value) ?? result.value } : result
+        },
+      }
+      const registration = registry.registrar.register(definition, { instanceId: 'fixture', configRevision }, { ...config, ...overrides })
       const ready = await registration.ready
       if (!ready.ok) throw new Error(ready.code)
       return { registry, pin: ready.value }

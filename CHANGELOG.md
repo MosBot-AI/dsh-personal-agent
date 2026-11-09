@@ -56,4 +56,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Refine the existing DSH-native plan into dependency-driven release stages, keeping local operation central and defining explicit plugin migration and recovery requirements.
 - Upgrade the work database to schema 14 for media jobs. The migration retains a private v13 backup. Use that backup to return to a schema-13 build.
 
+### Fixed
+
+- Honor media cancellation before and during output collection, preserve it across restart, and fence late collector results while retaining the lease until physical work settles.
+
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main
