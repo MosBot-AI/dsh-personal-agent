@@ -50,5 +50,6 @@
 
 - 新增限定范围的移动设备凭据 WorkStore 迁移。恢复旧备份时会清除移动配对码和凭据。
 - 将已有 DSH 原生方案细化为按依赖推进的发布阶段，以本机运行作为核心，明确插件迁移和恢复要求。
+- 工作数据库升级到 schema 14 以存储媒体任务。迁移会保留私有 v13 备份，回退到使用 schema 13 的构建时请使用该备份。
 
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main

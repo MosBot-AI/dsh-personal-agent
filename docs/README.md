@@ -42,6 +42,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Reviewed skill evidence](evidence/PA-020.md) | Accepted examples, held-out evaluation, explicit activation, and rollback |
 | [Resident host evidence](evidence/PA-021.md) | Startup and shutdown, health, provider waits, backup and restore |
 | [Capability plugin evidence](evidence/PA-038.md) | Public API, lifecycle registry, policy consumers and local examples |
+| [Local media execution evidence](evidence/PA-033.md) | Durable jobs, scoped cancellation, and ComfyUI fault recovery |
 | [Native routing boundary evidence](evidence/PA-040.md) | Versioned contracts, DSH selection, retries, and new request series |
 | [Difficulty routing evidence](evidence/PA-041.md) | Capability filtering, configured tiers, bounded estimation and quality escalation |
 | [Quota and inference recovery evidence](evidence/PA-042.md) | Shared account limits, bounded fallback, resource waits and interrupted recovery |
