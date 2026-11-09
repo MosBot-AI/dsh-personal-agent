@@ -33,7 +33,7 @@ export async function comfyFixture() {
   const running = new Map<string, unknown[]>()
   const history = new Map<string, unknown>()
   const outputs = new Map<string, Buffer>()
-  const faults = { loseResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false }
+  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url!, 'http://fixture')
     const path = url.pathname
@@ -65,6 +65,7 @@ export async function comfyFixture() {
       pending.set(body.prompt_id, [submissions.length, body.prompt_id, body.prompt, body.extra_data, body.partial_execution_targets])
       onSubmit?.(body)
       if (faults.loseResponse) return request.socket.destroy()
+      if (faults.holdResponse) return
       return json(response, { prompt_id: body.prompt_id })
     }
     const cancel = /^\/api\/jobs\/([^/]+)\/cancel$/.exec(path)
