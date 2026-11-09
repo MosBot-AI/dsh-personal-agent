@@ -21,7 +21,9 @@ export async function openHeadlessChrome(executable: string, profile: string, ce
     '--ignore-certificate-errors-spki-list=' + pin,
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
     '--disable-component-update', '--disable-sync', 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] })
+  ], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] })
+  let diagnostics = ''
+  child.stderr?.setEncoding('utf8').on('data', (chunk: string) => { diagnostics = (diagnostics + chunk).slice(-6_000) })
   const input = child.stdio[3] as Writable | null
   const output = child.stdio[4] as Readable | null
   const waiting = new Map<number, { finish: (error?: Error, result?: unknown) => void }>()
@@ -32,7 +34,7 @@ export async function openHeadlessChrome(executable: string, profile: string, ce
   }
   child.once('error', error => stop(error))
   const exited = new Promise<void>(resolve => child.once('close', () => {
-    stop(new Error('The isolated Chrome process closed'))
+    stop(new Error('The isolated Chrome process closed: ' + diagnostics))
     resolve()
   }))
   onTestFinished(async () => {
@@ -65,7 +67,7 @@ export async function openHeadlessChrome(executable: string, profile: string, ce
     if (failure) return Promise.reject(failure)
     const id = ++next
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => finish(new Error('Chrome did not respond to ' + method)), 8_000)
+      const timer = setTimeout(() => finish(new Error('Chrome did not respond to ' + method + '\n' + diagnostics)), 8_000)
       function finish(error?: Error, result?: unknown) {
         clearTimeout(timer)
         waiting.delete(id)
