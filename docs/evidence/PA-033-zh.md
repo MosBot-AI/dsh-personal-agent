@@ -2,7 +2,7 @@
 
 [English](PA-033.md)
 
-[PA-033](https://github.com/MosBot-AI/dsh-personal-agent/issues/33) · 计划 `2026-11-07-r7` · 实现 `740fe3436008fa07e1a5ab0e12864db010484dfb`。
+[PA-033](https://github.com/MosBot-AI/dsh-personal-agent/issues/33) · 计划 `2026-11-07-r7` · 初始实现 `740fe3436008fa07e1a5ab0e12864db010484dfb`。集成后的 schema 16 行为记录见下文。
 
 ## 已实现
 
@@ -48,3 +48,21 @@ E06 使用持久化数据库验证受控传输故障与操作系统进程崩溃�
 原生 DSH Web 宿主还在 WorkStore 包含渲染中任务时以关闭媒体的配置启动。GPU 准入拒绝新工作，且不会调用其操作。排队中、不持有租约的任务作为正对照，允许 GPU 工作。`pnpm test:media-host` 的三个用例全部通过。这是使用模拟媒体的原生宿主准入检查，不是物理 GPU 并发验收。
 
 上述传输与租约修复未修改数据库迁移。后续 #71 优先的迁移整合记录见下文。真实 ComfyUI、GPU、取消和睡眠/唤醒检查仍待完成。
+
+## 独立集成与取消修复
+
+2026-11-09（UTC），按所有者授权，在 #71 合并后，将 PA-033 变基到实际 main `07579662e0747acdac1ad34f0f823c41e9ec8b0d`。移动端迁移 014 和 015 保持不变，媒体迁移为 016。集成保留两类 WorkStore 服务、关闭媒体配置时的媒体租约准入检查、两类宿主关闭及启动失败清理流程、两项原生 CI 检查和隔离的 Linux 浏览器总线。
+
+通过精确核对媒体表、约束和索引识别原媒体专用 v14。升级前生成私有 v14 备份，保留任务、已准备的提示词及租约，仅补建缺失的移动端表。未知或混合的媒体 v14 结构会失败，不会重新标记来源数据库版本。新存储、v13 及移动端 v14/v15 均可到达 v16；移动端升级保留已注册凭据。回滚使用匹配的来源版本备份，而非用旧构建直接打开 v16。恢复会升级可识别的旧快照、清除移动凭据、禁止派发并保留未决媒体租约。原移动端 v14 测试夹具现移除所有 v14 之后的表；另有真实 DDL 夹具验证兼容性，不依赖这种模拟降级方法。
+
+取消现也会在 collecting 状态持久记录。系统中止可取消的读取，在收集前及提交输出前检查保存的决定。提供器忽略中止时，仍保留租约直到实际操作结束，迟到的成功不会发布输出。冷启动后继续执行取消。取消回执丢失且未能回读终态时，任务保持不确定并持有租约，不重新提交渲染。
+
+验证环境为 Debian 13 x86_64、Node.js 24.14.1、pnpm 11.28.5、DSH 0.2.2-rc.1、Chromium 154.0.8037.92 及 FFmpeg 7.1.5：
+
+- `pnpm check`：在基于实际 main 的集成上，类型检查、构建、53 个套件的 310 项测试及计划校验通过。
+- `dbus-run-session -- env DSHPA_CHROME_PATH=/usr/bin/chromium pnpm exec vitest run tests/e2e/local-flow.spec.ts tests/e2e/resident.spec.ts tests/e2e/media-host.spec.ts tests/e2e/mobile.spec.ts`：23 项通过，包括 10 项本地 Web、两项常驻宿主、六项媒体宿主及五项移动端用例。关闭媒体配置后的冷启动检查覆盖 submitting、unknown、rendering、collecting 租约，并以 queued 作为允许执行的正向对照。三项浏览器用例使用真实桌面 Chromium，不是实体手机。
+- `python3 -m unittest discover -s tests/coordination -p 'test_*.py'`：12 项通过。`git diff --check` 及中英文链接通过。
+- 六项真实 DDL 迁移用例验证旧版任务和租约保留、迁移备份可读、恢复限制、拒绝被改动的媒体 v14 结构，以及 DDL 失败回滚。真实响应体超时后，重开存储可恢复相同输出摘要，渲染仅提交一次。
+- `pnpm test:media-live`：因未设置 `DSHPA_COMFYUI_LIVE_CONFIG` 跳过一项；退出码零不代表真实环境验收。固定的本地上游 checkout 不可用，无法完成 `--check-sources`。
+
+真实 ComfyUI 生成、物理 GPU/OOM 和运行中渲染取消、实际睡眠/唤醒，以及实体手机和已部署 HTTPS 验收仍待完成。此前并发评审负载下曾失败一次的 schedule 恢复用例在本次最终工作区检查中通过；之前的根因尚未证实。测试未使用生产数据或部署。
