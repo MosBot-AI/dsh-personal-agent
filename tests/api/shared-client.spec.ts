@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { request } from 'node:http'
+import { DatabaseSync } from 'node:sqlite'
+import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,9 +10,11 @@ import { expect, it, onTestFinished, vi } from 'vitest'
 import type { MobileApprovals } from '../../packages/personal-agent/src/api/approvals.js'
 import { startMobileHttp } from '../../packages/personal-agent/src/api/mobile-http.js'
 import { projectSharedTask, sharedCapabilities, sharedError } from '../../packages/personal-agent/src/api/shared-client.js'
-import { ownerIdSchema, profileIdSchema, taskStatusSchema } from '../../packages/personal-agent/src/domain/model.js'
-import { openWorkStore } from '../../packages/personal-agent/src/storage/store.js'
+import { attemptIdSchema, clientIdSchema, conversationSchema, deviceIdSchema, mandateRefSchema, projectSchema, taskIdSchema, utcInstantSchema, ownerIdSchema, profileIdSchema, taskStatusSchema } from '../../packages/personal-agent/src/domain/model.js'
+import { openWorkStore, type WorkStore } from '../../packages/personal-agent/src/storage/store.js'
 
+const scope = { ownerId: ownerIdSchema.parse('owner'), profileId: profileIdSchema.parse('profile') }
+const instant = '2026-11-10T12:00:00.000Z'
 const contractRoot = new URL('../../contracts/personal-api/', import.meta.url)
 const fixtures = JSON.parse(readFileSync(new URL('fixtures.json', contractRoot), 'utf8'))
 const expectedCapabilities = fixtures.valid.find((fixture: { schema: string; value: { data?: { backend?: { id: string } } } }) =>
@@ -61,6 +65,40 @@ it('rejects unrepresentable task fields without truncating identity or silently 
     .toMatchObject({ id: '😀'.repeat(256), title: '😀'.repeat(4096), revision: String(Number.MAX_SAFE_INTEGER) })
 })
 
+function seedWork(store: WorkStore, owner = scope, label = 'primary') {
+  const project = projectSchema.parse({
+    ...owner, id: 'project-' + label, kind: 'project', title: 'Mobile access', purpose: 'Exercise scoped work.',
+    resourceRefs: ['private-project-path'], status: 'active', successCriteria: ['Verify the task'], planRevision: 1, milestones: [],
+  })
+  const conversation = conversationSchema.parse({
+    ...owner, id: 'thread-' + label, sessionIds: [],
+    originalDestination: { sourceInstanceId: 'original-source', externalDestinationId: 'private-origin' },
+  })
+  store.insertProject(project)
+  store.insertConversation(conversation)
+  const actor = {
+    ...owner, role: 'owner' as const, deviceId: deviceIdSchema.parse('local-device'),
+    clientId: clientIdSchema.parse('local-web'), policyVersion: 'mobile-test',
+  }
+  return (name: string, visible = true) => {
+    const taskId = taskIdSchema.parse('task-' + label + '-' + name)
+    const result = store.applyCommand({ type: 'work.create', commandId: 'create-' + taskId,
+      payload: { projectId: project.id, requestedOutcome: 'Outcome for ' + name, constraints: ['private-constraint'],
+        acceptance: { criteria: ['Verify the task'], requiresArtifact: false, requiresReceipt: false } },
+    }, {
+      actor, at: utcInstantSchema.parse(instant), projectId: project.id, newTaskId: taskId,
+      ...(visible ? { conversationId: conversation.id } : {}),
+      newAttempt: {
+        id: attemptIdSchema.parse('attempt-' + taskId),
+        mandate: mandateRefSchema.parse({ ...owner, id: 'mandate-' + taskId, policyVersion: actor.policyVersion }),
+      },
+    })
+    if (!result.ok) throw new Error('Task setup failed')
+    return result.state.task
+  }
+}
+
+
 async function httpFixture() {
   const root = mkdtempSync(join(tmpdir(), 'dshpa-shared-api-'))
   const store = openWorkStore(root)
@@ -99,18 +137,19 @@ async function httpFixture() {
       req.once('error', reject); req.end()
     })
   }
-  return { get, devices, pair, credential: enrolled.credential, foreignCredential: foreignDevice.credential }
+  return { get, devices, pair, store, scope, root, credential: enrolled.credential, foreignCredential: foreignDevice.credential }
 }
 
-it('serves authenticated discovery without promoting legacy features to shared availability', async () => {
+it('advertises only the implemented shared task capability and serves bounded pages', async () => {
   const f = await httpFixture()
-  expect(await f.get('/v1/capabilities')).toEqual({ status: 200, body: expectedCapabilities, cache: 'no-store' })
-  const unavailable = await f.get('/v1/tasks')
-  expect(unavailable.status).toBe(409)
-  expect(unavailable.body).toEqual(sharedError('capability_unavailable', 'The shared task list adapter is not implemented.', 'tasks.list'))
-  for (const query of ['?limit=1', '?limit=32&cursor=opaque', '?limit=64']) {
-    expect(await f.get('/v1/tasks' + query)).toMatchObject({ status: 409, body: { error: { code: 'capability_unavailable' } } })
+  expect(await f.get('/v1/capabilities')).toEqual({ status: 200, body: sharedCapabilities(true), cache: 'no-store' })
+  expect(sharedCapabilities(true).data.capabilities.filter(item => item.available).map(item => item.id)).toEqual(['tasks.list'])
+  for (const query of ['', '?limit=1', '?limit=64']) {
+    expect(await f.get('/v1/tasks' + query)).toMatchObject({ status: 200, body: {
+      schema_version: 'personal.api.v1', data: { items: [], next_cursor: null, consistency: 'live' },
+    } })
   }
+  expect(await f.get('/v1/tasks?cursor=opaque')).toMatchObject({ status: 400, body: { error: { code: 'cursor_invalid' } } })
   for (const query of ['?limit=0', '?limit=65', '?limit=1.5', '?limit=1&limit=2', '?cursor=', '?cursor=a&cursor=b', '?unknown=1', '?cursor=' + 'x'.repeat(2049)]) {
     expect(await f.get('/v1/tasks' + query)).toMatchObject({ status: 400, body: { error: { code: 'invalid_request' } } })
   }
@@ -135,4 +174,77 @@ it('preserves exact Host and Origin checks and rejects unknown query parameters'
     expect(await f.get('/v1/capabilities', f.credential, headers)).toMatchObject({ status: 403, body: { error: { code: 'forbidden' } } })
   }
   expect(await f.get('/v1/capabilities?unexpected=true')).toMatchObject({ status: 400, body: { error: { code: 'invalid_request' } } })
+})
+
+function pageOf(body: unknown) {
+  return (body as { data: { items: ReturnType<typeof projectSharedTask>[]; next_cursor: string | null; consistency: string } }).data
+}
+
+it('paginates beyond the legacy 64-task snapshot without leaking other scopes or private fields', async () => {
+  const f = await httpFixture()
+  const create = seedWork(f.store)
+  const ids = Array.from({ length: 64 }, (_, i) => create(String(i).padStart(3, '0')).id)
+  expect(pageOf((await f.get('/v1/tasks?limit=64')).body).next_cursor).toBeNull()
+  for (let i = 64; i < 70; i++) ids.push(create(String(i).padStart(3, '0')).id)
+  create('hidden', false)
+  seedWork(f.store, { ...scope, profileId: profileIdSchema.parse('other-profile') }, 'foreign')('foreign')
+  seedWork(f.store, { ...scope, ownerId: ownerIdSchema.parse('other-owner') }, 'other')('foreign')
+  const first = await f.get('/v1/tasks?limit=64')
+  expect(first.status).toBe(200)
+  const page = pageOf(first.body)
+  expect(page.items.map(task => task.id)).toEqual(ids.slice(0, 64))
+  expect(page.next_cursor).toBeTypeOf('string')
+  expect(page.consistency).toBe('live')
+  for (const task of page.items) expect(Object.keys(task).sort()).toEqual(['id', 'revision', 'state', 'title', 'wait_reason'])
+  const second = await f.get('/v1/tasks?limit=64&cursor=' + page.next_cursor)
+  expect(second.status).toBe(200)
+  expect(pageOf(second.body).items.map(task => task.id)).toEqual(ids.slice(64))
+  expect(pageOf(second.body).next_cursor).toBeNull()
+  expect(JSON.stringify(first.body)).not.toMatch(/private-|projectId|ownerId|profileId/)
+})
+
+it('binds cursors to the authenticated device and feed instance and rejects tampering', async () => {
+  const f = await httpFixture()
+  const create = seedWork(f.store)
+  create('a'); create('b')
+  const cursor = pageOf((await f.get('/v1/tasks?limit=1')).body).next_cursor!
+  const otherPair = f.devices.begin('Second device')
+  if (!otherPair.ok) throw new Error('Pair setup failed')
+  const otherDevice = f.devices.enroll(otherPair.pairingCode)
+  if (!otherDevice.ok) throw new Error('Device setup failed')
+  expect(await f.get('/v1/tasks?cursor=' + cursor, otherDevice.credential))
+    .toMatchObject({ status: 400, body: { error: { code: 'cursor_invalid' } } })
+  for (const bad of [cursor + 'x', 'x' + cursor, cursor.replace('.', '..'), Buffer.from('[1,"task-primary-a"]').toString('base64url')]) {
+    expect(await f.get('/v1/tasks?cursor=' + bad)).toMatchObject({ status: 400, body: { error: { code: 'cursor_invalid' } } })
+  }
+  expect(f.store.mobileFeed({ ...scope, profileId: profileIdSchema.parse('other-profile') }).sharedTasks(f.foreignCredential, 1, cursor))
+    .toEqual({ ok: false, code: 'cursor_invalid' })
+  expect(f.store.mobileFeed(scope).sharedTasks(f.credential, 1, cursor)).toEqual({ ok: false, code: 'cursor_invalid' })
+  f.devices.revoke(f.pair.deviceId)
+  expect(await f.get('/v1/tasks?cursor=' + cursor)).toMatchObject({ status: 401, body: { error: { code: 'auth_required' } } })
+})
+
+it('uses live keyset ordering instead of implying snapshot consistency', async () => {
+  const f = await httpFixture()
+  const create = seedWork(f.store)
+  create('b'); create('d')
+  const first = pageOf((await f.get('/v1/tasks?limit=1')).body)
+  create('a'); create('c')
+  const next = pageOf((await f.get('/v1/tasks?cursor=' + first.next_cursor)).body)
+  expect(next.items.map(task => task.id)).toEqual(['task-primary-c', 'task-primary-d'])
+  expect(next.consistency).toBe('live')
+  expect(pageOf((await f.get('/v1/tasks')).body).items).toHaveLength(4)
+})
+
+it('fails closed with a generic 503 when a stored task cannot satisfy the shared contract', async () => {
+  const f = await httpFixture()
+  seedWork(f.store)('broken')
+  const writer = new DatabaseSync(join(f.root, DATABASE_FILENAME))
+  try {
+    writer.prepare("UPDATE tasks SET record = json_set(record, '$.requestedOutcome', ?) WHERE id = ?")
+      .run('private-content-' + 'x'.repeat(4097), 'task-primary-broken')
+  } finally { writer.close() }
+  const response = await f.get('/v1/tasks')
+  expect(response).toMatchObject({ status: 503, body: sharedError('internal_unavailable', 'The shared API is temporarily unavailable.') })
+  expect(JSON.stringify(response.body)).not.toContain('private-content')
 })

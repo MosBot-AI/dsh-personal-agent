@@ -176,7 +176,7 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
       if (method !== 'GET') return json(response, 400, sharedError('invalid_request', 'This route requires GET.'))
       if (url.pathname === '/v1/capabilities') {
         if (url.search) return json(response, 400, sharedError('invalid_request', 'Discovery does not accept query parameters.'))
-        return json(response, 200, sharedCapabilities())
+        return json(response, 200, sharedCapabilities(true))
       }
       const limit = url.searchParams.get('limit')
       const cursor = url.searchParams.get('cursor')
@@ -186,7 +186,13 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
         || (cursor !== null && (cursor.length < 1 || cursor.length > 2048))) {
         return json(response, 400, sharedError('invalid_request', 'Invalid task list query.'))
       }
-      return json(response, 409, sharedError('capability_unavailable', 'The shared task list adapter is not implemented.', 'tasks.list'))
+      const result = feed.sharedTasks(credential, limit === null ? 32 : Number(limit), cursor)
+      if (!result.ok) {
+        const code = result.code === 'unauthorized' ? 'auth_required' : result.code
+        return json(response, code === 'auth_required' ? 401 : 400,
+          sharedError(code, code === 'cursor_invalid' ? 'Restart task pagination without a cursor.' : 'Invalid task list request.'))
+      }
+      return json(response, 200, result.page)
     }
     if (method === 'GET' && url.pathname === '/v1/snapshot' && !url.search) {
       const snapshot = feed.snapshot(credential)
