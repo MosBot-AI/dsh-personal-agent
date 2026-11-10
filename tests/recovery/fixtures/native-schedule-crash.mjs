@@ -110,7 +110,7 @@ function nativeCarrier(port, store, counters) {
       process.exit(90)
     },
   }
-  if (phase !== 'create-crash') return port
+  if (phase !== 'create-crash' && phase !== 'create-tamper-crash') return port
   return {
     ...port,
     async create(request) {
@@ -158,7 +158,12 @@ async function run(ctx, counters) {
   try {
     if (phase === 'recover-tampered') {
       const [entry] = await ctx.schedule.catalog()
-      await ctx.schedule.edit({ id: entry.id, action: 'update', patch: { title: 'Changed by native management' } })
+      assert.ok(entry)
+      assert.equal(entry.status, 'active')
+      const edited = await ctx.schedule.edit({ id: entry.id, action: 'update', patch: { title: 'Changed by native management' } })
+      assert.equal('code' in edited, false, JSON.stringify(edited))
+      assert.equal('deleted' in edited, false, JSON.stringify(edited))
+      assert.equal(edited.title, 'Changed by native management')
       const scan = await bridge.reconcile()
       assert.ok(scan.problems.some(problem => problem.code === 'changed_native'))
       const rows = await port.catalog()
@@ -172,8 +177,11 @@ async function run(ctx, counters) {
       return
     }
     const control = phase === 'manual-native' || phase === 'pause-native' || phase === 'warm-gap'
-    if (phase === 'create-crash' || phase === 'receipt-crash' || control) {
-      const intendedAt = new Date(Date.now() + (control ? 120_000 : 1_250)).toISOString()
+    if (phase === 'create-crash' || phase === 'create-tamper-crash' || phase === 'receipt-crash' || control) {
+      // Tamper recovery needs an unconsumed row, not a race against child startup.
+      // Two minutes exceeds the parent test's bounded crash/restart budget.
+      const futureWake = control || phase === 'create-tamper-crash'
+      const intendedAt = new Date(Date.now() + (futureWake ? 120_000 : 1_250)).toISOString()
       const { routine } = verify(bridge.create(scope, { id: routineId, title: 'Native routine recovery',
         timing: { kind: 'at', at: intendedAt }, timeZone: 'UTC', localTimeIntent: intendedAt,
         dst: { gap: 'skip', overlap: 'earlier' }, misfire: 'latest', target: { kind: 'reminder', text: reminderText },
