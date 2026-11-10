@@ -1,0 +1,10 @@
+{
+  "contract_version": "0.1.0",
+  "authority": "MosBot-AI/hermes-superagent",
+  "directory": "contracts/personal-api",
+  "files": {
+    "schema.json": "98c798e72f6b6ad7f28755d21204c23f6d3de5b9bc4ff232245312cbc9f0e436",
+    "openapi.json": "6d990e85d553935907458b5605d9f4744f48054e1665049ac3a8fd9052baf864",
+    "fixtures.json": "3e0593d7528bd2d44d5fe554c8fdeb7642ab130839295ddbc36a5c27d3aac4e2"
+  }
+}

@@ -1,0 +1,609 @@
+{
+  "valid": [
+    {
+      "schema": "Capabilities",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "data": {
+          "contract_version": "0.1.0",
+          "backend": {
+            "id": "hermes"
+          },
+          "capabilities": [
+            {
+              "id": "tasks.list",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.respond",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "changes.poll",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "conversations.resume",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.write",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            }
+          ],
+          "transport": {
+            "polling": false,
+            "sse": false
+          },
+          "limits": {
+            "max_page_size": 64
+          }
+        }
+      }
+    },
+    {
+      "schema": "Capabilities",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "data": {
+          "contract_version": "0.1.0",
+          "backend": {
+            "id": "dsh"
+          },
+          "capabilities": [
+            {
+              "id": "tasks.list",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "not_implemented",
+              "remediation": null
+            },
+            {
+              "id": "approvals.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "not_implemented",
+              "remediation": null
+            },
+            {
+              "id": "approvals.respond",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "not_implemented",
+              "remediation": null
+            },
+            {
+              "id": "changes.poll",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "not_implemented",
+              "remediation": null
+            },
+            {
+              "id": "conversations.resume",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "not_implemented",
+              "remediation": null
+            },
+            {
+              "id": "memory.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "not_implemented",
+              "remediation": null
+            },
+            {
+              "id": "memory.write",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "not_implemented",
+              "remediation": null
+            }
+          ],
+          "transport": {
+            "polling": true,
+            "sse": false
+          },
+          "limits": {
+            "max_page_size": 64
+          }
+        }
+      }
+    },
+    {
+      "schema": "Error",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "error": {
+          "code": "capability_unavailable",
+          "message": "The shared task list adapter is not implemented.",
+          "retryable": false,
+          "capability": "tasks.list"
+        }
+      }
+    },
+    {
+      "schema": "TasksPage",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "data": {
+          "items": [
+            {
+              "id": "synthetic_task",
+              "title": "Synthetic task",
+              "revision": "1",
+              "state": "unknown",
+              "wait_reason": "reconciliation_required"
+            }
+          ],
+          "next_cursor": null,
+          "consistency": "live"
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "lying_availability",
+      "schema": "Capabilities",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "data": {
+          "contract_version": "0.1.0",
+          "backend": {
+            "id": "hermes"
+          },
+          "capabilities": [
+            {
+              "id": "tasks.list",
+              "supported": false,
+              "enabled": false,
+              "available": true,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.respond",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "changes.poll",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "conversations.resume",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.write",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            }
+          ],
+          "transport": {
+            "polling": false,
+            "sse": false
+          },
+          "limits": {
+            "max_page_size": 64
+          }
+        }
+      }
+    },
+    {
+      "name": "duplicate_capability",
+      "schema": "Capabilities",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "data": {
+          "contract_version": "0.1.0",
+          "backend": {
+            "id": "hermes"
+          },
+          "capabilities": [
+            {
+              "id": "tasks.list",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "tasks.list",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.respond",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "changes.poll",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "conversations.resume",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.write",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            }
+          ],
+          "transport": {
+            "polling": false,
+            "sse": false
+          },
+          "limits": {
+            "max_page_size": 64
+          }
+        }
+      }
+    },
+    {
+      "name": "unknown_version",
+      "schema": "Capabilities",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "data": {
+          "contract_version": "99.0.0",
+          "backend": {
+            "id": "hermes"
+          },
+          "capabilities": [
+            {
+              "id": "tasks.list",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.respond",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "changes.poll",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "conversations.resume",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.write",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            }
+          ],
+          "transport": {
+            "polling": false,
+            "sse": false
+          },
+          "limits": {
+            "max_page_size": 64
+          }
+        }
+      }
+    },
+    {
+      "name": "unknown_field",
+      "schema": "Capabilities",
+      "value": {
+        "schema_version": "personal.api.v1",
+        "data": {
+          "contract_version": "0.1.0",
+          "backend": {
+            "id": "hermes"
+          },
+          "capabilities": [
+            {
+              "id": "tasks.list",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "approvals.respond",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "changes.poll",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "conversations.resume",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.read",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            },
+            {
+              "id": "memory.write",
+              "supported": false,
+              "enabled": false,
+              "available": false,
+              "reason": "identity_unavailable",
+              "remediation": {
+                "kind": "operator_action",
+                "message": "A verified host identity adapter and shared route implementation are required."
+              }
+            }
+          ],
+          "transport": {
+            "polling": false,
+            "sse": false
+          },
+          "limits": {
+            "max_page_size": 64
+          }
+        },
+        "access_token": "not-a-real-token"
+      }
+    }
+  ]
+}
