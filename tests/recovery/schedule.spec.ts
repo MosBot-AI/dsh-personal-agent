@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
 import { describe, expect, it } from 'vitest'
 import {
   createNativeProfile, nativeAgentRows, nativeProfileTimeoutMs, nativeSessionPersistenceRows,
@@ -68,16 +69,18 @@ describe('native routine recovery', () => {
     }
   }, 4 * nativeProfileTimeoutMs + 1_000)
 
-  it('holds an unbound mapping when its native marker survives an outside edit', () => {
+  it('holds an unbound mapping when its native marker survives an outside edit after a delayed restart', async () => {
     const profile = createScheduleProfile()
     try {
-      const crash = report(profile, 'create-crash', 88)
+      const crash = report(profile, 'create-tamper-crash', 88)
+      // Exceed the old 1,250 ms wake window without depending on machine load.
+      await delay(2_500)
       expect(report(profile, 'recover-tampered')).toMatchObject({ phase: 'recover-tampered', nativeId: crash.nativeId,
         nativeRows: 1, occurrences: 0, mappingState: 'uncertain' })
     } finally {
       profile.dispose()
     }
-  }, 2 * nativeProfileTimeoutMs + 1_000)
+  }, 2 * nativeProfileTimeoutMs + 3_500)
 
   it('keeps a raw native Run Now receipt out of timed application intake', () => {
     const profile = createScheduleProfile()
