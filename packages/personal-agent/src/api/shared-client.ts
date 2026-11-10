@@ -6,14 +6,15 @@ export const sharedCapabilityIds = [
   'conversations.resume', 'memory.read', 'memory.write',
 ] as const
 
-export function sharedCapabilities() {
+export function sharedCapabilities(tasksAvailable = false) {
   return {
     schema_version: 'personal.api.v1',
     data: {
       contract_version: '0.1.0', backend: { id: 'dsh' },
       capabilities: sharedCapabilityIds.map(id => ({
-        id, supported: false, enabled: false, available: false,
-        reason: 'not_implemented', remediation: null,
+        id, supported: id === 'tasks.list' && tasksAvailable, enabled: id === 'tasks.list' && tasksAvailable,
+        available: id === 'tasks.list' && tasksAvailable,
+        reason: id === 'tasks.list' && tasksAvailable ? null : 'not_implemented', remediation: null,
       })),
       transport: { polling: true, sse: false }, limits: { max_page_size: 64 },
     },
@@ -31,7 +32,7 @@ export function sharedError(code: SharedErrorCode, message: string, capability?:
   } as const
 }
 
-/** Future list adapter seam; deliberately not connected to a collection route yet. */
+/** Strict public task view. Recorded state is not proof of live worker or external-effect status. */
 export function projectSharedTask(task: {
   id: string; requestedOutcome: string; version: number; status: TaskStatus;
 }) {
