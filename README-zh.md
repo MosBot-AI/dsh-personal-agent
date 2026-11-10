@@ -146,9 +146,18 @@ desktop:
 
 **接管桌面**会立即阻止新的自动化输入。已经发出的操作收尾后，原生 Worker 释放计算槽位。**使用新租约继续桌面工作**会取得新授权，并要求重新观察。每位本地用户的共享保留会在不同 Profile 之间串行化桌面工作流。锁屏、缺少权限或驱动不可用时，任务进入环境等待。桌面部署只允许使用获租约的模型工具。操作系统沙箱需要另行配置能够强制隔离的执行后端。
 
-### Linux 原生就绪检查（不代表支持输入）
+### 配置 Linux 目标（尚未启用控制）
 
-在 Linux 上，宿主可识别已挂载的 `cua-driver-native` 提供者，并在桌面租约内以空参数调用固定版本的 `check_permissions`。缺少 X11/AT-SPI 时等待权限；拒绝 Wayland。即使能力检查成功，仍进入 `session_state_unavailable`：SDK 0.28.0 无法证明操作系统会话已解锁。不会开放截图、原生输入、模型调用或前台重试。现有 macOS 和隔离浏览器路径不变。Linux XDG 身份和可信 OS 锁屏探针仍待实现。[合约审计](docs/evidence/PA-031-zh.md#linux-原生就绪检查切片)
+现有 `applications` 保留给 macOS Bundle ID。Linux XDG ID 使用独立字段精确配置，不带 `.desktop` 后缀：
+
+```yaml
+desktop:
+  linuxApplications: [chromium, org.xfce.Mousepad]
+```
+
+持久任务键使用命名空间，例如 `linux:chromium`，因此切换已安装的提供者不会重新解释 macOS 授权。标识精确匹配、区分大小写；不接受路径、命令、隐式去除后缀或模糊可执行文件匹配。上游 `list_apps` 使用进程名启发式关联，仅是发现元数据，不是授权边界。
+
+今日页面列出目标，明确说明不可用并禁用启动。直接 RPC 启动也会在准备上下文、获取租约或创建 Worker 之前被拒绝。不会执行原生发现、截图、输入、模型调用或前台重试。Linux 控制仍需可信 OS 会话锁屏证明和精确的存活应用/窗口绑定；`LockedHint=false` 及上游 `desktop_unlocked` 都不能证明这些保证。现有 macOS 和浏览器目标保持原有授权。[合约审计](docs/evidence/PA-031-zh.md#显式-linux-目标配置)
 
 ### 运行隔离浏览器任务
 

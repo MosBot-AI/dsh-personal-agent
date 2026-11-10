@@ -54,14 +54,14 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
-  it.skipIf(process.platform !== 'linux')('parks native Linux capability success before model input', async () => {
+  it.skipIf(process.platform !== 'linux')('rejects unbound Linux targets and never reinterprets macOS grants', async () => {
     const linuxProbe = fileURLToPath(new URL('./fixtures/desktop-linux-probe.mjs', import.meta.url))
     const host = await openWebHost(linuxProbe, { patch: [
       '- id: dshpa', '  config:', '    inbox:',
       "      storageDirectory: !!js dshHomePath('desktop-inbox')",
       '      workRoot: !!js process.cwd()', '      worker:', '        provider: pa031-desktop-fixture',
       '        model: desktop-worker', '        concurrency: 2', '        unmetered: true',
-      '      desktop:', '        applications: [org.example.Editor]',
+      '      desktop:', '        applications: [org.example.Editor]', '        linuxApplications: [chromium]',
     ] })
     const cookie = await host.exchange()
     const inbox: InboxPort = async request => {
@@ -78,14 +78,22 @@ describe('published DSH Web local inbox', () => {
       assert.ok(response.ok && response.kind === 'snapshot')
       return response.snapshot.tasks.find(task => task.id === taskId)!
     }
-    updated(await inbox({ type: 'desktop_start', taskId, expectedVersion: (await read()).version,
-      cursor: 'linux-no-input', application: 'org.example.Editor' }))
+    const initial = await read()
+    const targets = await inbox({ type: 'snapshot' })
+    assert.ok(targets.ok && targets.kind === 'snapshot')
+    expect(targets.snapshot.desktopTargets).toContainEqual({ application: 'linux:chromium', unavailableReason: 'linux_binding_unavailable' })
+    expect(await inbox({ type: 'desktop_start', taskId, expectedVersion: initial.version,
+      cursor: 'linux-no-input', application: 'linux:chromium' })).toEqual({ ok: false, code: 'linux_binding_unavailable' })
+    expect(await read()).toMatchObject({ status: 'queued', version: initial.version, runtime: 'inactive' })
+    updated(await inbox({ type: 'desktop_start', taskId, expectedVersion: initial.version,
+      cursor: 'mac-no-linux-probe', application: 'org.example.Editor' }))
     const waiting = await waitForTask(read, task => task.status === 'waiting_environment' && task.runtime === 'inactive',
-      'Linux missing OS session probe', host.diagnostics)
-    expect(waiting.wait?.referenceId).toBe('dshpa-desktop-wait:session_state_unavailable')
+      'macOS provider unavailable, not substituted with Linux', host.diagnostics)
+    expect(waiting.wait?.referenceId).toBe('dshpa-desktop-wait:driver_unavailable')
     const db = new DatabaseSync(join(host.root, 'home', 'desktop-inbox', DATABASE_FILENAME), { readOnly: true })
     try {
-      expect(db.prepare('SELECT status FROM worker_inputs WHERE cursor = ?').get('linux-no-input')?.status).toBe('not_delivered')
+      expect(db.prepare('SELECT status FROM worker_inputs WHERE cursor = ?').get('linux-no-input')).toBeUndefined()
+      expect(db.prepare('SELECT status FROM worker_inputs WHERE cursor = ?').get('mac-no-linux-probe')?.status).toBe('not_delivered')
     } finally { db.close() }
   }, 30_000)
 

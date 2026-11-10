@@ -1,20 +1,21 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { z } from 'zod'
-import { desktopApplicationSchema, type DesktopActivity, type DesktopTarget } from '../domain/model.js'
+import { macosApplicationSchema, linuxApplicationIdSchema, linuxApplication, type DesktopActivity, type DesktopTarget } from '../domain/model.js'
 import type { WorkState } from '../domain/transitions.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
 import { bindBrowserWorkflow, browserApplication, browserProfileSchema, type BrowserProfile } from './browser.js'
-import { createLinuxDesktopReadiness } from './desktop-linux.js'
 import { bindDesktopWorkflow, createDesktopTool, type DesktopWait } from './desktop.js'
 import { createResourceLeases, type ResourceLease, type ResourceLeases } from './resource-leases.js'
 
 export const desktopConfigSchema = z.strictObject({
-  applications: z.array(desktopApplicationSchema.refine(value => !value.startsWith('browser.'))).max(16).default([]),
+  applications: z.array(macosApplicationSchema.refine(value => !value.startsWith('browser.'))).max(16).default([]),
+  linuxApplications: z.array(linuxApplicationIdSchema).max(16).default([]),
   browserProfiles: z.array(browserProfileSchema).max(8).default([]),
   leaseMs: z.int().min(1_000).max(30 * 60_000).default(5 * 60_000),
-}).refine(config => config.applications.length + config.browserProfiles.length > 0
+}).refine(config => config.applications.length + config.linuxApplications.length + config.browserProfiles.length > 0
+  && new Set(config.linuxApplications).size === config.linuxApplications.length
   && new Set(config.applications).size === config.applications.length
   && new Set(config.browserProfiles.map(profile => profile.id)).size === config.browserProfiles.length)
 
@@ -33,15 +34,14 @@ type Binding = {
   ref: WorkRef; attemptId: WorkState['attempt']['id']; target: DesktopTarget; lease: ResourceLease
 }
 
-const fail = (code: 'permission_denied' | 'resource_busy' | 'stale_lease') => ({ ok: false, code }) as const
+const fail = (code: 'permission_denied' | 'resource_busy' | 'stale_lease' | 'linux_binding_unavailable') => ({ ok: false, code }) as const
 
 /** Owner control of the local desktop. The lease object never crosses the inbox transport. */
-export function createDesktopControl({ store, identity, config, native, nativeLinux, nativeBrowser, bindBrowser, leases = createResourceLeases() }: {
+export function createDesktopControl({ store, identity, config, native, nativeBrowser, bindBrowser, leases = createResourceLeases() }: {
   store: WorkStore
   identity: IdentityBoundary
   config: z.infer<typeof desktopConfigSchema>
   native: () => ToolDefinition | undefined
-  nativeLinux?: () => ToolDefinition | undefined
   bindBrowser?: (profile: BrowserProfile, agent: Agent, signal: AbortSignal) => boolean
   nativeBrowser: (profile: BrowserProfile, name: string, execution: ToolRunContext) => ToolDefinition | undefined
   leases?: ResourceLeases
@@ -51,6 +51,7 @@ export function createDesktopControl({ store, identity, config, native, nativeLi
   const browsers = new Map(config.browserProfiles.map(profile => [browserApplication(profile), profile]))
   const targets: readonly DesktopTarget[] = Object.freeze([
     ...config.applications.map(application => ({ application })),
+    ...config.linuxApplications.map(id => ({ application: linuxApplication(id), unavailableReason: 'linux_binding_unavailable' as const })),
     ...[...browsers].map(([application, profile]) => ({ application, startUrl: profile.startUrl })),
   ])
 
@@ -85,6 +86,7 @@ export function createDesktopControl({ store, identity, config, native, nativeLi
       if (!target || identity.resolveOwner(token) !== owner || !sameOwner(ref, owner)) {
         return fail('permission_denied')
       }
+      if (target.unavailableReason) return fail(target.unavailableReason)
       const attemptId = state.attempt.id
       const generation = state.attempt.generation
       const options = {
@@ -121,11 +123,6 @@ export function createDesktopControl({ store, identity, config, native, nativeLi
         tool = workflow.tool
         waiting = workflow.waiting
         probes = () => [{ method: 'open' }]
-      } else if (nativeLinux?.()) {
-        const workflow = createLinuxDesktopReadiness(leases, lease, nativeLinux)
-        tool = workflow.tool
-        waiting = workflow.waiting
-        probes = workflow.probes
       } else {
         const workflow = bindDesktopWorkflow(leases, lease, application)
         const pinned = native()

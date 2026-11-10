@@ -1,6 +1,6 @@
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { z } from 'zod'
-import { desktopApplicationSchema } from '../domain/model.js'
+import { macosApplicationSchema as desktopApplicationSchema } from '../domain/model.js'
 import type { ResourceLease, ResourceLeases } from './resource-leases.js'
 
 const windowId = z.int().positive().max(2 ** 32 - 1)

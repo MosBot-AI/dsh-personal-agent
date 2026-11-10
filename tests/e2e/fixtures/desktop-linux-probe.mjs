@@ -19,9 +19,7 @@ async function initialize(ctx) {
     parameters: { type: 'object', additionalProperties: false, properties: {} },
     output: { schema: {}, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
     async execute(args) {
-      assert.deepEqual(args, {})
-      return { structuredContent: { x11: true, wayland: false, wayland_enabled: false,
-        atspi: true, xsend_event: true, desktop_unlocked: true } }
+      assert.fail('Target admission must not invoke native Linux discovery, capability checks or input')
     },
   })
   ctx.tools.register({

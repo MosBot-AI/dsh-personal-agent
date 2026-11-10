@@ -217,8 +217,20 @@ export const mandateRefSchema = z.strictObject({
   policyVersion: nonEmptyTextSchema,
 }).readonly()
 
-export const desktopApplicationSchema = z.string().regex(/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u).max(256)
-export const desktopTargetSchema = z.strictObject({ application: desktopApplicationSchema, startUrl: z.url().max(2048).optional() })
+export const macosApplicationSchema = z.string().regex(/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u).max(256)
+// Exact SDK XDG identifier, without the .desktop suffix. No normalization or launch syntax.
+export const linuxApplicationIdSchema = z.string().min(1).max(250)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u)
+  .refine(value => !value.endsWith('.desktop') && !value.includes('..'))
+export const linuxApplication = (id: string): string => `linux:${linuxApplicationIdSchema.parse(id)}`
+export const desktopApplicationSchema = z.union([
+  macosApplicationSchema,
+  z.string().startsWith('linux:').refine(value => linuxApplicationIdSchema.safeParse(value.slice(6)).success),
+])
+export const desktopTargetSchema = z.strictObject({
+  application: desktopApplicationSchema, startUrl: z.url().max(2048).optional(),
+  unavailableReason: z.literal('linux_binding_unavailable').optional(),
+})
 export type DesktopTarget = z.infer<typeof desktopTargetSchema>
 export const desktopActivitySchema = desktopTargetSchema.extend({
   taskId: z.string().min(1), leaseId: z.uuid(),

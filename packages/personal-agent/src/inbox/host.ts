@@ -391,11 +391,6 @@ export function activateLocalInbox(
           const provider = ctx.get('computerUse') as { providerName?: string } | undefined
           return provider?.providerName === 'dsh-cua' ? tools.executable('cua') : undefined
         },
-        nativeLinux: () => {
-          const provider = ctx.get('computerUse') as { providerName?: string } | undefined
-          return process.platform === 'linux' && provider?.providerName === 'cua-driver-native'
-            ? tools.executable('cua_driver_native__check_permissions') : undefined
-        },
         bindBrowser: (profile, agent, signal) => {
           const chrome = ctx.get('dshpaBrowserChrome') as {
             bind?: (owner: typeof agent, origin: string, signal: AbortSignal) => boolean
