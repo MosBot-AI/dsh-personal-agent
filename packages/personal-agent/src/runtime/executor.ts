@@ -742,7 +742,9 @@ class WorkerExecutor {
   private waitForDesktop(entry: Entry, state: WorkState, reason: DesktopWait | 'desktop_taken_over' | 'desktop_lease_lost'): void {
     const prompts = {
       driver_unavailable: 'Reconnect the native desktop provider.',
-      permission_required: 'Review macOS Accessibility and application consent.',
+      permission_required: 'Review native desktop accessibility permissions and application consent.',
+      session_state_unavailable: 'Linux native input requires a trusted OS session-lock probe; capture permission does not prove an unlocked session.',
+      unsupported_desktop: 'This native desktop boundary does not support Wayland input; no foreground fallback is permitted.',
       screen_locked: 'Unlock the local macOS session.',
       target_unavailable: 'Review the approved application and its current window.',
       desktop_taken_over: 'The owner took control of the desktop.',

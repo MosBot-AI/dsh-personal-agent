@@ -60,3 +60,15 @@ macOS 真机验收需要所有者解锁会话、为签名的 DSH Computer Use he
 首次集成类型检查因未导入浏览器服务的类型扩展而失败；修正后全量检查通过。离线安装缺少包策略元数据缓存；在线安装保留包策略校验，锁文件记录了适配器直接使用的固定版本 DSH 依赖。
 
 本次评审不能证明实体 macOS 输入／接管、锁屏／休眠唤醒、实体手机、真实 ComfyUI／GPU 或发布验收通过。PA-031 保持审查中，不添加 `acceptance:verified`，直至完成适用的真实桌面验收。当前 GitHub CLI 未登录，插件也无法操作私有 Project 字段；明确交接及进度记录在 Issue #25。用户知识库 `/Users/charleypeng/Documents/llmwiki` 不可用。
+
+## Linux 原生就绪检查切片
+
+本次后续工作识别 Linux 上已经挂载的 `cua-driver-native` 提供者，只在现有桌面租约内执行固定版本的只读权限探针。**不开放**应用发现、截图、输入、模型调用或前台重试。未知 OS 锁屏状态报告为 `session_state_unavailable`；不支持的 Wayland 报告为 `unsupported_desktop`。缺少 X11/AT-SPI/输入能力时仍等待权限。部署守卫继续阻止直接调用原始提供者工具。替换提供者、畸形或错误响应、租约丢失均拒绝放行。原生 D-Bus 地址不会返回给 Worker。
+
+合约审计：DSH 提交 `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159` 的[原生提供者](https://github.com/deepseek-ai/deepseek-harness/tree/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/experimental/computer-use-cua-driver-native)固定依赖 `@trycua/cua-driver@0.28.0`。SDK 源码标签 `cua-driver-rs-v0.28.0` 对应 [trycua/cua](https://github.com/trycua/cua/tree/1b50c02e2d34734f64d2d22f54eb76cc97b4a663/libs/cua-driver/rust) 提交 `1b50c02e2d34734f64d2d22f54eb76cc97b4a663`。Linux 的 `platform-linux/src/tools/impl_.rs` 为 `check_permissions` 定义严格空参数，返回 X11、Wayland、AT-SPI 和输入能力布尔值；macOS 风格的 `{prompt:false}` 不是 Linux 合约。`cua-driver-contract/src/outputs.rs` 明确说明 `desktop_unlocked` 代表截图范围授权，不是 OS 锁屏探针。`platform-linux/src/input/delivery.rs` 警告 Wayland 后台输入可能发往合成器焦点。这些信号都不足以授权安全的精确窗口输入。
+
+剩余实现：可信 OS 会话锁屏观察、Linux XDG 应用身份（不能假定为 macOS Bundle ID）、精确的存活 PID/窗口绑定、每窗口的新鲜 Token，以及仅后台操作的结果验证。物理锁屏、睡眠/唤醒和原生输入验收仍未验证。当前 Schema 仍仅接受反向域名应用标识；此就绪阶段不通过允许任意进程/窗口标识扩大权限。未改变权限、电源或安全设置，未调用模型，也未尝试真实原生操作。
+
+验证采用无密钥的确定性能力结果，不是原生设备实测。独立审查未发现此仅就绪边界的阻塞安全问题，建议补充在途接管及宿主准入回归，两项均已补充。变更前基线类型检查和构建通过，但全套中一个既有调度恢复断言失败（328/329）；单独重跑全部六项调度测试通过。该基线波动不归因于 Linux 变更。用户知识库路径不可用；以上源码结论均依据固定上游版本核查。
+
+候选版本验证环境：Linux x86_64、Node.js 24.22.1、pnpm 11.28.5。类型检查和构建通过；12 项 Linux 边界测试与两项原生宿主桌面测试通过（11 项无关 Web 用例按名称过滤，未声称通过）。计划校验、12 项协调测试和空白检查通过。完整 `pnpm check` 的 341 项中通过 340 项，同一个变更前已存在的调度恢复断言失败；限制测试并发也复现。因此完整测试门禁**并非全绿**。不请求自动合并或标记验收完成。后续实现可基于此安全等待的就绪边界继续，而不能把上游能力授权当作会话解锁证据。

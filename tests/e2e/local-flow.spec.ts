@@ -54,6 +54,41 @@ async function waitForTask(
 }
 
 describe('published DSH Web local inbox', () => {
+  it.skipIf(process.platform !== 'linux')('parks native Linux capability success before model input', async () => {
+    const linuxProbe = fileURLToPath(new URL('./fixtures/desktop-linux-probe.mjs', import.meta.url))
+    const host = await openWebHost(linuxProbe, { patch: [
+      '- id: dshpa', '  config:', '    inbox:',
+      "      storageDirectory: !!js dshHomePath('desktop-inbox')",
+      '      workRoot: !!js process.cwd()', '      worker:', '        provider: pa031-desktop-fixture',
+      '        model: desktop-worker', '        concurrency: 2', '        unmetered: true',
+      '      desktop:', '        applications: [org.example.Editor]',
+    ] })
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const reply = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(reply.status === 200 && reply.result?.ok, JSON.stringify(reply))
+      return reply.result.value
+    }
+    const projectId = updated(await inbox({ type: 'create_project', commandId: 'linux-project',
+      title: 'Linux readiness', purpose: 'Verify model admission remains closed.' })).projectId!
+    const taskId = updated(await inbox({ type: 'create_task', projectId, commandId: 'linux-task',
+      sessionId: 'pa031-primary', outcome: 'Linux capability readiness' })).taskId!
+    const read = async () => {
+      const response = await inbox({ type: 'snapshot' })
+      assert.ok(response.ok && response.kind === 'snapshot')
+      return response.snapshot.tasks.find(task => task.id === taskId)!
+    }
+    updated(await inbox({ type: 'desktop_start', taskId, expectedVersion: (await read()).version,
+      cursor: 'linux-no-input', application: 'org.example.Editor' }))
+    const waiting = await waitForTask(read, task => task.status === 'waiting_environment' && task.runtime === 'inactive',
+      'Linux missing OS session probe', host.diagnostics)
+    expect(waiting.wait?.referenceId).toBe('dshpa-desktop-wait:session_state_unavailable')
+    const db = new DatabaseSync(join(host.root, 'home', 'desktop-inbox', DATABASE_FILENAME), { readOnly: true })
+    try {
+      expect(db.prepare('SELECT status FROM worker_inputs WHERE cursor = ?').get('linux-no-input')?.status).toBe('not_delivered')
+    } finally { db.close() }
+  }, 30_000)
+
   it('parks unavailable desktop work, fences input on takeover, and continues on a fresh lease', async () => {
     const host = await openWebHost(desktopProbe, { patch: [
       '- id: dshpa', '  config:', '    inbox:',

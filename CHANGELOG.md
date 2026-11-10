@@ -12,6 +12,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Added
 
+- Recognize the Linux native provider with lease-gated, read-only capability checks; refuse unsupported Wayland and unknown OS lock state without admitting model, capture or input. This is not Linux input support.
+
 - Add opt-in mobile task updates and exact approval review with local pairing, device revocation and explicit per-review handoff. The view clears private content when hidden and authenticates again when it becomes visible.
 - Add the pinned TypeScript and pnpm workspace and a native bundle that loads through the named `dshpa` profile.
 - Add a native DSH agent and session adapter, with real-host contract checks and compatibility evidence for control, persistence, and scheduling.

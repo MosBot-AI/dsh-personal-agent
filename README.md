@@ -146,6 +146,10 @@ In **Today**, choose a queued task and application, then select **Authorize and 
 
 **Take over desktop** fences new automated input immediately. The native Worker releases its compute slot after started operations settle. **Continue with a new desktop lease** obtains a new grant and requires fresh observations. The local per-user reservation serializes desktop workflows across profiles. A lock, missing permissions, or an unavailable driver puts the task in an environment wait. The desktop deployment admits only its leased model tool. OS sandboxing requires a separate execution backend with an enforced isolation boundary.
 
+### Linux native readiness (not input support)
+
+On Linux, an already mounted `cua-driver-native` provider is recognized and its pinned `check_permissions` tool is called with empty arguments under the desktop lease. Missing X11/AT-SPI waits for permissions; Wayland is refused. Even a successful capability check stays in `session_state_unavailable`: SDK 0.28.0 does not prove the OS session is unlocked. No screenshot, native input, model admission or foreground fallback is enabled. Existing macOS and isolated-browser paths are unchanged. Linux XDG identity and a trusted OS-lock probe remain follow-up work. [Contract audit](docs/evidence/PA-031.md#linux-native-readiness-slice)
+
 ### Run an isolated browser task
 
 The optional Chrome bundle gives a task a leased browser profile and tab. Today shows the approved starting URL before launch. The model can observe and operate the isolated tab within its assigned origin. [Chrome provider setup](packages/browser-chrome/README.md)

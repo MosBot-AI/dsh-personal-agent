@@ -25,7 +25,7 @@ const capabilities = z.object({
 const selectedApplication = z.object({ ...appHandle, pid: z.int().positive(), bundleId: desktopApplicationSchema })
 const state = z.object({ ...appHandle, pid: z.int().positive(), snapshotId: nativeId, windowId: windowId.nullable() })
 
-export type DesktopWait = 'driver_unavailable' | 'screen_locked' | 'permission_required' | 'target_unavailable'
+export type DesktopWait = 'session_state_unavailable' | 'unsupported_desktop' | 'driver_unavailable' | 'screen_locked' | 'permission_required' | 'target_unavailable'
 type NativeRequest = z.infer<typeof requests>
 type NativeResult = { readonly isError: false; readonly value: unknown }
   | { readonly isError: true; readonly code?: string }

@@ -146,6 +146,10 @@ desktop:
 
 **接管桌面**会立即阻止新的自动化输入。已经发出的操作收尾后，原生 Worker 释放计算槽位。**使用新租约继续桌面工作**会取得新授权，并要求重新观察。每位本地用户的共享保留会在不同 Profile 之间串行化桌面工作流。锁屏、缺少权限或驱动不可用时，任务进入环境等待。桌面部署只允许使用获租约的模型工具。操作系统沙箱需要另行配置能够强制隔离的执行后端。
 
+### Linux 原生就绪检查（不代表支持输入）
+
+在 Linux 上，宿主可识别已挂载的 `cua-driver-native` 提供者，并在桌面租约内以空参数调用固定版本的 `check_permissions`。缺少 X11/AT-SPI 时等待权限；拒绝 Wayland。即使能力检查成功，仍进入 `session_state_unavailable`：SDK 0.28.0 无法证明操作系统会话已解锁。不会开放截图、原生输入、模型调用或前台重试。现有 macOS 和隔离浏览器路径不变。Linux XDG 身份和可信 OS 锁屏探针仍待实现。[合约审计](docs/evidence/PA-031-zh.md#linux-原生就绪检查切片)
+
 ### 运行隔离浏览器任务
 
 可选 Chrome Bundle 为任务提供受租约保护的浏览器 Profile 和标签页。今日会在启动前显示已批准的起始 URL。模型可在所分配的来源内观察和操作隔离标签页。[Chrome 提供者配置](packages/browser-chrome/README-zh.md)

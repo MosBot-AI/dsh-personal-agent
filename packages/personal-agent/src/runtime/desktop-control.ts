@@ -6,6 +6,7 @@ import type { WorkState } from '../domain/transitions.js'
 import type { IdentityBoundary, OwnerIdentity } from '../policy/identity.js'
 import type { WorkRef, WorkStore } from '../storage/store.js'
 import { bindBrowserWorkflow, browserApplication, browserProfileSchema, type BrowserProfile } from './browser.js'
+import { createLinuxDesktopReadiness } from './desktop-linux.js'
 import { bindDesktopWorkflow, createDesktopTool, type DesktopWait } from './desktop.js'
 import { createResourceLeases, type ResourceLease, type ResourceLeases } from './resource-leases.js'
 
@@ -35,11 +36,12 @@ type Binding = {
 const fail = (code: 'permission_denied' | 'resource_busy' | 'stale_lease') => ({ ok: false, code }) as const
 
 /** Owner control of the local desktop. The lease object never crosses the inbox transport. */
-export function createDesktopControl({ store, identity, config, native, nativeBrowser, bindBrowser, leases = createResourceLeases() }: {
+export function createDesktopControl({ store, identity, config, native, nativeLinux, nativeBrowser, bindBrowser, leases = createResourceLeases() }: {
   store: WorkStore
   identity: IdentityBoundary
   config: z.infer<typeof desktopConfigSchema>
   native: () => ToolDefinition | undefined
+  nativeLinux?: () => ToolDefinition | undefined
   bindBrowser?: (profile: BrowserProfile, agent: Agent, signal: AbortSignal) => boolean
   nativeBrowser: (profile: BrowserProfile, name: string, execution: ToolRunContext) => ToolDefinition | undefined
   leases?: ResourceLeases
@@ -119,6 +121,11 @@ export function createDesktopControl({ store, identity, config, native, nativeBr
         tool = workflow.tool
         waiting = workflow.waiting
         probes = () => [{ method: 'open' }]
+      } else if (nativeLinux?.()) {
+        const workflow = createLinuxDesktopReadiness(leases, lease, nativeLinux)
+        tool = workflow.tool
+        waiting = workflow.waiting
+        probes = workflow.probes
       } else {
         const workflow = bindDesktopWorkflow(leases, lease, application)
         const pinned = native()
