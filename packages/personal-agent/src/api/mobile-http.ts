@@ -5,6 +5,7 @@ import type { MobileApprovals } from './approvals.js'
 import { mobileIcon, mobileManifest, mobilePage, mobileScript, mobileStyles } from '../client/mobile-page.js'
 import type { MobileDeviceLedger } from './devices.js'
 import type { MobileFeed } from './events.js'
+import { sharedCapabilities, sharedError } from './shared-client.js'
 
 const cookieName = '__Host-dshpa-mobile'
 const cookieAttributes = 'Path=/; Secure; HttpOnly; SameSite=Strict'
@@ -134,10 +135,14 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
   async function handle(request: IncomingMessage, response: ServerResponse) {
     secureHeaders(response)
     const method = request.method
+    const sharedRoute = request.url?.split('?')[0] === '/v1/capabilities' || request.url?.split('?')[0] === '/v1/tasks'
     const site = request.headers['sec-fetch-site']
     if (request.headers.host !== origin.host || (request.headers.origin !== undefined && request.headers.origin !== origin.origin)
       || (site !== undefined && site !== 'same-origin' && site !== 'none')
-      || (method === 'POST' && request.headers.origin !== origin.origin)) return failure(response, 403, 'forbidden_origin')
+      || (method === 'POST' && request.headers.origin !== origin.origin)) {
+      return sharedRoute ? json(response, 403, sharedError('forbidden', 'The request origin is not allowed.'))
+        : failure(response, 403, 'forbidden_origin')
+    }
     if (!request.url?.startsWith('/') || request.url.startsWith('//') || request.url.includes('\\')) return failure(response, 400, 'invalid_path')
     const url = new URL(request.url, origin)
     if (method === 'GET' && !url.search) {
@@ -166,6 +171,23 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
       return json(response, 200, { ok: true })
     }
     const credential = credentialOf(request)
+    if (sharedRoute) {
+      if (!devices.authenticate(credential)) return json(response, 401, sharedError('auth_required', 'Device authentication is required.'))
+      if (method !== 'GET') return json(response, 400, sharedError('invalid_request', 'This route requires GET.'))
+      if (url.pathname === '/v1/capabilities') {
+        if (url.search) return json(response, 400, sharedError('invalid_request', 'Discovery does not accept query parameters.'))
+        return json(response, 200, sharedCapabilities())
+      }
+      const limit = url.searchParams.get('limit')
+      const cursor = url.searchParams.get('cursor')
+      if ([...url.searchParams.keys()].some(key => key !== 'limit' && key !== 'cursor')
+        || url.searchParams.getAll('limit').length > 1 || url.searchParams.getAll('cursor').length > 1
+        || (limit !== null && (!/^[1-9]\d?$/u.test(limit) || Number(limit) > 64))
+        || (cursor !== null && (cursor.length < 1 || cursor.length > 2048))) {
+        return json(response, 400, sharedError('invalid_request', 'Invalid task list query.'))
+      }
+      return json(response, 409, sharedError('capability_unavailable', 'The shared task list adapter is not implemented.', 'tasks.list'))
+    }
     if (method === 'GET' && url.pathname === '/v1/snapshot' && !url.search) {
       const snapshot = feed.snapshot(credential)
       return json(response, snapshot.ok ? 200 : 401, snapshot)
@@ -206,7 +228,9 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
   const server = createServer({ maxHeaderSize: 8192, requestTimeout: 10_000, headersTimeout: 8_000 }, (request, response) => {
     void handle(request, response).catch(() => {
       if (response.headersSent) response.end()
-      else failure(response, 503, 'mobile_unavailable')
+      else if (request.url?.split('?')[0] === '/v1/capabilities' || request.url?.split('?')[0] === '/v1/tasks') {
+        json(response, 503, sharedError('internal_unavailable', 'The shared API is temporarily unavailable.'))
+      } else failure(response, 503, 'mobile_unavailable')
     })
   })
   server.maxConnections = 128

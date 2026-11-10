@@ -1,0 +1,7 @@
+{
+  "repository": "MosBot-AI/hermes-superagent",
+  "commit": "48a930a2c01b2add9e349cbc1f0d65278066cc1c",
+  "directory": "contracts/personal-api",
+  "contract_version": "0.1.0",
+  "manifest_sha256": "809c64e989a8bf4c6b598f467d15a00aa123148400fc2be5f5f9e82653596a35"
+}

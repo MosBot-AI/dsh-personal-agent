@@ -8,6 +8,9 @@ Build a **persistent personal work system on the owner's computer**: one primary
 
 ## Reading guide
 
+
+- [Shared client API](shared-client-api.md): versioned cross-backend discovery and explicit unavailable domain routes.
+
 | Document | Purpose |
 | --- | --- |
 | [01 Product and architecture](01-product-and-architecture.md) | Value, user outcomes, responsibilities and non-goals |
