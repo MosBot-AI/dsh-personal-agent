@@ -3,7 +3,7 @@ import { closeSync } from 'node:fs'
 import { isAbsolute, matchesGlob, posix } from 'node:path'
 import { setImmediate } from 'node:timers/promises'
 import { z } from 'zod'
-import { indexText, keywordScore, keywordSnippet, knowledgeTerms, textPage, type IndexedText } from '../context/search-index.js'
+import { indexText, keywordScore, keywordSnippet, knowledgeQuery, textPage, type IndexedText } from '../context/search-index.js'
 import { sha256DigestSchema } from '../domain/model.js'
 import {
   directoryStat, fileStamp, identity, knowledgeFileOperations, openKnowledgeRoot, readKnowledgeFile, type KnowledgeFiles,
@@ -156,7 +156,7 @@ export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigS
               remainingRead -= metadata.size
             }
             const fresh = cached ? undefined : readKnowledgeFile(child, device, config.maxFileBytes)
-            const text = cached?.text ?? (fresh && indexText(fresh.bytes))
+            const text = cached?.text ?? (fresh && indexText(fresh.bytes, path))
             if (!text) {
               if (fresh) invalid.set(id, fresh.stamp)
               continue
@@ -226,16 +226,18 @@ export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigS
       if (!current() || closed || signal?.aborted) return fail('permission_denied')
       if (request.type === 'knowledge_status') return { ok: true as const, kind: 'knowledge_status' as const, roots: statuses() }
       if (request.type === 'knowledge_search') {
-        const terms = knowledgeTerms(request.query)
-        if (!terms) return fail('invalid_input')
+        const query = knowledgeQuery(request.query)
+        if (!query) return fail('invalid_input')
         const candidates = [...(root ? [root] : roots.values())].flatMap(origin => [...origin.rows.values()].flatMap(row => {
-          const score = keywordScore(row.text, row.source.path, terms)
+          const score = keywordScore(row.text, row.source.path, query)
           return score ? [{ origin, row, score }] : []
-        })).sort((a, b) => b.score - a.score || a.row.source.path.localeCompare(b.row.source.path))
+        })).sort((a, b) => b.score.exactFile - a.score.exactFile || b.score.bodyTerms - a.score.bodyTerms
+          || b.score.bodyMatches - a.score.bodyMatches || b.score.legacyScore - a.score.legacyScore
+          || a.row.source.path.localeCompare(b.row.source.path))
         const hits = []
         for (const { origin, row } of candidates) {
           if (!currentRow(origin, row)) continue
-          hits.push({ ...row.source, snippet: keywordSnippet(row.text, terms) })
+          hits.push({ ...row.source, snippet: keywordSnippet(row.text, query.terms) })
           if (hits.length >= request.limit) break
         }
         return { ok: true as const, kind: 'knowledge_search' as const, roots: statuses(), hits }
