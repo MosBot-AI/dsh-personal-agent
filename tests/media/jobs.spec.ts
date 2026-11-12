@@ -6,8 +6,9 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { expect, it, onTestFinished } from 'vitest'
+import { expect, it, onTestFinished, vi } from 'vitest'
 import { mediaServiceConfigSchema } from '../../packages/personal-agent/src/media/jobs.js'
+import { createGpuQueue } from '../../packages/personal-agent/src/runtime/gpu-queue.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { openWorkStore } from '../../packages/personal-agent/src/storage/store.js'
 import { accepted, comfyFixture, imageSpec, mediaRequest, videoSpec } from './fixture.js'
@@ -156,6 +157,71 @@ it('keeps a rate-limited preparation queued and cancels the waiting job without 
   expect(accepted(jobs.cancel({ access, operationId: request.operationId })).state).toBe('cancelled')
   expect(fixture.submissions).toEqual([])
   expect(fixture.cancelled).toEqual([])
+})
+
+it('waits for a GPU operation that starts during media preparation before submitting', async () => {
+  const fixture = await comfyFixture()
+  const preparing = Promise.withResolvers<void>()
+  const releasePreparation = Promise.withResolvers<void>()
+  const { registry, pin } = await fixture.register(1, {}, provider => {
+    const durableSubmission = provider.durableSubmission!
+    return {
+      ...provider,
+      durableSubmission: {
+        ...durableSubmission,
+        async prepare(request, signal) {
+          preparing.resolve()
+          await releasePreparation.promise
+          return durableSubmission.prepare(request, signal)
+        },
+      },
+    }
+  })
+  const store = openWorkStore(join(fixture.directory, 'work'))
+  const access = createAttempt(store, 'media-preparing')
+  const gpuAccess = createAttempt(store, 'gpu-during-preparation')
+  const request = { ...mediaRequest(), access }
+  const ref = { access, operationId: request.operationId }
+  const gpu = createGpuQueue({}, () => !store.mediaLeaseHeld())
+  const gpuStarted = Promise.withResolvers<void>()
+  const releaseGpu = Promise.withResolvers<void>()
+  const jobs = store.createMediaJobs(registry, mediaServiceConfigSchema.parse({ providers: { image: pin } }),
+    { current: () => true, artifactAllowed: () => false, canLease: () => gpu.snapshot(access).active === 0 })
+  onTestFinished(async () => {
+    releasePreparation.resolve()
+    releaseGpu.resolve()
+    await jobs.close()
+    await gpu.close()
+    await registry.close()
+    store.close()
+  })
+
+  expect(accepted(jobs.enqueue(request)).state).toBe('queued')
+  const sending = jobs.step()
+  await preparing.promise
+  const admission = gpu.enqueue(gpuAccess, () => true, async () => {
+    gpuStarted.resolve()
+    await releaseGpu.promise
+    return 'complete'
+  })
+  if (!admission.ok) throw new Error('Expected GPU admission, got ' + admission.code)
+  await gpuStarted.promise
+  releasePreparation.resolve()
+  await sending
+
+  expect(gpu.snapshot(access).active).toBe(1)
+  expect(fixture.submissions).toEqual([])
+  expect(accepted(jobs.inspect(ref))).toMatchObject({ state: 'queued', handle: undefined })
+  expect(store.mediaLeaseHeld()).toBe(false)
+
+  releaseGpu.resolve()
+  expect(await admission.completion).toEqual({ ok: true, value: 'complete' })
+  await vi.waitFor(() => expect(gpu.snapshot(access).active).toBe(0))
+  await jobs.step()
+  expect(fixture.submissions).toHaveLength(1)
+  expect(accepted(jobs.inspect(ref))).toMatchObject({ state: 'rendering',
+    handle: { handleId: fixture.submissions[0]!.prompt_id } })
+  expect(store.mediaLeaseHeld()).toBe(true)
 })
 
 it('releases the media lease when a finished prompt has a missing output', async () => {
