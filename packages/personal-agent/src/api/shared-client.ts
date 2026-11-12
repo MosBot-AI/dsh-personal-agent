@@ -36,9 +36,9 @@ export function sharedError(code: SharedErrorCode, message: string, capability?:
 export function projectSharedTask(task: {
   id: string; requestedOutcome: string; version: number; status: TaskStatus;
 }) {
-  // JSON Schema lengths count Unicode code points. Reject instead of truncating identity or content.
+  // JSON Schema lengths count Unicode code points. Identifiers and revisions must stay exact.
   if (typeof task.id !== 'string' || [...task.id].length < 1 || [...task.id].length > 256
-    || typeof task.requestedOutcome !== 'string' || [...task.requestedOutcome].length > 4096
+    || typeof task.requestedOutcome !== 'string'
     || !Number.isSafeInteger(task.version) || task.version < 1) {
     throw new RangeError('Task cannot be represented by the shared client contract')
   }
@@ -53,5 +53,8 @@ export function projectSharedTask(task: {
   } as const satisfies Record<TaskStatus, readonly [string, string | null]>
   if (!Object.hasOwn(states, task.status)) throw new RangeError('Unknown native task status')
   const [state, wait_reason] = states[task.status]
-  return { id: task.id, title: task.requestedOutcome, revision: String(task.version), state, wait_reason }
+  // Capture 4,095 code points only when at least 4,097 exist, leaving room for the ellipsis.
+  const titlePrefix = /^.{4095}(?=.{2})/su.exec(task.requestedOutcome)?.[0]
+  const title = titlePrefix === undefined ? task.requestedOutcome : titlePrefix + '…'
+  return { id: task.id, title, revision: String(task.version), state, wait_reason }
 }
