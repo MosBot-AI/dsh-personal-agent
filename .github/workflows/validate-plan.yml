@@ -47,6 +47,8 @@ jobs:
           fi
       - name: Verify native bundle
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm check
+      - name: Verify native Worker startup from a clean tarball profile
+        run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:install
       - name: Verify keyless native Web flow
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:local-flow
       - name: Verify mobile loopback Web flow

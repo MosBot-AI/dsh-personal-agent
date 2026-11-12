@@ -22,6 +22,7 @@
 | [10 模型调度与网关](10-model-routing-and-gateway-zh.md) | 难度/effort 自动选择、模型池、额度和兜底配置及实现比较 |
 | [11 Project 执行协议](11-github-project-workflow-zh.md) | GitHub 看板、认领、进度、验收与 Actions 自动化 |
 | [常驻宿主运维](operations-zh.md) | 前台 Profile、可选用户服务、健康检查、备份和审计 |
+| [Alpha 安装证据](evidence/PA-028-zh.md) | 打包后的原生 Worker 启动及剩余发布检查 |
 | [宿主兼容性证据](evidence/host-compatibility-zh.md) | 已安装 DSH 的代理、会话、调度和远程访问边界 |
 | [工作领域证据](evidence/PA-003-zh.md) | 记录校验、限定范围的命令准入和任务状态转换 |
 | [SQLite 存储证据](evidence/PA-004-zh.md) | 原子工作提交、单写入进程和故障恢复 |
