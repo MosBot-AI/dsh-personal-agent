@@ -101,6 +101,7 @@ function runMobilePage() {
   const replying = new Set<string>()
   let stream: EventSource | undefined
   let pending: AbortController | undefined
+  let refreshAfterPending = false
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
 
   function stop() {
@@ -108,6 +109,7 @@ function runMobilePage() {
     stream = undefined
     pending?.abort()
     pending = undefined
+    refreshAfterPending = false
     clearTimeout(refreshTimer)
     refreshTimer = undefined
     work.hidden = true
@@ -127,7 +129,10 @@ function runMobilePage() {
     stop()
     form.hidden = true
     status.textContent = text.reconnecting
-    refreshTimer = setTimeout(() => { void refresh() }, 1_500)
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined
+      void refresh()
+    }, 1_500)
   }
 
   function follow(cursor: string | null) {
@@ -135,8 +140,16 @@ function runMobilePage() {
     const events = new EventSource(path)
     stream = events
     const scheduleRefresh = () => {
-      if (stream !== events || refreshTimer !== undefined) return
-      refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh() }, 75)
+      if (stream !== events) return
+      if (pending) {
+        refreshAfterPending = true
+        return
+      }
+      if (refreshTimer !== undefined) return
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined
+        void refresh('event')
+      }, 75)
     }
     events.addEventListener('work', scheduleRefresh)
     events.addEventListener('approvals', scheduleRefresh)
@@ -210,11 +223,19 @@ function runMobilePage() {
     reviewSection.hidden = approvals.length === 0 && !reviewStatus.textContent
   }
 
-  async function refresh() {
+  async function refresh(source: 'direct' | 'event' = 'direct') {
     if (document.hidden) return
+    if (source === 'event' && pending) {
+      refreshAfterPending = true
+      return
+    }
     pending?.abort()
+    refreshAfterPending = false
     const controller = new AbortController()
     pending = controller
+    const deadline = setTimeout(() => {
+      if (pending === controller) reconnect()
+    }, 10_000)
     try {
       const request: RequestInit = { signal: controller.signal, cache: 'no-store' }
       const [response, reviews] = await Promise.all([fetch('/v1/snapshot', request), fetch('/v1/approvals', request)])
@@ -247,7 +268,11 @@ function runMobilePage() {
     } catch {
       if (!controller.signal.aborted) reconnect()
     } finally {
-      if (pending === controller) pending = undefined
+      clearTimeout(deadline)
+      if (pending === controller) {
+        pending = undefined
+        if (refreshAfterPending) void refresh()
+      }
     }
   }
 
