@@ -19,7 +19,13 @@ const provider = 'pa021-fixture'
 const projectId = 'ops-fixture-project'
 const privateMarker = 'private fixture provider content'
 const cwd = realpathSync(process.cwd())
-const models = ['healthy', 'auth-prepare', 'auth-stream', 'http-outage', 'transport', 'invalid-model', 'late', 'tools']
+const credentialFailures = new Map([
+  ['missing-credential', 'MISSING_CREDENTIAL'],
+  ['invalid-credential', 'INVALID_CREDENTIAL'],
+  ['account-sign-in', 'ACCOUNT_SIGN_IN_REQUIRED'],
+])
+const models = ['healthy', 'auth-prepare', 'auth-stream', ...credentialFailures.keys(),
+  'http-outage', 'transport', 'invalid-model', 'late', 'tools']
 const usage = { inputTokens: 5, outputTokens: 5, totalTokens: 10 }
 
 function* finish(status, code, providerRetryAfterMs) {
@@ -52,6 +58,8 @@ function attachAdapter(ctx) {
       calls.set(options.model, (calls.get(options.model) ?? 0) + 1)
       assert.equal(options.tools?.length ?? 0, 0)
       if (options.model === 'auth-stream') { yield* finish(403, 'FORBIDDEN'); return }
+      const credentialFailure = credentialFailures.get(options.model)
+      if (credentialFailure) { yield* finish(undefined, credentialFailure); return }
       if (options.model === 'http-outage') { yield* finish(503, 'HTTP_503', 120_000); return }
       if (options.model === 'transport') {
         await transport.promise
@@ -176,6 +184,18 @@ async function run(ctx, store) {
     const stream = await launch('auth-stream')
     const parked = await awaitWait(stream.ref, 'provider_authentication', true)
     assert.equal(seen.calls.get('auth-stream'), 1)
+    for (const model of credentialFailures.keys()) {
+      const { ref } = await launch(model)
+      const waiting = await awaitWait(ref, 'provider_authentication', true)
+      assert.match(waiting.task.wait.resumeCondition, /Verify model provider authorization/)
+      assert.equal(seen.calls.get(model), 1)
+    }
+    const repeated = await launch('missing-credential', 'missing-credential-cooldown')
+    await eventually(() => executor.query(repeated.ref).state?.task.status === 'waiting_resource',
+      'Same-route credential cooldown did not park the next Worker')
+    assert.equal(await executor.waitForRelease(repeated.ref), true)
+    assert.equal(executor.query(repeated.ref).issue, 'provider_authentication')
+    assert.equal(seen.calls.get('missing-credential'), 1)
     const wake = { type: 'wake', at, expectedVersion: parked.task.version, attemptId: parked.attempt.id,
       generation: parked.attempt.generation, reason: 'resource', referenceId: parked.task.wait.referenceId,
       policyVersion: actor.policyVersion, grantsCurrent: true, budgetAvailable: true, conditionSatisfied: true, runtimeQuiescent: true }
@@ -227,7 +247,7 @@ async function run(ctx, store) {
       ['start', 'step', 'progress'])
     const totals = budget.snapshot(scope).currencies[0]
     assert.equal(totals.claimedCalls, 0)
-    assert.equal(totals.uncertainCalls, 5)
+    assert.equal(totals.uncertainCalls, 8)
     assert.equal(success(store.applyEvent(stream.ref, { ...wake, at: parked.task.wait.notBefore })).task.status, 'queued')
     assert.equal(seen.calls.get('auth-stream'), 1, 'An explicit wake requeues without replaying the admitted input')
   } finally {

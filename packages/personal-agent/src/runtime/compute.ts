@@ -97,7 +97,10 @@ const transportCodes = new Set([
   'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH',
   'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET',
 ])
-const authCodes = new Set(['AUTH', 'UNAUTHORIZED', 'FORBIDDEN', 'MISSING_CREDENTIALS', 'HTTP_401', 'HTTP_403'])
+const authCodes = new Set([
+  'AUTH', 'UNAUTHORIZED', 'FORBIDDEN', 'HTTP_401', 'HTTP_403',
+  'MISSING_CREDENTIAL', 'MISSING_CREDENTIALS', 'INVALID_CREDENTIAL', 'ACCOUNT_SIGN_IN_REQUIRED',
+])
 type FailureFacts = Pick<LlmFailure, 'code' | 'status' | 'providerRetryAfterMs'>
 
 export function providerComputeIssue(failure: FailureFacts): ProviderIssue {
