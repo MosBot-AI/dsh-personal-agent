@@ -77,11 +77,13 @@ function runMobilePage() {
     connected: '已连接', pairing: '请从本机工作台获取配对码。', rejected: '配对失败，请检查配对码是否有效。',
     reconnecting: '正在重新连接…', empty: '暂时没有任务。',
     approve: '批准此动作', deny: '拒绝此动作', recorded: '已记录审批答复。', changed: '审批已变化或不可用，请重新检查。',
+    unconfirmed: '无法确认审批答复，请查看刷新后的审批。',
     account: '账户', resource: '资源', recipient: '接收方', scope: '数据范围', digest: '载荷摘要', expires: '过期时间', preview: '完整载荷预览',
   } : {
     connected: 'Connected', pairing: 'Get a pairing code from the local inbox.', rejected: 'Pairing failed. Check that the code is valid.',
     reconnecting: 'Reconnecting…', empty: 'No tasks yet.',
     approve: 'Approve this action', deny: 'Deny this action', recorded: 'Review response recorded.', changed: 'The review changed or is unavailable. Check it again.',
+    unconfirmed: 'Could not confirm the response. Check the refreshed review.',
     account: 'Account', resource: 'Resource', recipient: 'Recipient', scope: 'Data scope', digest: 'Payload digest', expires: 'Expires', preview: 'Exact payload preview',
   }
   const translations: Record<string, string> = {
@@ -98,12 +100,12 @@ function runMobilePage() {
   const reviewSection = document.querySelector<HTMLElement>('#reviews')!
   const reviewStatus = document.querySelector<HTMLParagraphElement>('#review-status')!
   const reviewItems = document.querySelector<HTMLUListElement>('#review-items')!
-  const replying = new Set<string>()
+  const replying = new Map<string, AbortController>()
   let stream: EventSource | undefined
   let pending: AbortController | undefined
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
 
-  function stop() {
+  function resetView() {
     stream?.close()
     stream = undefined
     pending?.abort()
@@ -117,6 +119,12 @@ function runMobilePage() {
     reviewStatus.textContent = ''
   }
 
+  function stop() {
+    for (const controller of replying.values()) controller.abort()
+    replying.clear()
+    resetView()
+  }
+
   function showPairing(message = text.pairing) {
     stop()
     form.hidden = false
@@ -124,7 +132,7 @@ function runMobilePage() {
   }
 
   function reconnect() {
-    stop()
+    resetView()
     form.hidden = true
     status.textContent = text.reconnecting
     refreshTimer = setTimeout(() => { void refresh() }, 1_500)
@@ -143,27 +151,34 @@ function runMobilePage() {
     events.addEventListener('session-ended', () => { if (stream === events) showPairing() })
     events.addEventListener('snapshot-required', () => {
       if (stream !== events) return
-      stop()
+      resetView()
       void refresh()
     })
     events.onerror = () => { if (stream === events) reconnect() }
   }
 
   async function respond(approval: InboxApproval, decision: 'approve' | 'deny', controls: HTMLDivElement) {
-    if (replying.has(approval.id)) return
-    replying.add(approval.id)
+    const requestId = approval.id
+    if (replying.has(requestId)) return
+    const controller = new AbortController()
+    replying.set(requestId, controller)
     for (const button of controls.querySelectorAll('button')) button.disabled = true
+    const deadline = setTimeout(() => controller.abort(), 10_000)
     try {
-      const response = await fetch('/v1/approvals/' + encodeURIComponent(approval.id) + '/responses', {
+      const response = await fetch('/v1/approvals/' + encodeURIComponent(requestId) + '/responses', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        signal: controller.signal,
         body: JSON.stringify({ expectedVersion: approval.version, digest: approval.digest, decision }),
       })
+      if (replying.get(requestId) !== controller) return
       if (response.status === 401) { showPairing(); return }
       reviewStatus.textContent = response.ok ? text.recorded : text.changed
     } catch {
-      reviewStatus.textContent = text.changed
+      if (replying.get(requestId) !== controller) return
+      reviewStatus.textContent = text.unconfirmed
     } finally {
-      replying.delete(approval.id)
+      clearTimeout(deadline)
+      if (replying.get(requestId) === controller) replying.delete(requestId)
     }
     await refresh()
   }
