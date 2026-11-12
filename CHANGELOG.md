@@ -63,6 +63,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Prompt owners to revalidate missing or invalid model credentials and signed-out DeepSeek accounts before resuming a Worker.
 - Honor media cancellation before and during output collection, preserve it across restart, and fence late collector results while retaining the lease until physical work settles.
 
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main

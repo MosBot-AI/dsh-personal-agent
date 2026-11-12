@@ -63,6 +63,7 @@
 
 ### 修复
 
+- 模型凭据缺失、无效或 DeepSeek 账号未登录时，提示所有者在恢复 Worker 前重新验证授权。
 - 在媒体输出收集前及收集期间执行取消，重启后保留取消决定，并在实际操作结束前保留租约、拒绝迟到的收集结果。
 
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main
