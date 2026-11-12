@@ -53,7 +53,7 @@ it('runs an owner-started native Worker from a fresh DSH tarball install', async
   const systemEnv = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }
   const installEnv = {
     ...systemEnv, DSH_HOME: dshHome, DSH_TELEMETRY_DISABLED: '1',
-    XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+    XDG_CACHE_HOME: process.env.XDG_CACHE_HOME || join(root, 'cache'),
     PNPM_CONFIG_OFFLINE: process.env.PNPM_CONFIG_OFFLINE,
     PNPM_CONFIG_REGISTRY: process.env.PNPM_CONFIG_REGISTRY,
     PNPM_CONFIG_STORE_DIR: process.env.PNPM_CONFIG_STORE_DIR,
