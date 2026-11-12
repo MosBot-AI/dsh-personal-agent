@@ -11,6 +11,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Keep mobile tasks and approvals updating on slow connections and after the live event stream reconnects.
 
 - Separate native schedule tamper-recovery fixture timing from real overdue-wakeup recovery, preserving strict uncertainty and no-delivery checks on slower hosts.
+- Reject startup of the resident Web profile when the local inbox cannot activate.
 
 - Restore mobile approval controls after an unconfirmed submission and keep responses from retired sessions from interrupting a new pairing.
 

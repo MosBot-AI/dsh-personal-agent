@@ -24,6 +24,14 @@
 | 命名 `dshpa` SDK 冒烟测试 | 0 | 安装本地 Bundle 并观察到加载和卸载。 |
 | `python3 scripts/check_plan.py --check-sources`、12 项协调测试、`git diff --check` 及双语审查 | 0 | 固定源码路径、Project 工作流、空白、双语对应文件及链接通过。 |
 
+## 常驻启动准入
+
+[维护工单 #94](https://github.com/MosBot-AI/dsh-personal-agent/issues/94) 在主分支 `917e84e` 上复现了已准备的 Web Profile 在常驻收件箱挂载失败后仍继续监听的问题。常驻覆盖配置现在要求固定版本的 DSH Web 启动条目依赖 `dshpaCompute`，由 Bundle 在挂载常驻收件箱后提供。DSH 启动检查会拒绝仍未满足依赖的条目。
+
+在 Debian 13、Node.js 24.14.1 和 DSH 0.2.2-rc.1 上，Bundle 缺失、Bundle 禁用和已配置的调度器禁用这三种错误启动在基线测试期限内都持续运行。修复后三者都以非零状态退出，且未生成所有者链接。5 项常驻用例和 12 项普通 Web 用例通过。正常常驻宿主、重复写入进程拒绝、仅恢复模式下的检查和生成的 Linux 单元验证均通过。恢复后的 Profile 返回 liveness 200 和 readiness 503。类型检查、工作区构建、329 项无凭据测试、12 项协调测试、计划验证和空白检查均通过。
+
+登录服务注册和实体设备生命周期验收仍属发布工作。
+
 ## 验收范围
 
 | 场景 | 已验证的 PA-021 行为 | 后续产品工作 |

@@ -1,4 +1,6 @@
 - id: web-runtime
+  # Native startup requires the Web runtime and the attached resident inbox.
+  inject: [webStartup, dshpaCompute]
   config:
     openBrowser: false
     printUrl: false
