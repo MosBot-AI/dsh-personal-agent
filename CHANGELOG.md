@@ -12,6 +12,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 - Separate native schedule tamper-recovery fixture timing from real overdue-wakeup recovery, preserving strict uncertainty and no-delivery checks on slower hosts.
 
+- Restore mobile approval controls after an unconfirmed submission and keep responses from retired sessions from interrupting a new pairing.
+
 - Retry interrupted media output downloads without rerendering, and preserve GPU exclusion for persisted media jobs even when media configuration is disabled.
 
 - Improve local knowledge keyword ranking with stronger document-body matches and priority for exact filenames and relative paths.
