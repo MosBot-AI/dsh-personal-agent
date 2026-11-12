@@ -8,6 +8,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Keep mobile tasks and approvals updating on slow connections and after the live event stream reconnects.
+
 - Separate native schedule tamper-recovery fixture timing from real overdue-wakeup recovery, preserving strict uncertainty and no-delivery checks on slower hosts.
 
 - Retry interrupted media output downloads without rerendering, and preserve GPU exclusion for persisted media jobs even when media configuration is disabled.
