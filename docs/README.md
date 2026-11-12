@@ -22,6 +22,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [10 Model routing and gateway](10-model-routing-and-gateway.md) | Difficulty/effort, user pools, quotas, fallback configuration and implementation comparison |
 | [11 Project workflow](11-github-project-workflow.md) | GitHub board, claims, reporting, acceptance and Actions automation |
 | [Resident host operations](operations.md) | Foreground profile, optional user services, health, backup and audit |
+| [Alpha installation evidence](evidence/PA-028.md) | Packaged native Worker startup and remaining release checks |
 | [Host compatibility evidence](evidence/host-compatibility.md) | Installed DSH agent, session, schedule, and remote access boundaries |
 | [Work domain evidence](evidence/PA-003.md) | Record validation, scoped command admission, and task transitions |
 | [SQLite storage evidence](evidence/PA-004.md) | Atomic work commits, one-writer ownership, and failure recovery |

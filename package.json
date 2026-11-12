@@ -16,6 +16,7 @@
     "test:local-flow": "vitest run tests/e2e/local-flow.spec.ts",
     "test:mobile": "vitest run tests/e2e/mobile.spec.ts",
     "test:resident": "vitest run tests/e2e/resident.spec.ts",
+    "test:install": "vitest run tests/e2e/install.spec.ts",
     "test:media-host": "vitest run tests/e2e/media-host.spec.ts",
     "test:media-live": "vitest run tests/e2e/media-live.spec.ts",
     "test:e2e": "node scripts/run-live-e2e.mjs",
