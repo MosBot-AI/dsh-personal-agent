@@ -54,10 +54,10 @@ it('maps every native task status without declaring an uncertain effect complete
     .toEqual(fixtures.valid.find((fixture: { schema: string }) => fixture.schema === 'TasksPage').value.data.items[0])
 })
 
-it('rejects unrepresentable task fields without truncating identity or silently rounding revisions', () => {
+it('rejects unrepresentable identities and revisions and preserves a title at the contract limit', () => {
   const task = { id: 'task', requestedOutcome: 'Outcome', version: 1, status: 'queued' as const }
   for (const invalid of [
-    { id: '' }, { id: 'x'.repeat(257) }, { requestedOutcome: 'x'.repeat(4097) },
+    { id: '' }, { id: 'x'.repeat(257) },
     { version: 0 }, { version: -1 }, { version: 1.5 }, { version: Number.MAX_SAFE_INTEGER + 1 },
     { version: Number.NaN }, { version: Number.POSITIVE_INFINITY },
   ]) expect(() => projectSharedTask({ ...task, ...invalid })).toThrow(RangeError)
@@ -80,10 +80,10 @@ function seedWork(store: WorkStore, owner = scope, label = 'primary') {
     ...owner, role: 'owner' as const, deviceId: deviceIdSchema.parse('local-device'),
     clientId: clientIdSchema.parse('local-web'), policyVersion: 'mobile-test',
   }
-  return (name: string, visible = true) => {
+  return (name: string, visible = true, requestedOutcome = 'Outcome for ' + name) => {
     const taskId = taskIdSchema.parse('task-' + label + '-' + name)
     const result = store.applyCommand({ type: 'work.create', commandId: 'create-' + taskId,
-      payload: { projectId: project.id, requestedOutcome: 'Outcome for ' + name, constraints: ['private-constraint'],
+      payload: { projectId: project.id, requestedOutcome, constraints: ['private-constraint'],
         acceptance: { criteria: ['Verify the task'], requiresArtifact: false, requiresReceipt: false } },
     }, {
       actor, at: utcInstantSchema.parse(instant), projectId: project.id, newTaskId: taskId,
@@ -203,6 +203,33 @@ it('paginates beyond the legacy 64-task snapshot without leaking other scopes or
   expect(JSON.stringify(first.body)).not.toMatch(/private-|projectId|ownerId|profileId/)
 })
 
+it('previews a long native outcome without losing its contents or interrupting pagination', async () => {
+  const f = await httpFixture()
+  const create = seedWork(f.store)
+  const prefix = '中'.repeat(4094) + '😀'
+  const outcome = prefix + '\nAdditional native task instructions.'
+  const longTask = create('a-long', true, outcome)
+  const nextTask = create('b-next')
+
+  const first = await f.get('/v1/tasks?limit=1')
+  expect(first.status).toBe(200)
+  const page = pageOf(first.body)
+  expect(page.items).toEqual([{
+    id: longTask.id, title: prefix + '…', revision: String(longTask.version), state: 'queued', wait_reason: null,
+  }])
+  expect([...page.items[0]!.title]).toHaveLength(4096)
+  expect(page.next_cursor).toBeTypeOf('string')
+
+  const next = await f.get('/v1/tasks?limit=1&cursor=' + page.next_cursor)
+  expect(next.status).toBe(200)
+  expect(pageOf(next.body)).toMatchObject({ items: [{ id: nextTask.id, title: nextTask.requestedOutcome }], next_cursor: null })
+
+  expect(f.store.getWork({ ...f.scope, taskId: longTask.id })?.task.requestedOutcome).toBe(outcome)
+  expect(await f.get('/v1/snapshot')).toMatchObject({ status: 200, body: { ok: true, tasks: expect.arrayContaining([
+    expect.objectContaining({ id: longTask.id, outcome }),
+  ]) } })
+})
+
 it('binds cursors to the authenticated device and feed instance and rejects tampering', async () => {
   const f = await httpFixture()
   const create = seedWork(f.store)
@@ -238,13 +265,14 @@ it('uses live keyset ordering instead of implying snapshot consistency', async (
 
 it('fails closed with a generic 503 when a stored task cannot satisfy the shared contract', async () => {
   const f = await httpFixture()
-  seedWork(f.store)('broken')
+  const broken = seedWork(f.store)('broken', true, 'private-content')
   const writer = new DatabaseSync(join(f.root, DATABASE_FILENAME))
   try {
-    writer.prepare("UPDATE tasks SET record = json_set(record, '$.requestedOutcome', ?) WHERE id = ?")
-      .run('private-content-' + 'x'.repeat(4097), 'task-primary-broken')
+    writer.prepare("UPDATE tasks SET record = json_set(record, '$.status', ?) WHERE id = ?")
+      .run('unknown-native-status', broken.id)
   } finally { writer.close() }
   const response = await f.get('/v1/tasks')
-  expect(response).toMatchObject({ status: 503, body: sharedError('internal_unavailable', 'The shared API is temporarily unavailable.') })
-  expect(JSON.stringify(response.body)).not.toContain('private-content')
+  expect(response).toEqual({ status: 503, cache: 'no-store',
+    body: sharedError('internal_unavailable', 'The shared API is temporarily unavailable.') })
+  expect(JSON.stringify(response.body)).not.toMatch(/private-content|unknown-native-status|task-primary-broken/)
 })

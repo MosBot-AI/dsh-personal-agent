@@ -70,10 +70,12 @@ export function createMobileFeed(dbAccess: DatabaseAccess, scope: MobileDeviceSc
       return dbAccess(db => {
         // Live keyset pagination: immutable IDs, no truncated snapshot masquerading as a collection.
         // The trusted scope and mobile-visible predicate apply to every query, never to cursor data.
+        const seek = after === null ? '' : 'AND id > ? COLLATE BINARY'
+        const bindings = after === null ? key : [...key, after]
         const rows = db.prepare(`SELECT record FROM tasks
           WHERE owner_id = ? AND profile_id = ? AND conversation_id IS NOT NULL
-            AND (? IS NULL OR id > ? COLLATE BINARY)
-          ORDER BY id COLLATE BINARY LIMIT ?`).all(...key, after, after, limit + 1)
+            ${seek}
+          ORDER BY id COLLATE BINARY LIMIT ?`).all(...bindings, limit + 1)
         const items = rows.slice(0, limit).map(row => projectSharedTask(taskSchema.parse(JSON.parse(String(row.record)))))
         return { ok: true, page: { schema_version: 'personal.api.v1', data: {
           items, next_cursor: rows.length > limit ? encodePageCursor(items.at(-1)!.id, device.deviceId) : null,
