@@ -34,11 +34,11 @@
 
 `pnpm test:media-host` 用例在固定版本的原生 DSH Web 宿主上通过，测试启用了常驻模式。DSH Profile 装载独立的 ComfyUI 包，可信探针调用宿主提供的 `dshpaMedia` 服务，并验证旧尝试代次被拒绝。模拟上游断开提交响应后，第一台宿主退出时 SQLite 中的任务仍未解决。第二个就绪的宿主打开同一 WorkStore 并取回原 prompt 对应的样本 PNG。SHA-256 与 FFmpeg 样本一致，模拟上游只收到一次 POST。此检查使用模拟 ComfyUI HTTP 服务。
 
-## 验收范围
+## 初始回归的验收范围
 
 E06 使用持久化数据库验证受控传输故障与操作系统进程崩溃。E09 覆盖本地队列限制、串行执行与受控限流。E16 覆盖经 FFmpeg 生成及解码的样本、在模拟服务上验证的限定范围取消，以及模拟的后端 OOM 状态。E18 有原生常驻宿主冒烟套件，以及单独的媒体调用端重开验证。E21 有独立构建的提供器与固定配置回查。
 
-实际 ComfyUI 图片和视频渲染、真实 GPU 可用性与 OOM、物理宿主运行中任务的取消，以及实际睡眠唤醒后的媒体恢复仍待验收。HTTP 夹具与 FFmpeg 生成样本提供上述已验证范围的证据。 [ComfyUI v0.44.0 路由](https://github.com/Comfy-Org/ComfyUI/blob/v0.44.0/server.py)
+这些回归完成时，实际 ComfyUI 图片和视频渲染、真实 GPU 可用性与 OOM、物理宿主运行中任务的取消，以及实际睡眠唤醒后的媒体恢复仍待验收。HTTP 夹具与 FFmpeg 生成样本提供上述已验证范围的证据。 [ComfyUI v0.44.0 路由](https://github.com/Comfy-Org/ComfyUI/blob/v0.44.0/server.py)
 
 
 ## 评审修复：输出中断与持久化 GPU 租约
@@ -47,7 +47,7 @@ E06 使用持久化数据库验证受控传输故障与操作系统进程崩溃�
 
 原生 DSH Web 宿主还在 WorkStore 包含渲染中任务时以关闭媒体的配置启动。GPU 准入拒绝新工作，且不会调用其操作。排队中、不持有租约的任务作为正对照，允许 GPU 工作。`pnpm test:media-host` 的三个用例全部通过。这是使用模拟媒体的原生宿主准入检查，不是物理 GPU 并发验收。
 
-上述传输与租约修复未修改数据库迁移。后续 #71 优先的迁移整合记录见下文。真实 ComfyUI、GPU、取消和睡眠/唤醒检查仍待完成。
+上述传输与租约修复未修改数据库迁移。后续 #71 优先的迁移整合记录见下文。这些修复完成时，真实 ComfyUI、GPU、取消和睡眠/唤醒检查仍待完成。
 
 ## 独立集成与取消修复
 
@@ -65,7 +65,7 @@ E06 使用持久化数据库验证受控传输故障与操作系统进程崩溃�
 - 六项真实 DDL 迁移用例验证旧版任务和租约保留、迁移备份可读、恢复限制、拒绝被改动的媒体 v14 结构，以及 DDL 失败回滚。真实响应体超时后，重开存储可恢复相同输出摘要，渲染仅提交一次。
 - `pnpm test:media-live`：因未设置 `DSHPA_COMFYUI_LIVE_CONFIG` 跳过一项；退出码零不代表真实环境验收。固定的本地上游 checkout 不可用，无法完成 `--check-sources`。
 
-真实 ComfyUI 生成、物理 GPU/OOM 和运行中渲染取消、实际睡眠/唤醒，以及实体手机和已部署 HTTPS 验收仍待完成。此前并发评审负载下曾失败一次的 schedule 恢复用例在本次最终工作区检查中通过；之前的根因尚未证实。测试未使用生产数据或部署。
+此次集成验证完成时，真实 ComfyUI 生成、物理 GPU/OOM 和运行中渲染取消、实际睡眠/唤醒，以及实体手机和已部署 HTTPS 验收仍待完成。此前并发评审负载下曾失败一次的 schedule 恢复用例在本次最终工作区检查中通过；之前的根因尚未证实。测试未使用生产数据或部署。
 
 ## 独立真实 ComfyUI CPU 恢复验证（2026-11-09）
 
@@ -92,4 +92,25 @@ DSHPA_COMFYUI_LIVE_CONFIG=/tmp/dshpa-comfy-live-20261109/provider.json pnpm test
 | 独立文件 SHA-256 | `f20b2af6d426c86184cb205ca7cadb5fecdf676bfdacfa477d60bfd0fbabc70c`。 |
 | 源码／状态隔离 | 测试时 dshpa 检出目录在对应 main 提交上保持干净；全部服务状态均为一次性数据。验证后已停止本次创建的服务。 |
 
-这证明了无模型 CPU 夹具中的真实本地 ComfyUI 传输、输出解码和提交响应丢失恢复。恒定颜色工作流不验证提示词遵循、模型图片／视频质量、实体 GPU／OOM、运行中渲染取消或休眠唤醒；这些验收项仍未完成。本结果不把 PA-033 标记为 Done，也不添加 `acceptance:verified`。
+这证明了无模型 CPU 夹具中的真实本地 ComfyUI 传输、输出解码和提交响应丢失恢复。恒定颜色工作流不验证提示词遵循、模型图片／视频质量、实体 GPU／OOM、运行中渲染取消或休眠唤醒。此次运行结束后，这些验收项仍未完成，PA-033 保持 In review。
+
+## 使用真实模型的 CPU 验收（2026-11-12）
+
+Linux 笔记本运行未修改的 dshpa main `917e84efaf26c00f7a62b3b02c6253be72e8b8ed` 和官方 ComfyUI 0.44.0 提交 `2c75dc1b379a59e0880619d029607af5169a62ef`。一次性回环实例使用 PyTorch 2.15.0+cpu 和本机已安装的模型权重。FFmpeg 独立解码生成的产物。
+
+- **图片提交回执丢失。** 将 `DSHPA_COMFYUI_LIVE_CONFIG` 指向一次性提供器配置后，`pnpm exec vitest run tests/e2e/media-live.spec.ts --disableConsoleIntercept --reporter=verbose` 通过一项用例，没有跳过。SD 1.5 图使用内置节点和六步 Euler 采样生成一张 256×256 图片。中继丢弃已接受提交的响应，新 WorkStore 调用进程在一次 POST 后恢复 prompt `2653817e-e205-41a3-b692-97dd77a5bb25`。提供器历史和文件回读确认只生成一张 65,853 字节的 PNG，SHA-256 为 `00221472aa3868d58b118211a94eb73ed2eed11cea806e3449a88ad58e4d1c47`。[图片和取消验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6823972690)
+- **运行中任务取消。** 使用两个一次性 WorkStore 时，ComfyUI 记录 SD 1.5 prompt `324d96c2-951e-4eea-866a-b7aa8672e607` 已执行到第 1 步，共 24 步，对照 prompt `8c2a9f24-d405-4af2-acbb-b7a75f5fb742` 仍在排队。中继记录两次提交及一次发给运行中 prompt ID 的取消请求。ComfyUI 记录 `execution_interrupted`。冷重开确认目标 WorkStore 仍记录 `cancelled`，无输出且租约已释放。对照任务完成并生成一张 64×64 PNG，SHA-256 为 `ee3c489b8d2710d6f6b04a54e766b9010ca3f5a8dcebd2b73d33b21e0f8ad161`。[图片和取消验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6823972690)
+- **常驻宿主重启。** 对原生媒体宿主测试的临时适配组合了固定版本 DSH 0.2.2-rc.1、真实 SD 1.5 提供器和现有回执丢失中继。中继阻止回读，直至第一个一次性宿主停止。另一个就绪宿主打开同一 WorkStore，恢复 prompt `c5a88c0f-0aee-496f-9551-0a30d99ea3f8`，并在收集输出后释放持久化的未决租约。临时用例 `tests/e2e/media-host-live-local.spec.ts` 在 19.23 秒内通过，提供器仅收到一次 POST。解码的 256×256 PNG 为 52,220 字节。其 SHA-256 `11c109c882e64361aefc601a5073549d04bd6bf092db247a763e143243ca6f09` 与中继和 WorkStore 一致。[常驻宿主和视频验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990)
+- **较早的视频尝试。** 一次 Wan 尝试在 CPU 文本编码器加载期间使宿主交换空间用量增加约 684 MiB，触发资源保护后停止。SQLite 将已接受的任务保留为 `unknown`。[停止的视频尝试](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824358063)
+- **受资源限制的 Wan 恢复。** 同一真实后端测试命令使用本机 Wan 2.1 1.3B UNet、UMT5 编码器和 VAE，在 312 秒内通过一项用例。中继丢弃已接受提交的响应，新 WorkStore 调用进程在一次提交后恢复同一 prompt `b876c51a-d89e-4e36-880c-edb7a0e25855`。FFmpeg 解码全部 17 帧，各帧摘要互不相同。H.264 MP4 为 256×256、16 fps、1.0625 秒及 36,234 字节。文件 SHA-256 `3cc1fbf6d1970bb740dc7f0257dee251a5ccba3f7a8f737d661bc074356709cb` 与中继和 WorkStore 一致。一次性 cgroup 使用 16 GiB 软限制、18 GiB 硬上限且禁用交换空间。峰值 cgroup 内存计费为 16.00 GiB，宿主最少可用内存为 29.73 GiB。cgroup 采样记录的交换空间用量和 OOM 事件计数均为零。临时提供器在各自测试结束后停止。[常驻宿主和视频验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990)
+
+## CUDA 生成与限额内的分配器 OOM（2026-11-12）
+
+相同的 dshpa 和 ComfyUI 修订使用 PyTorch 2.11.0+cu128 在 RTX 3080 Laptop GPU 上运行。两个一次性回环提供器都使用原生 CUDA 分配器和经核实的进程级分配上限。每次运行期间，NVML 均采样提供器的显存用量和设备剩余显存。
+
+- **受控 CUDA 分配失败。** 使用 `--gpu-only` 和经核实的 128 MiB 原生分配器上限时，内置 `EmptyImage` 工作流尝试为首个通道张量分配 256 MiB。ComfyUI 仅接受一次 prompt `713e0210-fe34-4fc9-9563-a284a227cb8c`，并记录 `torch.OutOfMemoryError`。冷重开后，WorkStore 保留 `failed` 和原因 `provider_failed`，无输出且租约已释放。同一提供器随后收到一次 POST 并完成对照 prompt `dc0a3209-fc48-4a09-ba01-323663be6e93`。FFmpeg 解码其 64×64 PNG，独立计算的 SHA-256 `ee3c489b8d2710d6f6b04a54e766b9010ca3f5a8dcebd2b73d33b21e0f8ad161` 与 WorkStore 一致。提供器采样峰值显存为 188 MiB，设备采样最少剩余显存为 9,628 MiB。
+- **SD 1.5 CUDA 提交回执丢失恢复。** 现有 `tests/e2e/media-live.spec.ts` 在原生分配器上限为 2.5 GiB、扩散采样使用 CUDA、文本编码器和 VAE 位于 CPU 的配置下通过。ComfyUI 仅接受一次 prompt `e5b4918f-4bb7-48de-8cc5-aacd76dc92aa`。丢弃已接受提交的响应后，新调用进程恢复了同一 prompt 及原始输出。独立解码验证了 256×256 PNG，文件为 78,333 字节，SHA-256 为 `581b390d3f73991fdb1f004cbcbf1a5990f8d4769ed93ea8b077c1ce613a281c`。提供器采样峰值显存为 2,028 MiB，设备采样最少剩余显存为 7,788 MiB。两个临时提供器均在验证后停止。[GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
+
+## PA-033 剩余验收项
+
+真实运行覆盖 E06 和 E16 中的 CPU 与 CUDA 图片生成、CPU 视频生成、提交回执丢失恢复、运行中任务取消及限额内的 CUDA 分配失败。常驻测试覆盖 E18 中的宿主重启恢复。实际休眠唤醒、模型产物质量和更广泛的发布场景仍待验收。PA-033 仍为 In review。[CPU 与常驻验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990) · [GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
