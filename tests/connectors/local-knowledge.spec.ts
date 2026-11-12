@@ -32,6 +32,49 @@ function fixture() {
 }
 
 describe.skipIf(!supported)('descriptor-relative local knowledge', () => {
+  it('ranks matching document text ahead of a keyword-heavy file name and title', async () => {
+    const f = fixture()
+    const archive = '00-webhook-重放.md'
+    const guide = 'operations.md'
+    writeFileSync(join(f.root, archive), '# Webhook 重放\r\n' + '重放 历史清单 '.repeat(12))
+    const instructions = '\r\n'.repeat(24) + 'Current operations\nWebhook 接收失败时，先核对签名，再申请重放。'
+    writeFileSync(join(f.root, guide), instructions)
+    const connector = f.open()
+
+    const result = await f.search(connector, 'Ｗｅｂｈｏｏｋ 重放')
+    assert.ok(result.ok && result.kind === 'knowledge_search')
+    expect(result.hits.map(hit => hit.path)).toEqual([guide, archive])
+    const first = result.hits[0]!
+    expect(await connector.handle({ type: 'knowledge_read', ref: first.ref, revision: first.revision }, current))
+      .toMatchObject({ kind: 'knowledge_page', text: instructions })
+  })
+
+  it('keeps exact file and relative-path navigation ahead of text references', async () => {
+    const f = fixture()
+    const filename = 'retry retry retry.md'
+    const target = 'docs/' + filename
+    const other = '00-retry retry.md notes.md'
+    mkdirSync(join(f.root, 'docs'))
+    writeFileSync(join(f.root, target), 'Older operational notes.')
+    writeFileSync(join(f.root, other), ('See ' + target + ' for the notes.\n').repeat(5))
+    const connector = f.open()
+
+    for (const query of ['RETRY retry retry.md', target]) {
+      const result = await f.search(connector, query)
+      assert.ok(result.ok && result.kind === 'knowledge_search')
+      expect(result.hits.map(hit => hit.path)).toEqual([target, other])
+    }
+  })
+
+  it('caps repeated body terms so one repeated keyword cannot dominate a match', async () => {
+    const f = fixture()
+    writeFileSync(join(f.root, 'a-noisy.txt'), 'retry '.repeat(20) + 'budget budget')
+    writeFileSync(join(f.root, 'b-guide.txt'), 'retry budget '.repeat(3))
+    const result = await f.search(f.open(), 'retry budget')
+    assert.ok(result.ok && result.kind === 'knowledge_search')
+    expect(result.hits.map(hit => hit.path)).toEqual(['b-guide.txt', 'a-noisy.txt'])
+  })
+
   it('indexes only changed configured documents, searches mixed languages and keeps references stable across restart', async () => {
     const f = fixture()
     const target = join(f.root, '计划.md')

@@ -12,6 +12,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 - Retry interrupted media output downloads without rerendering, and preserve GPU exclusion for persisted media jobs even when media configuration is disabled.
 
+- Improve local knowledge keyword ranking with stronger document-body matches and priority for exact filenames and relative paths.
+
 ### Added
 
 - Add opt-in mobile task updates and exact approval review with local pairing, device revocation and explicit per-review handoff. The view clears private content when hidden and authenticates again when it becomes visible.
