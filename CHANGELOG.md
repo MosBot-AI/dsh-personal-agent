@@ -64,5 +64,6 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 ### Fixed
 
 - Honor media cancellation before and during output collection, preserve it across restart, and fence late collector results while retaining the lease until physical work settles.
+- Build byte-identical Web client bundles across checkout locations by omitting generated source-path debug comments.
 
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main

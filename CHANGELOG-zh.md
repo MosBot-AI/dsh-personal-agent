@@ -64,5 +64,6 @@
 ### 修复
 
 - 在媒体输出收集前及收集期间执行取消，重启后保留取消决定，并在实际操作结束前保留租约、拒绝迟到的收集结果。
+- 省略自动生成的源码路径调试注释，使不同检出位置生成的 Web 客户端 Bundle 逐字节一致。
 
 [Unreleased]: https://github.com/MosBot-AI/dsh-personal-agent/commits/main
