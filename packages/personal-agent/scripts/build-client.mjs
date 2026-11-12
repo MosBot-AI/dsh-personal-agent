@@ -5,6 +5,7 @@ const bundle = await rolldown({
   input: fileURLToPath(new URL('../src/client/index.tsx', import.meta.url)),
   external: ['react', 'react/jsx-runtime'],
   platform: 'browser',
+  experimental: { attachDebugInfo: 'none' },
 })
 
 try {
