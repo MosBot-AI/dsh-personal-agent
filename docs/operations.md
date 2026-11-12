@@ -34,7 +34,7 @@ dshpa_overlay="$PWD/.dshpa/resident.yml"
 sh deploy/run-resident.sh "$dshpa_node" "$DSH_HOME" dshpa-resident "$dshpa_overlay" 3080
 ```
 
-The launcher executes the pinned DSH process directly, binds `127.0.0.1`, and keeps native private output out of service logs. The SQLite writer lease is acquired before native schedule resolution becomes ready. A competing resident profile exits without taking ownership. Stop a foreground host with Ctrl+C. Service managers request shutdown with `SIGTERM`. The runtime stops new operations, drains owned work and closes the store. A forced exit is recovered from durable state on the next launch.
+The launcher executes the pinned DSH process directly, binds `127.0.0.1`, and keeps native private output out of service logs. The prepared Web profile requires the resident inbox to attach during native startup. If the bundle is missing, disabled or unable to attach the inbox, startup exits with a nonzero status. The SQLite writer lease is acquired before native schedule resolution becomes ready. A competing resident profile exits without taking ownership. Stop a foreground host with Ctrl+C. Service managers request shutdown with `SIGTERM`. The runtime stops new operations, drains owned work and closes the store. A forced exit is recovered from durable state on the next launch.
 
 ## Inspect the host
 

@@ -43,6 +43,20 @@ function profileOverlay(storage: string, workRoot?: string): string {
   ].join('\n')
 }
 
+function launchResident(profile: ReturnType<typeof prepareWebHost>, overlay: string): ChildProcessWithoutNullStreams {
+  const child = spawn('/bin/sh', [launcher, process.execPath, profile.dshHome, profile.profileName, overlay, '0'], {
+    cwd: profile.root, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+  })
+  child.stdin.end()
+  return child
+}
+
+async function expectRejectedLaunch(child: ChildProcessWithoutNullStreams): Promise<void> {
+  const [code, signal] = await once(child, 'exit', { signal: AbortSignal.timeout(10_000) })
+  expect(typeof code === 'number' && code !== 0).toBe(true)
+  expect(signal).toBeNull()
+}
+
 it('renders an opt-in login or user service with the foreground launcher', () => {
   const profile = prepareWebHost()
   onTestFinished(() => rmSync(profile.root, { recursive: true, force: true }))
@@ -62,6 +76,44 @@ it('renders an opt-in login or user service with the foreground launcher', () =>
   expect(existsSync(join(profile.dshHome, 'profiles', profile.profileName, 'package.json'))).toBe(true)
 })
 
+it.each([
+  { configuration: 'the resident bundle is missing', profilePatch: [], missingBundle: true },
+  { configuration: 'the resident bundle is disabled', profilePatch: ['- id: dshpa', '  disabled: true'] },
+  { configuration: 'the inbox cannot mount without the configured scheduler', profilePatch: ['- id: schedule', '  disabled: true'] },
+])('rejects native resident startup when $configuration', async ({ profilePatch, missingBundle }) => {
+  const profile = prepareWebHost(undefined, profilePatch)
+  let child: ChildProcessWithoutNullStreams | undefined
+  onTestFinished(async () => {
+    try {
+      if (child && child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, 'exit')
+        child.kill('SIGKILL')
+        await exited
+      }
+    } finally {
+      rmSync(profile.root, { recursive: true, force: true })
+    }
+  })
+  if (missingBundle) {
+    const bundle = '@mosbot-ai/dshpa'
+    const directory = join(profile.dshHome, 'profiles', profile.profileName)
+    const path = join(directory, 'package.json')
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as {
+      dependencies: Record<string, string>; dsh: { profile: { bundles: string[] } }
+    }
+    delete manifest.dependencies[bundle]
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => name !== bundle)
+    writeFileSync(path, JSON.stringify(manifest))
+    rmSync(join(directory, 'node_modules', bundle), { recursive: true, force: true })
+  }
+  const storage = join(profile.root, 'resident-state')
+  const overlay = join(profile.root, 'resident-activation.yml')
+  writeFileSync(overlay, profileOverlay(storage), { mode: 0o600 })
+  child = launchResident(profile, overlay)
+  await expectRejectedLaunch(child)
+  expect(existsSync(join(storage, RESIDENT_OWNER_FILE))).toBe(false)
+}, 15_000)
+
 it('runs a native resident host with no browser, catches a suspended wake, backs up and restarts safely', async () => {
   const profile = prepareWebHost()
   const storage = join(profile.root, 'resident-state')
@@ -79,19 +131,9 @@ it('runs a native resident host with no browser, catches a suspended wake, backs
   })
 
   function launch() {
-    const child = spawn('/bin/sh', [launcher, process.execPath, profile.dshHome, profile.profileName, overlay, '0'], {
-      cwd: profile.root, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
-    })
+    const child = launchResident(profile, overlay)
     children.add(child)
-    child.stdin.end()
     return child
-  }
-
-  async function rejectedLaunch() {
-    const child = launch()
-    const [code, signal] = await once(child, 'exit', { signal: AbortSignal.timeout(10_000) })
-    expect(typeof code === 'number' && code !== 0).toBe(true)
-    expect(signal).toBeNull()
   }
 
   async function start(directory: string, ready: boolean) {
@@ -155,11 +197,11 @@ it('runs a native resident host with no browser, catches a suspended wake, backs
   const invalidWorkRoot = join(profile.root, 'invalid-work-root')
   writeFileSync(invalidWorkRoot, '')
   writeFileSync(overlay, profileOverlay(storage, invalidWorkRoot), { mode: 0o600 })
-  await rejectedLaunch()
+  await expectRejectedLaunch(launch())
   expect(existsSync(join(storage, RESIDENT_OWNER_FILE))).toBe(false)
 
   const first = await start(storage, true)
-  await rejectedLaunch()
+  await expectRejectedLaunch(launch())
   expect(JSON.parse(readFileSync(join(storage, RESIDENT_OWNER_FILE), 'utf8')).pid).toBe(first.child.pid)
   expect((await fetch(`${first.origin}/dshpa/ready`, { headers: { ...loopback, origin: 'https://untrusted.invalid' } })).status).toBe(403)
   expect((await fetch(`${first.origin}/api/${INBOX_RPC_ENDPOINT}`, { method: 'POST', headers: { ...loopback, 'content-type': 'application/json' },
