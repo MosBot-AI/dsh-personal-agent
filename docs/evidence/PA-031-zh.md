@@ -60,3 +60,11 @@ macOS 真机验收需要所有者解锁会话、为签名的 DSH Computer Use he
 首次集成类型检查因未导入浏览器服务的类型扩展而失败；修正后全量检查通过。离线安装缺少包策略元数据缓存；在线安装保留包策略校验，锁文件记录了适配器直接使用的固定版本 DSH 依赖。
 
 本次评审不能证明实体 macOS 输入／接管、锁屏／休眠唤醒、实体手机、真实 ComfyUI／GPU 或发布验收通过。PA-031 保持审查中，不添加 `acceptance:verified`，直至完成适用的真实桌面验收。当前 GitHub CLI 未登录，插件也无法操作私有 Project 字段；明确交接及进度记录在 Issue #25。用户知识库 `/Users/charleypeng/Documents/llmwiki` 不可用。
+
+## 全新 tarball 安装的浏览器启动（2026-11-13）
+
+[Issue #102](https://github.com/MosBot-AI/dsh-personal-agent/issues/102) 在已合入的 main `917e84e` 上复现了打包安装特有的故障。全新的 DSH Profile 安装了可选浏览器 tarball，也启动了 Chrome DevTools MCP，但持有租约的 Agent 找不到原生工具，任务在 Chromium 启动前进入 `driver_unavailable` 等待。两份 DSH 作用域模块版本和字节均相同，但 Profile 内的副本创建了独立的作用域标识。在一次性诊断副本中复用固定版本宿主的作用域模块后，同一租约工作流恢复运行。
+
+浏览器包现将固定版本的 DSH 作用域和 MCP 客户端声明为宿主 peer。工作区构建完成后，原生回归将核心与浏览器分别打包，并安装到 DSH 生成的全新 Profile，验证两项宿主 peer 均未安装在 Profile 内。通过身份认证的所有者在本地回环测试页启动带租约的任务。测试校验实际保存值、排除来源零流量、所有者显式验收、Profile 争用和接管。在 CI 中设置 `DSHPA_TEST_BROWSER_TARBALL=1`，将此用例和工作区浏览器用例一并执行。
+
+本地回归使用 DSH 0.2.2-rc.1、Chromium 154.0.8037.92、Chrome DevTools MCP 1.9.0、Node.js 24.14.1 和 pnpm 11.28.5，验证了打包版 Chromium 启动及浏览器租约流程。上文的实体桌面验收仍待完成。

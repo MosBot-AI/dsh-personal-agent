@@ -42,4 +42,6 @@ DSHPA_TEST_CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   pnpm exec vitest run tests/e2e/browser-live.spec.ts tests/e2e/browser-multiorigin.spec.ts
 ```
 
+设置 `DSHPA_TEST_BROWSER_TARBALL=1`，还会将 dshpa 和浏览器提供者打包并安装到全新的 DSH Profile。安装后的浏览器提供者使用固定版本宿主的 MCP 客户端和作用域包，使宿主能解析其受租约约束的工具。安装测试可能访问软件包注册表。浏览器任务只访问本地测试服务器。
+
 [仓库 README](../../README-zh.md)

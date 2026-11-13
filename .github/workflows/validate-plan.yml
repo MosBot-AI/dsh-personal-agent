@@ -61,6 +61,7 @@ jobs:
       - name: Verify task browser origin isolation and takeover
         run: |
           export DSHPA_TEST_CHROME="$(command -v google-chrome)"
+          export DSHPA_TEST_BROWSER_TARBALL=1
           "$DSHPA_TEST_CHROME" --version
           dbus-run-session -- npm exec --yes --package=pnpm@11.28.5 -- pnpm exec vitest run tests/e2e/browser-live.spec.ts tests/e2e/browser-multiorigin.spec.ts tests/e2e/cross-pr.spec.ts
       - name: Verify native media recovery with a simulated provider

@@ -10,6 +10,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 - Separate native schedule tamper-recovery fixture timing from real overdue-wakeup recovery, preserving strict uncertainty and no-delivery checks on slower hosts.
 
+- Start leased Chromium tasks from a clean tarball installation by sharing the pinned DSH host's MCP and scope packages.
 - Retry interrupted media output downloads without rerendering, and preserve GPU exclusion for persisted media jobs even when media configuration is disabled.
 
 ### Added

@@ -5,11 +5,13 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { expect, it, onTestFinished } from 'vitest'
 import { INBOX_RPC_ENDPOINT, type InboxPort, type InboxResponse } from '../../packages/personal-agent/src/inbox/protocol.js'
+import { installBrowserProfile } from './fixtures/installed-browser.js'
 import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/browser-flow-probe.mjs', import.meta.url))
 const bundle = fileURLToPath(new URL('../../packages/browser-chrome/', import.meta.url))
 const chrome = process.env.DSHPA_TEST_CHROME
+const installModes = process.env.DSHPA_TEST_BROWSER_TARBALL === '1' ? ['workspace', 'tarball'] : ['workspace']
 
 async function localServer(listener: RequestListener): Promise<string> {
   const server = createServer(listener)
@@ -31,7 +33,7 @@ function updated(response: InboxResponse) {
   return response
 }
 
-it.skipIf(!chrome)('routes a verified task through isolated Chrome and blocks a second origin', async () => {
+it.skipIf(!chrome).each(installModes)('routes a verified task through isolated Chrome and blocks a second origin (%s)', async mode => {
   let blockedRequests = 0
   const excluded = await localServer((_request, response) => {
     blockedRequests++
@@ -60,16 +62,18 @@ document.querySelector('#save').onclick = () => {
 };
 </script>`)
   })
-  const prepared = prepareWebHost(probe, [
+  const patch = [
     '- id: dshpa-browser-chrome', '  disabled: false', '  config:',
     `    executablePath: ${JSON.stringify(chrome)}`, `    allowedOrigins: [${JSON.stringify(origin)}]`,
     '- id: dshpa', '  config:', '    inbox:', "      storageDirectory: !!js dshHomePath('browser-inbox')",
     '      workRoot: !!js process.cwd()', '      worker:', '        provider: pa031-browser-fixture',
     '        model: browser-worker', '        concurrency: 2', '        unmetered: true',
     '      desktop:', '        browserProfiles:', '          - id: fixture', `            startUrl: ${JSON.stringify(origin + '/')}`,
-  ], [bundle])
+  ]
+  const prepared = mode === 'tarball' ? await installBrowserProfile(probe, patch) : prepareWebHost(probe, patch, [bundle])
   onTestFinished(() => rmSync(prepared.root, { recursive: true, force: true }))
   const host = await openWebHost(probe, { prepared })
+  expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'snapshot' })).toMatchObject({ status: 401 })
   const cookie = await host.exchange()
   const inbox: InboxPort = async request => {
     const reply = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
@@ -144,4 +148,4 @@ document.querySelector('#save').onclick = () => {
   updated(await inbox({ type: 'desktop_release', taskId: held, leaseId: activity.leaseId }))
   expect((await snapshot()).desktopActivities).toEqual([])
 
-}, 55_000)
+}, process.env.DSHPA_TEST_BROWSER_TARBALL === '1' ? 240_000 : 55_000)
