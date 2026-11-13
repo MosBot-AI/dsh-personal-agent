@@ -30,6 +30,14 @@ OpenAPI 的 `backendSession` Cookie 绑定仅描述当前已实现的 DSH HTTP �
 
 客户端应把游标当作不透明令牌。HMAC 将其绑定到可信 owner/profile、已注册设备和 feed 实例。篡改、另一设备或重启返回 `cursor_invalid`（400），客户端应清除游标重试；撤权/到期即使带旧游标也返回 `auth_required`（401）。游标没有认证权限，永不作为 SQL 作用域。没有新增凭据、持久秘密或签发方。分页 SQL 最多返回 65 行。所请求的页面中若有无效记录，响应返回通用 `internal_unavailable`（503）。
 
+## 移动端任务浏览
+
+在显式启用的移动任务视图中，点击**浏览全部任务**（Browse all tasks）后，页面先用已配对的设备会话读取 `GET /v1/capabilities`。只有所有者开始浏览，且 `tasks.list` 受支持、已启用并可用时，页面才请求 `GET /v1/tasks`。该能力不可用时，页面会提示任务列表不可用。
+
+页面按任务 ID 顺序每次最多显示 32 条任务。有下一页时，**下一页**使用不透明游标替换当前页。**从头开始**不带游标读取首页。如果服务端返回 `cursor_invalid`，例如游标来自服务端重启前，页面会丢弃游标并提示所有者显式从头开始。
+
+点击**最近任务**返回实时快照。该快照与精确审批操作继续通过既有的已鉴权移动路由更新。会话失效（包括设备被撤销）、页面隐藏或事件流重连时，页面清除浏览状态并取消待处理的浏览请求。会话失效后，设备回到配对页面。共享任务页面沿用所有者、Profile 和对话可见性限制，并展示共享状态，包括待取消时的等待状态和对账时的未知状态。
+
 ## 后续切片与兼容性差距
 
 1. 在部署 HTTPS 和实体手机上验收共享任务分页。旧 64 条 snapshot 保持独立，不作为共享集合。
@@ -44,6 +52,8 @@ OpenAPI 的 `backendSession` Cookie 绑定仅描述当前已实现的 DSH HTTP �
 分页测试还覆盖超过 64 条任务、精确公共字段、所有者和 Profile 隔离、隐藏任务、跨设备和篡改游标、重启后游标失效、撤销以及实时插入顺序。夹具使用隔离的本地状态。实体手机、外部部署的 HTTPS 来源和经认证的 Hermes HTTP 仍分别需要验收证据。
 
 原生移动端套件还通过经过证书验证的回环 HTTPS 代理，在构建后的收件箱上检查两条共享路由。配对设备发现 `tasks.list`，从原生 WorkStore 读取两页任务，每页一项。所有者撤销设备后，原设备重用游标时收到 `auth_required`。另一台已注册设备也无法使用该游标。这项本地检查通过 `pnpm test:mobile` 运行。[原生 HTTPS 覆盖 #119](https://github.com/MosBot-AI/dsh-personal-agent/issues/119)
+
+移动端任务浏览的验收用例通过桌面 Chromium 和回环 HTTPS 代理访问原生 DSH 中构建后的收件箱。用例检查配对设备能否浏览到近期 64 条任务快照以外的任务、在收到 `cursor_invalid` 后显式从头开始，以及在浏览时答复精确审批。用例还检查页面隐藏后清除浏览内容、重连后恢复近期任务及待审内容，以及撤销设备后清除私有内容并返回配对页面。已部署 HTTPS、实体手机及经认证的 Hermes HTTP 仍是 [PA-022](https://github.com/MosBot-AI/dsh-personal-agent/issues/23) 下的独立验收项。
 
 - [能力发现 #79](https://github.com/MosBot-AI/dsh-personal-agent/pull/79) 已合入，提交为 `3900cf4406caef7f15af69d09c9b6840255ce670`。能力发现分支通过了 14 项专项 API 测试。早期全量套件的失败和未运行的原生浏览器阶段均记录在 PR 中。
 - [任务分页 #81](https://github.com/MosBot-AI/dsh-personal-agent/pull/81) 已合入，提交为 `ffbfa1bae6b147e19458269a662337e0d06c24f7`。最终整合版本通过了 19 项专项 API 测试、8 项原生 Chromium 用例、类型检查、构建、12 项协调测试和计划校验。PR 工作流在 Chrome 启动超时后重跑通过，合并提交的主线工作流首轮通过。[整合证据](https://github.com/MosBot-AI/dsh-personal-agent/issues/23#issuecomment-6846471838) · [PR CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43381473515) · [主线 CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43382599557)

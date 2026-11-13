@@ -30,6 +30,14 @@ Pages follow SQLite binary task-ID order. Continuation queries seek directly pas
 
 Continuation tokens are opaque to clients, HMAC-bound to the trusted owner/profile, enrolled device and feed instance. Modifications, another device or a restart return `cursor_invalid` (400); restart without a cursor. Revocation/expiry returns `auth_required` (401), even with a previously valid cursor. Tokens carry no authentication authority and are never used as SQL scope. No new credential, durable secret or issuer is added. Page SQL returns at most 65 rows. An invalid record on the requested page fails the response with generic `internal_unavailable` (503).
 
+## Mobile task browser
+
+In the opt-in mobile work view, **Browse all tasks** first reads `GET /v1/capabilities` using the paired device session. It requests `GET /v1/tasks` only when the owner starts browsing and `tasks.list` is supported, enabled and available. The browser reports an unavailable task list when that capability is unavailable.
+
+The browser shows one page of up to 32 tasks in task-ID order. **Next page** replaces that page using the opaque continuation when one is available. **Restart** reads the first page without a cursor. If the server returns `cursor_invalid`, including for a cursor from before a server restart, the browser discards the cursor and asks the owner to restart explicitly.
+
+**Recent tasks** returns to the live snapshot. That snapshot and exact approval controls continue to update through the existing authenticated mobile routes. Session loss, including device revocation, page hiding, and event-stream reconnect each clear browse state and cancel pending browse reads. Session loss returns the device to pairing. The shared task page uses the same owner/profile and conversation visibility and shows the shared states, including waiting for pending cancellation and unknown for reconciliation.
+
 ## Next slices and compatibility gaps
 
 1. Validate shared task pagination in deployed HTTPS and physical-phone environments. The legacy 64-task snapshot remains separate and is not used as the shared collection.
@@ -44,6 +52,8 @@ Continuation tokens are opaque to clients, HMAC-bound to the trusted owner/profi
 Pagination checks also cover more than 64 tasks, the exact public fields, owner and profile isolation, hidden tasks, cross-device and tampered cursors, cursor invalidation after restart, revocation, and live insert ordering. The fixtures use isolated local state. Physical-phone behavior, an externally deployed HTTPS origin and authenticated Hermes HTTP still require their own acceptance evidence.
 
 The native mobile suite also checks both shared routes through the built inbox behind a certificate-verified loopback HTTPS proxy. A paired device discovers `tasks.list`, reads two one-item pages from the native WorkStore, and receives `auth_required` when it reuses its cursor after owner revocation. A second enrolled device cannot use that cursor. This local check runs with `pnpm test:mobile`. [Native HTTPS coverage #119](https://github.com/MosBot-AI/dsh-personal-agent/issues/119)
+
+The mobile task browser acceptance case uses the built inbox in native DSH with desktop Chromium and the loopback HTTPS proxy. It checks that a paired device can browse to a task outside the 64-task recent snapshot, explicitly restart after `cursor_invalid`, and respond to an exact approval while browsing. It also checks that hiding clears the browse page, reconnect restores recent tasks and pending approvals, and revocation clears private content and returns the device to pairing. Deployed HTTPS, a physical handset and authenticated Hermes HTTP remain separate acceptance gates under [PA-022](https://github.com/MosBot-AI/dsh-personal-agent/issues/23).
 
 - [Discovery #79](https://github.com/MosBot-AI/dsh-personal-agent/pull/79) merged as `3900cf4406caef7f15af69d09c9b6840255ce670`. The discovery branch passed 14 focused API tests. Its initial full-suite failures and unrun native-browser stage are recorded in the PR.
 - [Pagination #81](https://github.com/MosBot-AI/dsh-personal-agent/pull/81) merged as `ffbfa1bae6b147e19458269a662337e0d06c24f7`. The final integration passed 19 focused API tests, eight native Chromium cases, type checking, build, 12 coordination tests and plan validation. The PR workflow passed on retry after a Chrome startup timeout, and the merged commit's main workflow passed on the first run. [Integration evidence](https://github.com/MosBot-AI/dsh-personal-agent/issues/23#issuecomment-6846471838) · [PR CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43381473515) · [Main CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43382599557)
