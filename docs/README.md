@@ -9,7 +9,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 ## Reading guide
 
 
-- [Shared client API](shared-client-api.md): versioned cross-backend discovery and explicit unavailable domain routes.
+- [Shared client API](shared-client-api.md): versioned contract, authenticated DSH discovery and task pagination, and remaining cross-backend acceptance.
 
 | Document | Purpose |
 | --- | --- |

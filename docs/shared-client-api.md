@@ -4,7 +4,7 @@ English | [简体中文](shared-client-api-zh.md)
 
 ## Status and authority
 
-The owner requested one REST contract for phone and desktop clients, with Hermes or DSH selectable behind that contract. The DSH adapter implements **authenticated protocol discovery and live task pagination**, not full functional parity or a new agent runtime. It extends [PA-022](https://github.com/MosBot-AI/dsh-personal-agent/issues/23); deployed HTTPS and physical-phone acceptance remain pending.
+The owner requested one REST contract for phone and desktop clients, with Hermes or DSH selectable behind that contract. DSH main includes **authenticated protocol discovery and live task pagination**. Deployed HTTPS and physical-phone acceptance remain open under [PA-022](https://github.com/MosBot-AI/dsh-personal-agent/issues/23).
 
 The canonical 0.1.0 contract belongs to `MosBot-AI/hermes-superagent/contracts/personal-api`. This repository vendors its exact JSON schema, OpenAPI description, fixtures and digest manifest in `contracts/personal-api`. The source lock pins authority commit `48a930a2c01b2add9e349cbc1f0d65278066cc1c`. The pinned artifacts match the merged Hermes contract byte for byte. [Hermes PR #100](https://github.com/MosBot-AI/hermes-superagent/pull/100)
 
@@ -22,7 +22,6 @@ Change the authority first, independently review it, update the pin and copied b
 
 Pairing, legacy task snapshots, approval handoff/responses and legacy SSE retain their current routes and semantics. No replacement login issuer, token forwarding, generic tool execution, external write or new listening port is introduced. The mobile listener remains opt-in and uses the operator's configured HTTPS reverse proxy.
 
-
 The OpenAPI `backendSession` cookie binding describes the currently implemented DSH HTTP adapter only. It is not a new issuer or a claim that Hermes uses the same cookie. Clients use their normal cookie jar; business behavior must not branch on backend brand.
 
 ## Live pagination semantics
@@ -36,22 +35,13 @@ Continuation tokens are opaque to clients, HMAC-bound to the trusted owner/profi
 1. Validate shared task pagination in deployed HTTPS and physical-phone environments. The legacy 64-task snapshot remains separate and is not used as the shared collection.
 2. Adapt approvals, operations and a pollable durable change feed, preserving exact one-use grants, version checks, revocation and unknown-outcome reconciliation.
 3. Adapt conversation continuation and memory only through the existing native owner/runtime boundary. Capability availability must remain false until each operation has its own verified adapter and security/recovery evidence.
-4. Run the same client contract suite against both backends. Hermes additionally requires verified HTTP principal propagation; a schema or DSH success does not resolve that host seam. Native phone sign-in and deployed-origin acceptance remain separate release gates.
+4. Run the same client contract suite against both backends once Hermes verifies the native HTTP principal and registers the shared routes. [Hermes identity #29](https://github.com/MosBot-AI/hermes-superagent/issues/29) · [Hermes domain API #30](https://github.com/MosBot-AI/hermes-superagent/issues/30)
 
 ## Verification
 
 `tests/api/shared-client.spec.ts` compares the pure unavailable-discovery/error helpers with the canonical fixtures and checks live HTTP task availability and page responses, verifies vendored artifact SHA-256 digests, covers all native task-state mappings, and exercises real loopback HTTP authentication, pairing-code rejection, device revocation, exact Host/Origin and query rejection. `tests/api/remote.spec.ts` retains legacy device/replay coverage.
 
-Pagination checks additionally cover more than 64 tasks, exact public fields, owner/profile and hidden-task isolation, cross-device/tampered/restarted cursors, revocation and live insert ordering. These checks use isolated synthetic local state. They do not prove physical-phone behavior, a deployed HTTPS origin, deployed shared task access or parity with Hermes. The user's local knowledge base was unavailable in this cloud workspace; no historical decisions were inferred from it.
+Pagination checks also cover more than 64 tasks, the exact public fields, owner and profile isolation, hidden tasks, cross-device and tampered cursors, cursor invalidation after restart, revocation, and live insert ordering. The fixtures use isolated local state. Physical-phone behavior, an externally deployed HTTPS origin and authenticated Hermes HTTP still require their own acceptance evidence.
 
-### This slice's local results
-
-- Shared and existing mobile API tests: 14/14 passed, including real loopback HTTP.
-- Workspace `tsc --noEmit`, personal-agent compilation and client bundle build passed. Plan validation, 12 coordination tests and whitespace checks passed.
-- Full default-parallel suite: 332/336 passed; the known pending #75 schedule-recovery race and three media/restore five-second timeouts failed. With `--maxWorkers=2`, 335/336 passed; only the same schedule-recovery assertion failed. No timeout, assertion or production schedule logic was relaxed. This branch does not contain pending #76. The full-suite gate is not green.
-- Native mobile/browser suite could not start under `dbus-run-session`: the current environment denied its transient directory and message-bus socket. No security setting was changed. This is an unrun stage, not a successful phone or browser check.
-- The available pnpm executable is 11.25.0, not repository-pinned 11.28.5, and installation refused that mismatch. Tests used the existing same-lockfile dependency installation copied into this worktree and its pinned TypeScript/Vitest executables directly. No package or lockfile version was changed. An initial full-suite attempt before generated libraries existed failed; it is superseded by the post-build results above, not claimed as a pass.
-
-### Pagination follow-up
-
-The follow-up is stacked on pending #79 and does not merge any earlier PR. Local checks and independent review are recorded in the PR; original-slice results above remain historical, not claims about the new candidate. Physical-phone/HTTPS acceptance and #23 stay open.
+- [Discovery #79](https://github.com/MosBot-AI/dsh-personal-agent/pull/79) merged as `3900cf4406caef7f15af69d09c9b6840255ce670`. The discovery branch passed 14 focused API tests. Its initial full-suite failures and unrun native-browser stage are recorded in the PR.
+- [Pagination #81](https://github.com/MosBot-AI/dsh-personal-agent/pull/81) merged as `ffbfa1bae6b147e19458269a662337e0d06c24f7`. The final integration passed 19 focused API tests, eight native Chromium cases, type checking, build, 12 coordination tests and plan validation. The PR workflow passed on retry after a Chrome startup timeout, and the merged commit's main workflow passed on the first run. [Integration evidence](https://github.com/MosBot-AI/dsh-personal-agent/issues/23#issuecomment-6846471838) · [PR CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43381473515) · [Main CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43382599557)
