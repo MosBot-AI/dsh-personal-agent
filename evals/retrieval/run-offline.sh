@@ -42,7 +42,7 @@ done
 
 exec "$bwrap" --unshare-user --uid "$(id -u)" --gid "$(id -g)" --unshare-net \
   --unshare-ipc --unshare-pid --cap-add CAP_NET_ADMIN --die-with-parent --new-session \
-  --ro-bind / / --ro-bind /dev /dev --proc /proc --tmpfs /tmp --tmpfs /var/tmp --tmpfs /run \
+  --ro-bind / / --ro-bind /dev /dev --dev-bind /dev/null /dev/null --proc /proc --tmpfs /tmp --tmpfs /var/tmp --tmpfs /run \
   "${mounts[@]}" --bind "$reports" "$reports" --chdir "$repository" --clearenv \
   --setenv PATH "$(dirname -- "$node"):/usr/bin:/bin" --setenv LANG C.UTF-8 \
   --setenv HOME /tmp/home --setenv TMPDIR /tmp/work \
