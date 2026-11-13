@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { createGitHubDraftRuntime, createGitHubDraftService, githubDraftAccount } from '../../packages/personal-agent/src/connectors/github-draft.js'
 import type { GitHubDraftConfig } from '../../packages/personal-agent/src/connectors/github-draft-model.js'
 import type { DraftProvider } from '../../packages/personal-agent/src/connectors/github-write.js'
@@ -16,6 +17,40 @@ export type View = NonNullable<Extract<InboxResponse, { kind: 'github_draft' }>[
 export function draftView(result: InboxResponse): View {
   assert.ok(result.ok && result.kind === 'github_draft' && result.draft, JSON.stringify(result))
   return result.draft
+}
+
+export async function waitForDraftReceipt(
+  h: Pick<Awaited<ReturnType<typeof makeDraftHarness>>, 'request' | 'taskId'>,
+  operationId: View['payload']['operationId'],
+  { pollWindowMs = 60_000, intervalMs = 1_000 } = {},
+): Promise<string> {
+  const deadline = performance.now() + pollWindowMs
+  let effect: View['effect'] | undefined
+  // The deadline stops new lookups. Finish any in-flight lookup before
+  // disposing the host. The runtime bounds that lookup independently.
+  do {
+    const view = draftView(await h.request({ type: 'github_draft_inspect', taskId: h.taskId }))
+    assert.equal(view.payload.operationId, operationId)
+    effect = view.effect
+    if (effect === 'confirmed' && view.receipt) return view.receipt
+    if ((effect === 'uncertain' || effect === 'manual_reconciliation') && performance.now() < deadline) {
+      const result = await h.request({ type: 'github_draft_reconcile', taskId: h.taskId, operationId })
+      if (result.ok) {
+        const reconciled = draftView(result)
+        assert.equal(reconciled.payload.operationId, operationId)
+        assert.ok(reconciled.effect === 'confirmed' && reconciled.receipt)
+        return reconciled.receipt
+      }
+      if (result.code !== 'busy' && result.code !== 'outcome_uncertain') {
+        throw new Error(`GitHub draft readback failed: ${result.code}`)
+      }
+    } else if (effect !== 'dispatching') {
+      break
+    }
+    const remaining = deadline - performance.now()
+    if (remaining > 0) await delay(Math.min(intervalMs, remaining))
+  } while (performance.now() < deadline)
+  throw new Error(`GitHub draft readback did not confirm the approved operation (last state: ${effect}).`)
 }
 
 export async function makeDraftHarness(config: GitHubDraftConfig, provider?: DraftProvider, clock = Date.now) {
