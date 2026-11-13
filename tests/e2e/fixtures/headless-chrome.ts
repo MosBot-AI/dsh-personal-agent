@@ -10,9 +10,13 @@ interface Reply {
   error?: unknown
 }
 
+const startupTimeoutMs = 10_000
+const commandTimeoutMs = 8_000
+
 export async function openHeadlessChrome(executable: string, profile: string, certificate: Buffer) {
   const key = new X509Certificate(certificate).publicKey.export({ type: 'spki', format: 'der' })
   const pin = createHash('sha256').update(key).digest('base64')
+  const startedAt = performance.now()
   const child = spawn(executable, [
     '--headless',
     // This disposable profile must not wait for a locked Linux desktop keyring.
@@ -21,33 +25,46 @@ export async function openHeadlessChrome(executable: string, profile: string, ce
     '--ignore-certificate-errors-spki-list=' + pin,
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
     '--disable-component-update', '--disable-sync', 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] })
-  let diagnostics = ''
-  child.stderr?.setEncoding('utf8').on('data', (chunk: string) => { diagnostics = (diagnostics + chunk).slice(-6_000) })
+  ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] })
   const input = child.stdio[3] as Writable | null
   const output = child.stdio[4] as Readable | null
-  const waiting = new Map<number, { finish: (error?: Error, result?: unknown) => void }>()
-  let failure: Error | undefined
-  const stop = (error: Error) => {
-    failure = error
-    for (const request of waiting.values()) request.finish(error)
+  const waiting = new Map<number, (reason?: string, result?: unknown) => void>()
+  let firstReplyMs: number | undefined
+  let failure: string | undefined
+  const stop = (reason: string) => {
+    if (failure) return
+    failure = reason
+    for (const finish of waiting.values()) finish(reason)
   }
-  child.once('error', error => stop(error))
+  const processExited = 'Chrome process exited'
+  child.once('error', () => stop('Chrome process error'))
+  child.once('exit', () => stop(processExited))
   const exited = new Promise<void>(resolve => child.once('close', () => {
-    stop(new Error('The isolated Chrome process closed: ' + diagnostics))
+    stop(processExited)
     resolve()
   }))
   onTestFinished(async () => {
+    stop('Chrome test finished')
     if (child.exitCode === null && child.signalCode === null && child.pid !== undefined) child.kill('SIGTERM')
+    input?.destroy()
+    output?.destroy()
     const timer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null && child.pid !== undefined) child.kill('SIGKILL')
     }, 2_000)
     try { await exited } finally { clearTimeout(timer) }
   })
   assert.ok(input && output)
-  const sendError = () => stop(new Error('Chrome DevTools pipe failed'))
-  input.on('error', sendError)
-  output.on('error', sendError)
+  const pipeError = () => stop('Chrome DevTools pipe error')
+  input.on('error', pipeError)
+  output.on('error', pipeError)
+  function pipeClosed() {
+    output?.off('end', pipeClosed).off('close', pipeClosed)
+    // Give an exiting child a chance to report its exit status before pipe EOF.
+    setImmediate(() => stop(child.exitCode !== null || child.signalCode !== null
+      ? processExited : 'Chrome DevTools pipe closed'))
+  }
+  output.once('end', pipeClosed)
+  output.once('close', pipeClosed)
   let data = ''
   output.setEncoding('utf8').on('data', chunk => {
     data += chunk
@@ -56,29 +73,39 @@ export async function openHeadlessChrome(executable: string, profile: string, ce
       const json = data.slice(0, delimiter)
       data = data.slice(delimiter + 1)
       let reply: Reply
-      try { reply = JSON.parse(json) as Reply } catch { sendError(); return }
-      if (reply.id === undefined) continue
-      waiting.get(reply.id)?.finish(reply.error ? new Error('Chrome DevTools command failed') : undefined, reply.result)
+      try { reply = JSON.parse(json) as Reply } catch { stop('Invalid Chrome DevTools reply'); return }
+      const finish = reply?.id === undefined ? undefined : waiting.get(reply.id)
+      if (!finish) continue
+      firstReplyMs ??= Math.round(performance.now() - startedAt)
+      finish(reply.error ? 'Chrome DevTools rejected the command' : undefined, reply.result)
     }
   })
 
   let next = 0
   function call<T>(method: string, params: object = {}, sessionId?: string): Promise<T> {
-    if (failure) return Promise.reject(failure)
+    const commandStartedAt = performance.now()
+    const startup = method === 'Browser.getVersion'
+    const commandError = (reason: string) => new Error(
+      `${startup ? 'Chrome DevTools startup' : 'Chrome DevTools command'} (${method}): ${reason}. ` +
+      `Elapsed ${Math.round(performance.now() - commandStartedAt)} ms, first reply ${firstReplyMs === undefined ? 'none' : `${firstReplyMs} ms`}, ` +
+      `exit code ${child.exitCode ?? 'none'}, signal ${child.signalCode ?? 'none'}.`,
+    )
+    if (failure) return Promise.reject(commandError(failure))
     const id = ++next
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => finish(new Error('Chrome did not respond to ' + method + '\n' + diagnostics)), 8_000)
-      function finish(error?: Error, result?: unknown) {
+      const timer = setTimeout(() => finish('Timed out waiting for a reply'), startup ? startupTimeoutMs : commandTimeoutMs)
+      function finish(reason?: string, result?: unknown) {
         clearTimeout(timer)
         waiting.delete(id)
-        if (error) reject(error)
+        if (reason) reject(commandError(reason))
         else resolve(result as T)
       }
-      waiting.set(id, { finish })
+      waiting.set(id, finish)
       input!.write(JSON.stringify({ id, method, params, sessionId }) + '\0')
     })
   }
 
+  await call('Browser.getVersion')
   const { targetId } = await call<{ targetId: string }>('Target.createTarget', { url: 'about:blank' })
   const { sessionId } = await call<{ sessionId: string }>('Target.attachToTarget', { targetId, flatten: true })
   const send = <T>(method: string, params?: object) => call<T>(method, params, sessionId)
