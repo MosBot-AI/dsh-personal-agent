@@ -1,0 +1,874 @@
+{
+  "rubric": {
+    "scope": "Independent synthetic holdout for offline local-knowledge retrieval. Documents span different fictional operational, historical, and teaching collections. Source passages and annotations are fixed before any retrieval scores are examined.",
+    "positiveQueries": "63 answerable questions. English, Simplified Chinese and mixed language contribute 21 each, with seven direct, seven paraphrase and seven contextual questions per language. Mixed questions deliberately code-switch.",
+    "sourcedHit": "A hit must return an annotated relative source path. An exact-revision readback must match its corpus bytes and contain the exact answer anchor. Topic similarity without the right entity, condition, purpose or answer does not qualify.",
+    "denominator": "Report sourced hit@1 and hit@3 over all positives and by language and mode, with exact readback verification and misses. Keep answerable and no-answer denominators separate.",
+    "negativeControls": "15 unanswerable questions, five per language. Per language, two request unsupported attributes, one a different time or condition, one an unsupported comparison, and one an unrelated fact. Report each returned hit as a false positive under the corpus rubric.",
+    "target": "Report measured sourced retrieval against the plan's 80 percent target using the positive-query denominator."
+  },
+  "documents": {
+    "cartography/ridge-atlas.md": "# Ridge atlas field edition\n\nThe print room produced two editions from the same set of survey notes. This page describes the booklet issued to walking groups, with annotations for the main map and the small overflow panel.\n\nIn the field edition, a hollow triangle marks a drinking fountain; a filled triangle marks a lookout.\n\nRoutes that continue beyond the main sheet resume on the inset titled Eastern Fold.\n\nTo replace a copy without changing route numbers, match the month and letter printed together under the scale bar.\n",
+    "street-history/window-trail.md": "# Window trail interpretation sheet\n\nThe trail describes former workshop windows in the invented town of Elm Narrows. It separates marks made when the workshops were active from repairs carried out for the recent exhibition.\n\nTwo diagonal scratches on an original pane marked the glassmaker's second firing.\n\nThe slight ripples come from the original hand-rolled glass cooling unevenly, not from the recent repairs.\n\nThe painted number can be viewed without stairs through the pavement-level replica at Number Seven.\n",
+    "acoustics/listening-vans.md": "# Listening van seating and measurements\n\nThe traveling listening exhibit rotates between two vehicles. Measurements and seating arrangements on this page refer to the van with the felt lining.\n\nThe felt-lined listening van carries seven stools for the audience.\n\nThe hum drops after parking because the exhibit disconnects the demonstration speakers from the vehicle's charging circuit.\n\nFor a clear view of the caption strip when the rear row is occupied, offer the place on the aisle beside the folding counter.\n",
+    "volunteer-desk/repair-tokens.md": "# Community repair desk tokens\n\nVisitors receive a token at the desk and may have to leave briefly before their item is called. The following rules apply to the recurring Tuesday repair session.\n\nA teal token means the visitor needs an estimate before any repair work begins.\n\nA visitor who misses one call keeps their place immediately behind the next item already at the bench.\n\nWhen a visitor wants to decide the next day, the host clips the ticket to the board marked Awaiting reply.\n",
+    "observations/shore-benchmarks.md": "# Rook Strand benchmark notebook\n\nThis notebook explains an exercise with painted shoreline markers. Measurements are teaching examples, and all marker names and observations are synthetic.\n\nFor this exercise, height zero is the lower edge of the brass mark named Dock Three.\n\nReading from the side avoids mistaking the reflection in the wet paint for the top of the mark.\n\nIf Dock Three cannot be read, use Slate Corner and subtract fourteen centimetres from its indicated height.\n",
+    "education/shadow-screen.md": "# Shadow screen teaching kit\n\nThis is the inventory and adjustment card for the double-panel teaching screen. The single-panel traveling model is documented separately.\n\nThe standard spacing between the two panels is eight centimetres.\n\nFor a crisper outline, place the smooth face of the outer panel toward the audience.\n\nWhen the outer panel is reseated from the rear, release the lower latch on the handwheel side before lifting.\n",
+    "housing/corridor-tiles.md": "# Juniper Court corridor tile log\n\nThe caretaker keeps a small reserve of pattern tiles for the common corridor. Individual residents' doorway repairs are tracked on a separate sheet.\n\nCommon corridor pattern tiles are stored in the bottom compartment of the gray service cupboard.\n\nThe notch points toward the entrance when a pattern tile is laid in the common corridor.\n\nLeave a tile with a shallow chip in place until the next quarterly inspection; report the location on the caretaker card.\n",
+    "交通志/雾港渡口.md": "# 雾港渡口冬季导引\n\n本页记录虚构渡口的步行导引。候船区与卸货坡道在同一侧，但开放时段和使用条件分开登记。\n\n冬季步行候船线从钟楼外侧的第三根灰柱开始。\n\n卸货结束后，渡工会把横放的木牌转成竖直，表示行人可以进入栈桥。\n\n携带婴儿车的乘客可沿茶摊后面的平坡进入下层候船区。\n",
+    "城市档案/早市秤签.md": "# 松铃巷早市的秤签登记\n\n登记员复核摊位时会发不同样式的秤签。本记录适用于轮换摊位，不涵盖固定室内柜台。\n\n临时摊位通过复核后领一张边缘印有两道紫线的秤签。\n\n秤签被水浸但编号仍清楚时，带原签和当日摊位卡到登记桌换领。\n\n临时调换位置时，秤签随原摊主保留，由登记员改写摊位栏。\n",
+    "工艺口述/线装册折口.md": "# 线装册样件折口记录\n\n记录收录装订师的三条现场说明。样件不销售，纸面上的可见标记用于在工序间识别不同批次。\n\n第四批线装册样件的折口印记盖在页脚一侧。\n\n先压浅折痕是为了让几层纸一起归位，避免从边缘用力时纸角拱起。\n\n纸角起翘的样件先夹进两张干净厚纸之间压平，确认没有裂纹后再交下一道工序。\n",
+    "地形展/砾纹模型.md": "# 细砂地形模型展牌\n\n展台有模拟风纹和模拟水纹两组砾纹模型。展牌写的是水纹组，附近还有一个让观众自己尝试的空盘。\n\n水纹组模型最粗的一层用灰白色碎石粒表示。\n\n水纹靠近窄槽的一侧更密，是因为水流经过变窄处时加快了。\n\n需要亲手比较纹路时，使用展牌右下方抽屉里的备用水纹板，展示件留在原位。\n",
+    "值守记录/长廊雨幕.md": "# 北芦长廊雨幕操作记\n\n值守记录按小雨、斜雨和无雨分别登记。本页的雨幕安装在北芦长廊外侧，普通窗帘不适用这些安排。\n\n遇到斜雨时把雨幕下沿固定在靠里的第二排扣环。\n\n雨停后先保持雨幕垂下晾干，马上卷起会把水留在夹层里。\n\n雨幕松脱时，先围住靠近第三扇门的半段通道，再由值守员重新扣紧。\n",
+    "口述整理/车铃录音.md": "# 石井车铃录音的转写卡\n\n这张卡只用于博物馆向公众播放的短录音。原始档案单独保存，转写文字不替换录音文件。\n\n连续三次短响统一转写成「三促铃」。\n\n被旁白盖住的铃声仍需留位，方便把文字与原始录音的时间线对齐。\n\n听不清响铃次数时，在时间点后写「次数待核」，不要补写确定次数。\n",
+    "公共园地/台阶拼图.md": "# 霞河台阶石片拼图交接\n\n广场有一张可拆卸的图样供节庆布置。记录区分原本铺在台阶上的石片和备用盒里的复制件。\n\n缺口使用带蓝边盒中的复制石片补位。\n\n原石片背面有一条刻入的短槽，复制件背面是平的。\n\n有裂纹的原片放在单独的毡垫上，并把原位置号写在垫边小卡。\n",
+    "night-transit/blue-turn.md": "# Blue Turn stop card / 夜间停靠\n\nThis stop card describes the festival shuttle operated on the upper loop. Lower-loop vehicles use a different platform after dark.\n\nFor the upper loop after dusk, Blue Turn boards from Platform Four beside the ticket hut.\n\nTwo brief headlight flashes tell the queue that the driver is waiting for a crossing, not that boarding has opened.\n\nWhen the platform is partly closed, wheeled luggage should wait in the marked bay beside the ramp entrance.\n",
+    "print-society/rain-index.md": "# Rain Index booklet assembly / 读本装订\n\nRain Index is a fictional oral history booklet assembled for a public listening event. Copies with handwritten notes follow separate rules from the display stock.\n\nFor Rain Index, insert a correction slip immediately after page twelve.\n\nA copy with handwritten notes may be handed out only if the reader's permission stamp is on the inside cover.\n\nFor an omitted issue number, use a narrow paper label on the top outside corner without covering the title.\n",
+    "makers-collective/loft-hinge.md": "# Loft Hinge panel practice / 支架试装\n\nThe notes cover the heavy practice panel used for demonstration. The removable handle has its own marked crate.\n\nSecure the Loft Hinge demo panel with the latch on the stair side.\n\nBefore carrying the panel, slide the wooden brace into the narrow floor groove so the lower edge cannot swing.\n\nIf the handle is missing, leave the heavy panel on its stand and demonstrate the movement with the short tabletop model.\n",
+    "facilities/silver-lane.md": "# Silver Lane handover notes / 共用通道\n\nThese notes apply to the covered walkway behind a fictional gallery. They distinguish delivery windows from normal public access.\n\nWeekday deliveries on Silver Lane end at a quarter past eleven in the morning.\n\nThe public door has a narrow silver strip across the bottom; the delivery door has no strip.\n\nDuring unloading, visitors who need level access can enter through the flat passage beside the ticket office.\n",
+    "design-notes/poppy-proof.md": "# Poppy Proof color comparison / 校样读数\n\nThis file defines how to compare proofs for a fabric catalogue. It describes only the version with a pale paper background.\n\nCompare an approved Poppy Proof swatch under neutral white light at the side table.\n\nUse the woven front face for comparisons; the backing can vary between otherwise matching samples.\n\nIf the working light is unavailable, record the sample identifiers and mark the color comparison deferred until the lamp is replaced.\n",
+    "visitor-log/birch-ticket.md": "# Birch Ticket route rehearsal / 入口演练\n\nBirch Ticket is the practice itinerary used by volunteer ushers. The spectator route is finalized before the fictional fair opens.\n\nFor the Birch Ticket rehearsal, enter through the gate with the small black flag.\n\nThe rehearsal ends at the information kiosk; it does not loop back to the starting gate.\n\nIf the main passage closes, the next volunteer group assembles under the roof beside the information kiosk.\n",
+    "instrument-shelf/copper-read.md": "# Copper Read display checkout / 仪表交接\n\nCopper Read refers to a passive scale for a teaching display. The scale is moved only during the exhibition changeover.\n\nAfter checkout, place the Copper Read scale on the red felt mat for the return inspection.\n\nTo avoid viewing-angle error, line up the indicator with its reflection in the small mirror before reading the scale.\n\nA scale still under inspection cannot be checked out; mark the handover line waiting and leave the checkout time blank.\n",
+    "cartography/instructor-atlas.md": "# Ridge atlas classroom print\n\nA filled triangle on the instructor's classroom print marks a water source reserved for the field exercise. Hollow triangles are reference points for drawing contour lines.\n\nThe classroom sheets continue onto the West Sheet. The instructor's copy is reprinted when the sheet color changes, and it is identified by its serial sticker rather than the date beneath the scale.\n",
+    "street-history/restoration-tour.md": "# Restoration tour for upstairs volunteers\n\nMarks etched during restoration have two short parallel strokes. Scratches were added to the repair guide so installers could align new frames during fitting.\n\nA flat sheet in the upstairs archive lets volunteers compare a smooth modern pane with the wavy panes on the route. The replica at Number Six has the museum hours painted on it; it is not the workshop pane with the painted number.\n",
+    "acoustics/unlined-van.md": "# Unlined van arrival notes\n\nThe unlined listening van has five folding stools and no aisle counter. Its caption strip hangs behind the forward row. For a show at the depot, place the signs on the ramp before opening the side door.\n\nIn the unlined van the sound check includes a low recorded tone, which the host turns off before driving. When parked, that vehicle can be plugged into the depot's external socket.\n",
+    "volunteer-desk/annual-repair-fair.md": "# Annual repair fair tokens\n\nOn the annual fair's Sunday program, teal tokens identify prepaid places at the sewing station. The board marked Confirmed carries jobs already booked for that afternoon.\n\nA visitor who misses two calls at the fair returns to the welcome queue. Tuesday repair sessions at the community room use a separate card and ticket rules.\n",
+    "observations/gull-cove-benchmarks.md": "# Gull Cove benchmark field card\n\nGull Cove uses a mark named Dock One for its starting height. The lower line on the bright brass tag is a glare reference, not the zero level. The Gull Cove marker called Rock Corner requires a four-centimetre correction when the tag is difficult to read.\n\nSome students mistakenly apply the coast exercise from Rook Strand here. The marks were set on different days and their reference heights cannot be shared.\n",
+    "education/traveling-silhouette.md": "# Single-panel silhouette kit\n\nThe traveling silhouette screen has one panel. Its rough face is directed toward the audience to scatter glare during the demonstration. The eight-centimetre foam block belongs to the packing case and does not set a spacing on this model.\n\nTo remove the only panel from the front, lift the upper clip next to the label strip. A teacher who has the double-panel model should consult its inventory card instead.\n",
+    "housing/doorway-mosaic.md": "# Juniper Court private doorway tiles\n\nPlain tiles ordered for the apartment thresholds sit on the upper shelf of a gray cupboard. Floor tiles bearing a notch were rotated according to each individual doorway design.\n\nReplace a damaged private threshold tile once the resident confirms the installer visit. Repairs in the common corridor are logged by the caretaker under a different inspection schedule.\n",
+    "交通志/雾港夏季轮渡.md": "# 雾港渡口夏季卸货与候船\n\n夏季午后，行人从钟楼内侧第二根柱子排队。卸货结束后货车由石阶旁的宽坡退出，宽坡要等司机通知才能开放。\n\n换班时会把木牌横着靠在岗亭边，表示值守人暂离。这里的木牌不是冬季栈桥上的放行标记。\n",
+    "城市档案/松铃室内柜台.md": "# 松铃巷早市的室内柜台\n\n固定室内摊位复核后换一张印有一道紫线的秤签。每逢月底调整柜台位置，柜台编号卡跟着台架一起移动。\n\n重新换领室内长期签时先出示本月缴费单。临时轮换摊的秤签变更不在本说明中。\n",
+    "工艺口述/礼盒册样.md": "# 礼盒折页打样说明\n\n礼盒赠册的第三批在页眉一侧盖折口章。这里的试折用带旧印的纸，纸角变形可以暂时用硬夹子压住，随后重新裁切。\n\n线装册的纸张更厚，本工位的折页试验不作为线装工序标准。\n",
+    "地形展/风纹实验盘.md": "# 风纹组演示资料\n\n风纹组的模型底层用浅褐色颗粒表示。狭窄入口旁的风纹变细，可以用透明罩外的空盘演示。玻璃边的小抽屉由讲解员保管。\n\n不要把空盘的实验结果直接用来解释另一台水纹模型，两组的介质不同。\n",
+    "值守记录/南廊帘布.md": "# 南侧短廊遮帘值守\n\n南侧短廊的遮帘遇小雨只扣最外排，空气流动时可先收起一半。雨后值守员查看靠近第一扇门的防滑垫，方便接班人更换。\n\n北芦长廊的雨幕遮挡面积不同，南廊这张说明只用于带短横梁的位置。\n",
+    "口述整理/室内钟声.md": "# 铃响教学片段和场内播报\n\n室内提示铃连续两响转写为「二促铃」。音量很低但可以识别的长铃仍写出铃声类型；重叠的口述另起一行。\n\n与车铃录音对照时只使用同一时点的档案，不能用提示铃的段数填补车铃缺失的次数。\n",
+    "公共园地/广场彩砖储存.md": "# 节庆彩砖备品\n\n供儿童练习的石片来自带黄边的小盒。备用石片背面的短线是颜料刷出的，不作原石记号。\n\n完全裂成两片的练习砖直接投入纸包，准备第二天清点。霞河台阶图样的原件不随这批材料回收。\n",
+    "night-transit/lower-loop.md": "# Festival lower-loop stop card\n\nThe lower-loop Blue Turn shuttle uses Platform Two by the lamp post after dusk. The first short horn means boarding for the lower loop has begun.\n\nAt the upper-loop ticket hut, the sign normally names a crossing time. The signs next to the lower-loop ramp apply to that vehicle only.\n",
+    "print-society/reading-stock.md": "# Listening event display copies\n\nRain Index 的展台副本如果有错字，可以把较宽的勘误条夹在第十四页后，方便布置人员识别。供观众领走的书不放在这一叠。\n\n手写页通常用于主持人的发言准备；展示库存的内封面印的是分类章。\n",
+    "makers-collective/hinge-case.md": "# Practice equipment handles and latches\n\nThe short tabletop Loft Hinge model is fixed with a latch facing the storage cabinet. Its removable handle stays on the workbench when the small model is demonstrated.\n\nFor the heavy practice panel, prepare the stand before the volunteer briefing. The instructions above do not authorize moving a panel that has no handle.\n",
+    "facilities/silver-lane-market.md": "# Saturday market corridor map\n\nSilver Lane 的周六活动在十一点半后才开放卸货。摊主可从后门进场；这扇门底部的银线已经刷掉。\n\n参观者平日有专门入口，这张图没有画出票务办公室旁的平路。封闭时请先确认走廊对应的是哪张值班表。\n",
+    "design-notes/poppy-proof-dark.md": "# Poppy Proof dark backing experiment\n\nFor samples in the dark paper comparison, a shaded booth can make outlines easier to see. Inspect the backing from the underside if the experiment requires checking backing color.\n\nPale-paper catalogue proofs and dark experimental cuttings are identified by different envelopes. The experimental record sheet is not the pale-paper color approval form.\n",
+    "visitor-log/birch-ticket-spectators.md": "# Birch Ticket spectator entry cards\n\n正式观众从插白旗的入口进场，演出后可在出入口旁领取反馈卡。志愿者预演路线有另一张卡，不能照观众路线返回起点。\n\n主通道暂停时，观众在外侧排队区等工作人员通知，不进入屋顶下的志愿者区域。\n",
+    "instrument-shelf/copper-read-demo.md": "# Copper Read classroom handling\n\nCopper Read teaching assistants put unopened accessories on the gray mat before the audience arrives. In the demonstration photo the mirror was removed to show how the indicator is attached.\n\nOnly shelves holding a completed inspection sheet are ready for checkout. Practice forms may show a sample return time, which has no effect on the live handover log.\n"
+  },
+  "queries": [
+    {
+      "id": "semantic-en-direct-01",
+      "language": "en",
+      "mode": "direct",
+      "query": "On the field edition of the ridge atlas, what symbol marks a drinking fountain?",
+      "relevant": [
+        {
+          "path": "cartography/ridge-atlas.md",
+          "anchor": "In the field edition, a hollow triangle marks a drinking fountain; a filled triangle marks a lookout."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-paraphrase-01",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Our route runs past the edge of the main ridge map. Which panel do I use to pick up the path again?",
+      "relevant": [
+        {
+          "path": "cartography/ridge-atlas.md",
+          "anchor": "Routes that continue beyond the main sheet resume on the inset titled Eastern Fold."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-contextual-01",
+      "language": "en",
+      "mode": "contextual",
+      "query": "I'm replacing a damp copy of the ridge atlas at the desk and need an edition with the same route numbering. What should I compare?",
+      "relevant": [
+        {
+          "path": "cartography/ridge-atlas.md",
+          "anchor": "To replace a copy without changing route numbers, match the month and letter printed together under the scale bar."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-direct-02",
+      "language": "en",
+      "mode": "direct",
+      "query": "On the Elm Narrows window trail, what did two diagonal scratches on a pane indicate?",
+      "relevant": [
+        {
+          "path": "street-history/window-trail.md",
+          "anchor": "Two diagonal scratches on an original pane marked the glassmaker's second firing."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-paraphrase-02",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Why are some of the old workshop windows a little wavy, according to the trail guide?",
+      "relevant": [
+        {
+          "path": "street-history/window-trail.md",
+          "anchor": "The slight ripples come from the original hand-rolled glass cooling unevenly, not from the recent repairs."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-contextual-02",
+      "language": "en",
+      "mode": "contextual",
+      "query": "I'm following the window trail with someone who cannot climb the narrow stairs. Where can we still see the pane with the old painted number?",
+      "relevant": [
+        {
+          "path": "street-history/window-trail.md",
+          "anchor": "The painted number can be viewed without stairs through the pavement-level replica at Number Seven."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-direct-03",
+      "language": "en",
+      "mode": "direct",
+      "query": "How many listening stools does the felt-lined van carry?",
+      "relevant": [
+        {
+          "path": "acoustics/listening-vans.md",
+          "anchor": "The felt-lined listening van carries seven stools for the audience."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-paraphrase-03",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Why is the background hum less noticeable when the display van is parked?",
+      "relevant": [
+        {
+          "path": "acoustics/listening-vans.md",
+          "anchor": "The hum drops after parking because the exhibit disconnects the demonstration speakers from the vehicle's charging circuit."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-contextual-03",
+      "language": "en",
+      "mode": "contextual",
+      "query": "The back row in the felt-lined van is full and a guest needs to see the caption strip. Which place can the host offer?",
+      "relevant": [
+        {
+          "path": "acoustics/listening-vans.md",
+          "anchor": "For a clear view of the caption strip when the rear row is occupied, offer the place on the aisle beside the folding counter."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-direct-04",
+      "language": "en",
+      "mode": "direct",
+      "query": "At the Tuesday repair desk, what does a teal token tell the helpers?",
+      "relevant": [
+        {
+          "path": "volunteer-desk/repair-tokens.md",
+          "anchor": "A teal token means the visitor needs an estimate before any repair work begins."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-paraphrase-04",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "I stepped out while waiting for a repair and missed my number. Am I sent to the end of the line?",
+      "relevant": [
+        {
+          "path": "volunteer-desk/repair-tokens.md",
+          "anchor": "A visitor who misses one call keeps their place immediately behind the next item already at the bench."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-contextual-04",
+      "language": "en",
+      "mode": "contextual",
+      "query": "The repair desk has given me an estimate and I'd like to think overnight instead of agreeing now. Where does the ticket go?",
+      "relevant": [
+        {
+          "path": "volunteer-desk/repair-tokens.md",
+          "anchor": "When a visitor wants to decide the next day, the host clips the ticket to the board marked Awaiting reply."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-direct-05",
+      "language": "en",
+      "mode": "direct",
+      "query": "Which benchmark on Rook Strand is used as the zero height for the exercise?",
+      "relevant": [
+        {
+          "path": "observations/shore-benchmarks.md",
+          "anchor": "For this exercise, height zero is the lower edge of the brass mark named Dock Three."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-paraphrase-05",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Why do the shoreline exercise notes say to read the mark from the side instead of straight on?",
+      "relevant": [
+        {
+          "path": "observations/shore-benchmarks.md",
+          "anchor": "Reading from the side avoids mistaking the reflection in the wet paint for the top of the mark."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-contextual-05",
+      "language": "en",
+      "mode": "contextual",
+      "query": "We're collecting the Rook Strand measurements, but Dock Three is hidden by spray. Can we use another mark without guessing the conversion?",
+      "relevant": [
+        {
+          "path": "observations/shore-benchmarks.md",
+          "anchor": "If Dock Three cannot be read, use Slate Corner and subtract fourteen centimetres from its indicated height."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-direct-06",
+      "language": "en",
+      "mode": "direct",
+      "query": "What is the normal spacing between the two panels in the shadow teaching screen?",
+      "relevant": [
+        {
+          "path": "education/shadow-screen.md",
+          "anchor": "The standard spacing between the two panels is eight centimetres."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-paraphrase-06",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Which way should I turn the screen when I want the outline to look sharper rather than hazy?",
+      "relevant": [
+        {
+          "path": "education/shadow-screen.md",
+          "anchor": "For a crisper outline, place the smooth face of the outer panel toward the audience."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-contextual-06",
+      "language": "en",
+      "mode": "contextual",
+      "query": "The screen's outer panel has slipped and I can only reach it from the back. Which latch should I use to reseat it?",
+      "relevant": [
+        {
+          "path": "education/shadow-screen.md",
+          "anchor": "When the outer panel is reseated from the rear, release the lower latch on the handwheel side before lifting."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-direct-07",
+      "language": "en",
+      "mode": "direct",
+      "query": "Where are spare patterned tiles for the Juniper Court corridor stored?",
+      "relevant": [
+        {
+          "path": "housing/corridor-tiles.md",
+          "anchor": "Common corridor pattern tiles are stored in the bottom compartment of the gray service cupboard."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-paraphrase-07",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "How can I tell which side of a loose corridor tile is supposed to face the entrance?",
+      "relevant": [
+        {
+          "path": "housing/corridor-tiles.md",
+          "anchor": "The notch points toward the entrance when a pattern tile is laid in the common corridor."
+        }
+      ]
+    },
+    {
+      "id": "semantic-en-contextual-07",
+      "language": "en",
+      "mode": "contextual",
+      "query": "There's a shallow chip on one common corridor tile and we have a full matching spare. Do we swap the whole tile now?",
+      "relevant": [
+        {
+          "path": "housing/corridor-tiles.md",
+          "anchor": "Leave a tile with a shallow chip in place until the next quarterly inspection; report the location on the caretaker card."
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-direct-01",
+      "language": "zh",
+      "mode": "direct",
+      "query": "雾港渡口冬季的步行候船线从哪里开始？",
+      "relevant": [
+        {
+          "path": "交通志/雾港渡口.md",
+          "anchor": "冬季步行候船线从钟楼外侧的第三根灰柱开始。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-paraphrase-01",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "渡船还在卸箱子，等船的人怎么知道现在可以往栈桥走了？",
+      "relevant": [
+        {
+          "path": "交通志/雾港渡口.md",
+          "anchor": "卸货结束后，渡工会把横放的木牌转成竖直，表示行人可以进入栈桥。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-contextual-01",
+      "language": "zh",
+      "mode": "contextual",
+      "query": "我推着婴儿车到了雾港渡口，去栈桥的石阶湿滑。有没有指定的无台阶路线？",
+      "relevant": [
+        {
+          "path": "交通志/雾港渡口.md",
+          "anchor": "携带婴儿车的乘客可沿茶摊后面的平坡进入下层候船区。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-direct-02",
+      "language": "zh",
+      "mode": "direct",
+      "query": "松铃巷早市的临时摊位通过秤具复核后领哪种秤签？",
+      "relevant": [
+        {
+          "path": "城市档案/早市秤签.md",
+          "anchor": "临时摊位通过复核后领一张边缘印有两道紫线的秤签。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-paraphrase-02",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "我把秤签弄湿了，但还能看清号码。重领时要带什么去登记？",
+      "relevant": [
+        {
+          "path": "城市档案/早市秤签.md",
+          "anchor": "秤签被水浸但编号仍清楚时，带原签和当日摊位卡到登记桌换领。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-contextual-02",
+      "language": "zh",
+      "mode": "contextual",
+      "query": "我们上午和隔壁摊位调了位置，秤签也要跟着一起换过去吗？",
+      "relevant": [
+        {
+          "path": "城市档案/早市秤签.md",
+          "anchor": "临时调换位置时，秤签随原摊主保留，由登记员改写摊位栏。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-direct-03",
+      "language": "zh",
+      "mode": "direct",
+      "query": "线装册的第四批样件在折口哪边盖印？",
+      "relevant": [
+        {
+          "path": "工艺口述/线装册折口.md",
+          "anchor": "第四批线装册样件的折口印记盖在页脚一侧。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-paraphrase-03",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "为什么装订师先把纸轻轻压出折痕，再对齐边缘？",
+      "relevant": [
+        {
+          "path": "工艺口述/线装册折口.md",
+          "anchor": "先压浅折痕是为了让几层纸一起归位，避免从边缘用力时纸角拱起。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-contextual-03",
+      "language": "zh",
+      "mode": "contextual",
+      "query": "这一小摞线装册的纸角起翘了，下一工序已经在等。送过去之前该先怎么处理？",
+      "relevant": [
+        {
+          "path": "工艺口述/线装册折口.md",
+          "anchor": "纸角起翘的样件先夹进两张干净厚纸之间压平，确认没有裂纹后再交下一道工序。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-direct-04",
+      "language": "zh",
+      "mode": "direct",
+      "query": "水纹组砾纹模型最粗的一层用什么材料表示？",
+      "relevant": [
+        {
+          "path": "地形展/砾纹模型.md",
+          "anchor": "水纹组模型最粗的一层用灰白色碎石粒表示。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-paraphrase-04",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "为什么水纹模型的一侧波纹挤得更密？",
+      "relevant": [
+        {
+          "path": "地形展/砾纹模型.md",
+          "anchor": "水纹靠近窄槽的一侧更密，是因为水流经过变窄处时加快了。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-contextual-04",
+      "language": "zh",
+      "mode": "contextual",
+      "query": "参观者说空盘上做出的条纹和展示模型不同，想直接动展品比较。应该把他引到哪里去试？",
+      "relevant": [
+        {
+          "path": "地形展/砾纹模型.md",
+          "anchor": "需要亲手比较纹路时，使用展牌右下方抽屉里的备用水纹板，展示件留在原位。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-direct-05",
+      "language": "zh",
+      "mode": "direct",
+      "query": "北芦长廊遇到斜雨，雨幕的下沿要固定到哪一排扣环？",
+      "relevant": [
+        {
+          "path": "值守记录/长廊雨幕.md",
+          "anchor": "遇到斜雨时把雨幕下沿固定在靠里的第二排扣环。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-paraphrase-05",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "为什么刚停雨不能马上卷起北芦长廊的那层挡雨布？",
+      "relevant": [
+        {
+          "path": "值守记录/长廊雨幕.md",
+          "anchor": "雨停后先保持雨幕垂下晾干，马上卷起会把水留在夹层里。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-contextual-05",
+      "language": "zh",
+      "mode": "contextual",
+      "query": "雨幕下边被风吹松了一截，游客还在长廊里走动。需要先封住哪一段？",
+      "relevant": [
+        {
+          "path": "值守记录/长廊雨幕.md",
+          "anchor": "雨幕松脱时，先围住靠近第三扇门的半段通道，再由值守员重新扣紧。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-direct-06",
+      "language": "zh",
+      "mode": "direct",
+      "query": "石井车铃录音里连续三次短响用什么字样标记？",
+      "relevant": [
+        {
+          "path": "口述整理/车铃录音.md",
+          "anchor": "连续三次短响统一转写成「三促铃」。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-paraphrase-06",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "有些车铃声音刚响就被旁白压住，转写时为什么还得留一个记号？",
+      "relevant": [
+        {
+          "path": "口述整理/车铃录音.md",
+          "anchor": "被旁白盖住的铃声仍需留位，方便把文字与原始录音的时间线对齐。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-contextual-06",
+      "language": "zh",
+      "mode": "contextual",
+      "query": "我在复核车铃录音，只听到短促响声两下，后面可能还有第三下。该写成确定的三次吗？",
+      "relevant": [
+        {
+          "path": "口述整理/车铃录音.md",
+          "anchor": "听不清响铃次数时，在时间点后写「次数待核」，不要补写确定次数。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-direct-07",
+      "language": "zh",
+      "mode": "direct",
+      "query": "霞河台阶拼图有缺口时，用哪种盒子里的石片补位？",
+      "relevant": [
+        {
+          "path": "公共园地/台阶拼图.md",
+          "anchor": "缺口使用带蓝边盒中的复制石片补位。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-paraphrase-07",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "怎么判断一块没贴纸的石片是不是原本就铺在台阶上的？",
+      "relevant": [
+        {
+          "path": "公共园地/台阶拼图.md",
+          "anchor": "原石片背面有一条刻入的短槽，复制件背面是平的。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zh-contextual-07",
+      "language": "zh",
+      "mode": "contextual",
+      "query": "收拾石片时发现一块原片边缘裂开，今晚还要把拼图收起来。裂片跟其他原片放一起吗？",
+      "relevant": [
+        {
+          "path": "公共园地/台阶拼图.md",
+          "anchor": "有裂纹的原片放在单独的毡垫上，并把原位置号写在垫边小卡。"
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-direct-01",
+      "language": "mixed",
+      "mode": "direct",
+      "query": "Blue Turn 上环的 late shuttle 晚上在哪个平台停靠？",
+      "relevant": [
+        {
+          "path": "night-transit/blue-turn.md",
+          "anchor": "For the upper loop after dusk, Blue Turn boards from Platform Four beside the ticket hut."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-paraphrase-01",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "我在 Blue Turn 候车，只看到司机亮了两次车灯。这个 double flash 是不是表示车到站了？",
+      "relevant": [
+        {
+          "path": "night-transit/blue-turn.md",
+          "anchor": "Two brief headlight flashes tell the queue that the driver is waiting for a crossing, not that boarding has opened."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-contextual-01",
+      "language": "mixed",
+      "mode": "contextual",
+      "query": "Blue Turn 的 upper loop 站台封了一段，我又推着行李车。Where should I wait for boarding now?",
+      "relevant": [
+        {
+          "path": "night-transit/blue-turn.md",
+          "anchor": "When the platform is partly closed, wheeled luggage should wait in the marked bay beside the ramp entrance."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-direct-02",
+      "language": "mixed",
+      "mode": "direct",
+      "query": "Rain Index booklet 的 correction slip 要放在第几页后面？",
+      "relevant": [
+        {
+          "path": "print-society/rain-index.md",
+          "anchor": "For Rain Index, insert a correction slip immediately after page twelve."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-paraphrase-02",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Rain Index 有人给了一本写满批注的 sample，我怎么判断它能不能发给来听故事的人？",
+      "relevant": [
+        {
+          "path": "print-society/rain-index.md",
+          "anchor": "A copy with handwritten notes may be handed out only if the reader's permission stamp is on the inside cover."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-contextual-02",
+      "language": "mixed",
+      "mode": "contextual",
+      "query": "Rain Index 刚装订完就发现 cover 少印了期号，演出前来不及换。Which temporary label should I add?",
+      "relevant": [
+        {
+          "path": "print-society/rain-index.md",
+          "anchor": "For an omitted issue number, use a narrow paper label on the top outside corner without covering the title."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-direct-03",
+      "language": "mixed",
+      "mode": "direct",
+      "query": "Loft Hinge 的 demo panel 用哪一侧的 latch 固定？",
+      "relevant": [
+        {
+          "path": "makers-collective/loft-hinge.md",
+          "anchor": "Secure the Loft Hinge demo panel with the latch on the stair side."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-paraphrase-03",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Loft Hinge 练习板一抬起来就晃。What keeps the panel steady before it is carried?",
+      "relevant": [
+        {
+          "path": "makers-collective/loft-hinge.md",
+          "anchor": "Before carrying the panel, slide the wooden brace into the narrow floor groove so the lower edge cannot swing."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-contextual-03",
+      "language": "mixed",
+      "mode": "contextual",
+      "query": "Loft Hinge 的 handle 找不到，活动还要继续，但不能 lift panel。现有的演示替代安排是什么？",
+      "relevant": [
+        {
+          "path": "makers-collective/loft-hinge.md",
+          "anchor": "If the handle is missing, leave the heavy panel on its stand and demonstrate the movement with the short tabletop model."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-direct-04",
+      "language": "mixed",
+      "mode": "direct",
+      "query": "Silver Lane 的 weekday delivery window 每天几点结束？",
+      "relevant": [
+        {
+          "path": "facilities/silver-lane.md",
+          "anchor": "Weekday deliveries on Silver Lane end at a quarter past eleven in the morning."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-paraphrase-04",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Silver Lane 的两扇推门长得一样，访客怎样认出哪扇可以用？Is there a visible marker?",
+      "relevant": [
+        {
+          "path": "facilities/silver-lane.md",
+          "anchor": "The public door has a narrow silver strip across the bottom; the delivery door has no strip."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-contextual-04",
+      "language": "mixed",
+      "mode": "contextual",
+      "query": "Silver Lane 正在卸货，有位访客只能走平路。Where can I send them without going through the delivery area?",
+      "relevant": [
+        {
+          "path": "facilities/silver-lane.md",
+          "anchor": "During unloading, visitors who need level access can enter through the flat passage beside the ticket office."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-direct-05",
+      "language": "mixed",
+      "mode": "direct",
+      "query": "Poppy Proof 里 pale background 的 approved swatch 应该在什么光线下比对？",
+      "relevant": [
+        {
+          "path": "design-notes/poppy-proof.md",
+          "anchor": "Compare an approved Poppy Proof swatch under neutral white light at the side table."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-paraphrase-05",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Poppy Proof 两张 fabric sample 在桌上看着一样，翻过去颜色却不同。Which face counts for the comparison?",
+      "relevant": [
+        {
+          "path": "design-notes/poppy-proof.md",
+          "anchor": "Use the woven front face for comparisons; the backing can vary between otherwise matching samples."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-contextual-05",
+      "language": "mixed",
+      "mode": "contextual",
+      "query": "Poppy Proof 的工作灯坏了，窗边 daylight 又在变。今天还要继续记录，怎么标记这批对比结果？",
+      "relevant": [
+        {
+          "path": "design-notes/poppy-proof.md",
+          "anchor": "If the working light is unavailable, record the sample identifiers and mark the color comparison deferred until the lamp is replaced."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-direct-06",
+      "language": "mixed",
+      "mode": "direct",
+      "query": "Birch Ticket 的 rehearsal entry 从哪一扇 gate 进去？",
+      "relevant": [
+        {
+          "path": "visitor-log/birch-ticket.md",
+          "anchor": "For the Birch Ticket rehearsal, enter through the gate with the small black flag."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-paraphrase-06",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Birch Ticket 的 volunteer run 走到一半想确认有没有走完，最后要回到原来的入口吗？",
+      "relevant": [
+        {
+          "path": "visitor-log/birch-ticket.md",
+          "anchor": "The rehearsal ends at the information kiosk; it does not loop back to the starting gate."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-contextual-06",
+      "language": "mixed",
+      "mode": "contextual",
+      "query": "Birch Ticket rehearsal 遇到 main passage 停用，接下来的志愿者要在哪里集合等改线？",
+      "relevant": [
+        {
+          "path": "visitor-log/birch-ticket.md",
+          "anchor": "If the main passage closes, the next volunteer group assembles under the roof beside the information kiosk."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-direct-07",
+      "language": "mixed",
+      "mode": "direct",
+      "query": "Copper Read 的 scale 回库以后要先放在哪张 mat 上？",
+      "relevant": [
+        {
+          "path": "instrument-shelf/copper-read.md",
+          "anchor": "After checkout, place the Copper Read scale on the red felt mat for the return inspection."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-paraphrase-07",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Copper Read 的读数看起来总差一点。怎么排除是因为我站偏了？",
+      "relevant": [
+        {
+          "path": "instrument-shelf/copper-read.md",
+          "anchor": "To avoid viewing-angle error, line up the indicator with its reflection in the small mirror before reading the scale."
+        }
+      ]
+    },
+    {
+      "id": "semantic-mixed-contextual-07",
+      "language": "mixed",
+      "mode": "contextual",
+      "query": "Copper Read 还没结束 inspection，下一组已经要 checkout。能否先签出，交接表上怎么写？",
+      "relevant": [
+        {
+          "path": "instrument-shelf/copper-read.md",
+          "anchor": "A scale still under inspection cannot be checked out; mark the handover line waiting and leave the checkout time blank."
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "What make of radio does the felt-lined listening van carry in the cab?"
+    },
+    {
+      "language": "en",
+      "query": "Which exact paint batch was used on the notch of the Juniper Court corridor tiles?"
+    },
+    {
+      "language": "en",
+      "query": "What time does the Elm Narrows window trail admit ticketed visitors on the first Monday of March?"
+    },
+    {
+      "language": "en",
+      "query": "Is Dock Three farther from the sea than Slate Corner, and by how many metres?"
+    },
+    {
+      "language": "en",
+      "query": "Which instrument did the composer of the imaginary Harbor Glass cantata play as a child?"
+    },
+    {
+      "language": "zh",
+      "query": "雾港渡口新铺的栈桥总共用了多少枚固定螺栓？"
+    },
+    {
+      "language": "zh",
+      "query": "水纹组砾纹模型的展牌是哪位设计师绘制的？"
+    },
+    {
+      "language": "zh",
+      "query": "松铃巷早市的临时摊位在冬至当天提前几点开始复核？"
+    },
+    {
+      "language": "zh",
+      "query": "北芦长廊的雨幕比南侧短廊的遮帘重多少公斤？"
+    },
+    {
+      "language": "zh",
+      "query": "虚构的罗杉电影院一九五七年首映礼用了什么牌子的放映机？"
+    },
+    {
+      "language": "mixed",
+      "query": "Loft Hinge demo panel 的运输单上写的是哪一家 supplier？"
+    },
+    {
+      "language": "mixed",
+      "query": "Birch Ticket 的信息亭 roof 涂料是哪个具体色号？"
+    },
+    {
+      "language": "mixed",
+      "query": "Blue Turn upper loop 的 late shuttle 在元旦清晨几点开第一班？"
+    },
+    {
+      "language": "mixed",
+      "query": "Rain Index booklet 和 Birch Ticket cards 的纸张相比，哪一种每平方米更重，差多少？"
+    },
+    {
+      "language": "mixed",
+      "query": "Silver Atlas 的 winter kayaking insurance 可以在什么网站 renew？"
+    }
+  ]
+}

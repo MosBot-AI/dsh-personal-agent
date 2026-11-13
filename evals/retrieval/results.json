@@ -1,0 +1,1245 @@
+{
+  "baselineRevision": "9714da4638b7bd21aa1bb9efda3c62c9557a942c",
+  "calibration": {
+    "corpusDigest": "6a1d8f525493e06c73dfe3b9de10ab99d055e037968a2ba6a4601716bf76439c",
+    "manifestDigest": "3886b8830879277f1f13946cf1d5e5808b0fe965a9024a85bb98688f8d8c4c18",
+    "scorerDigest": "77250e109440ab97b8755fd43908dbe346710f98205a9438086edf97716517c1",
+    "denseCutoff": 0.92,
+    "denseMinimumGap": 0.03,
+    "lexicalWeight": 0.75
+  },
+  "calibrationQuality": {
+    "lexical": {
+      "queries": 24,
+      "hitAt1": 3,
+      "hitAt3": 4,
+      "falsePositives": [
+        "no-answer-2",
+        "no-answer-10",
+        "no-answer-13",
+        "no-answer-15",
+        "no-answer-16",
+        "no-answer-17",
+        "no-answer-18",
+        "no-answer-20",
+        "no-answer-21"
+      ],
+      "falsePositiveDenominator": 24
+    },
+    "dense": {
+      "queries": 24,
+      "hitAt1": 2,
+      "hitAt3": 2,
+      "falsePositives": [
+        "no-answer-21"
+      ],
+      "falsePositiveDenominator": 24
+    },
+    "hybrid": {
+      "queries": 24,
+      "hitAt1": 5,
+      "hitAt3": 6,
+      "falsePositives": [
+        "no-answer-2",
+        "no-answer-10",
+        "no-answer-13",
+        "no-answer-15",
+        "no-answer-16",
+        "no-answer-17",
+        "no-answer-18",
+        "no-answer-20",
+        "no-answer-21"
+      ],
+      "falsePositiveDenominator": 24
+    }
+  },
+  "holdout": {
+    "corpusDigest": "8cc8b097957a80494094d4e6e16b49c8c3646504e6878c45e7e66fc892731012",
+    "policyDigest": "58edf4a27d775768b1c4482a947ba5f59b5f093485f8552117e1e4b2f4170ace",
+    "quality": {
+      "lexical": {
+        "queries": 63,
+        "hitAt1": 44,
+        "hitAt3": 44,
+        "missesAt1": [
+          "semantic-en-paraphrase-04",
+          "semantic-en-direct-05",
+          "semantic-en-paraphrase-06",
+          "semantic-zh-paraphrase-01",
+          "semantic-zh-paraphrase-02",
+          "semantic-zh-contextual-02",
+          "semantic-zh-contextual-04",
+          "semantic-zh-contextual-05",
+          "semantic-zh-paraphrase-06",
+          "semantic-zh-contextual-06",
+          "semantic-zh-contextual-07",
+          "semantic-mixed-paraphrase-01",
+          "semantic-mixed-paraphrase-02",
+          "semantic-mixed-contextual-03",
+          "semantic-mixed-paraphrase-04",
+          "semantic-mixed-contextual-04",
+          "semantic-mixed-contextual-05",
+          "semantic-mixed-paraphrase-06",
+          "semantic-mixed-paraphrase-07"
+        ],
+        "missesAt3": [
+          "semantic-en-paraphrase-04",
+          "semantic-en-direct-05",
+          "semantic-en-paraphrase-06",
+          "semantic-zh-paraphrase-01",
+          "semantic-zh-paraphrase-02",
+          "semantic-zh-contextual-02",
+          "semantic-zh-contextual-04",
+          "semantic-zh-contextual-05",
+          "semantic-zh-paraphrase-06",
+          "semantic-zh-contextual-06",
+          "semantic-zh-contextual-07",
+          "semantic-mixed-paraphrase-01",
+          "semantic-mixed-paraphrase-02",
+          "semantic-mixed-contextual-03",
+          "semantic-mixed-paraphrase-04",
+          "semantic-mixed-contextual-04",
+          "semantic-mixed-contextual-05",
+          "semantic-mixed-paraphrase-06",
+          "semantic-mixed-paraphrase-07"
+        ],
+        "byLanguage": {
+          "en": {
+            "queries": 21,
+            "hitAt1": 18,
+            "hitAt3": 18,
+            "missesAt1": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-direct-05",
+              "semantic-en-paraphrase-06"
+            ],
+            "missesAt3": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-direct-05",
+              "semantic-en-paraphrase-06"
+            ]
+          },
+          "mixed": {
+            "queries": 21,
+            "hitAt1": 13,
+            "hitAt3": 13,
+            "missesAt1": [
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ],
+            "missesAt3": [
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ]
+          },
+          "zh": {
+            "queries": 21,
+            "hitAt1": 13,
+            "hitAt3": 13,
+            "missesAt1": [
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07"
+            ],
+            "missesAt3": [
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07"
+            ]
+          }
+        },
+        "byMode": {
+          "contextual": {
+            "queries": 21,
+            "hitAt1": 13,
+            "hitAt3": 13,
+            "missesAt1": [
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05"
+            ],
+            "missesAt3": [
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05"
+            ]
+          },
+          "direct": {
+            "queries": 21,
+            "hitAt1": 20,
+            "hitAt3": 20,
+            "missesAt1": [
+              "semantic-en-direct-05"
+            ],
+            "missesAt3": [
+              "semantic-en-direct-05"
+            ]
+          },
+          "paraphrase": {
+            "queries": 21,
+            "hitAt1": 11,
+            "hitAt3": 11,
+            "missesAt1": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-paraphrase-06",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-paraphrase-06",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ],
+            "missesAt3": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-paraphrase-06",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-paraphrase-06",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ]
+          }
+        },
+        "falsePositives": [
+          "no-answer-3",
+          "no-answer-4",
+          "no-answer-6",
+          "no-answer-11",
+          "no-answer-12"
+        ],
+        "falsePositiveDenominator": 15
+      },
+      "dense": {
+        "queries": 63,
+        "hitAt1": 2,
+        "hitAt3": 2,
+        "missesAt1": [
+          "semantic-en-direct-01",
+          "semantic-en-paraphrase-01",
+          "semantic-en-contextual-01",
+          "semantic-en-direct-02",
+          "semantic-en-paraphrase-02",
+          "semantic-en-contextual-02",
+          "semantic-en-direct-03",
+          "semantic-en-paraphrase-03",
+          "semantic-en-contextual-03",
+          "semantic-en-direct-04",
+          "semantic-en-paraphrase-04",
+          "semantic-en-contextual-04",
+          "semantic-en-direct-05",
+          "semantic-en-paraphrase-05",
+          "semantic-en-contextual-05",
+          "semantic-en-direct-06",
+          "semantic-en-paraphrase-06",
+          "semantic-en-contextual-06",
+          "semantic-en-direct-07",
+          "semantic-en-paraphrase-07",
+          "semantic-en-contextual-07",
+          "semantic-zh-direct-01",
+          "semantic-zh-paraphrase-01",
+          "semantic-zh-contextual-01",
+          "semantic-zh-direct-02",
+          "semantic-zh-paraphrase-02",
+          "semantic-zh-contextual-02",
+          "semantic-zh-paraphrase-03",
+          "semantic-zh-contextual-03",
+          "semantic-zh-direct-04",
+          "semantic-zh-paraphrase-04",
+          "semantic-zh-contextual-04",
+          "semantic-zh-direct-05",
+          "semantic-zh-paraphrase-05",
+          "semantic-zh-contextual-05",
+          "semantic-zh-direct-06",
+          "semantic-zh-paraphrase-06",
+          "semantic-zh-contextual-06",
+          "semantic-zh-paraphrase-07",
+          "semantic-zh-contextual-07",
+          "semantic-mixed-direct-01",
+          "semantic-mixed-paraphrase-01",
+          "semantic-mixed-contextual-01",
+          "semantic-mixed-direct-02",
+          "semantic-mixed-paraphrase-02",
+          "semantic-mixed-contextual-02",
+          "semantic-mixed-direct-03",
+          "semantic-mixed-paraphrase-03",
+          "semantic-mixed-contextual-03",
+          "semantic-mixed-direct-04",
+          "semantic-mixed-paraphrase-04",
+          "semantic-mixed-contextual-04",
+          "semantic-mixed-direct-05",
+          "semantic-mixed-paraphrase-05",
+          "semantic-mixed-contextual-05",
+          "semantic-mixed-direct-06",
+          "semantic-mixed-paraphrase-06",
+          "semantic-mixed-contextual-06",
+          "semantic-mixed-direct-07",
+          "semantic-mixed-paraphrase-07",
+          "semantic-mixed-contextual-07"
+        ],
+        "missesAt3": [
+          "semantic-en-direct-01",
+          "semantic-en-paraphrase-01",
+          "semantic-en-contextual-01",
+          "semantic-en-direct-02",
+          "semantic-en-paraphrase-02",
+          "semantic-en-contextual-02",
+          "semantic-en-direct-03",
+          "semantic-en-paraphrase-03",
+          "semantic-en-contextual-03",
+          "semantic-en-direct-04",
+          "semantic-en-paraphrase-04",
+          "semantic-en-contextual-04",
+          "semantic-en-direct-05",
+          "semantic-en-paraphrase-05",
+          "semantic-en-contextual-05",
+          "semantic-en-direct-06",
+          "semantic-en-paraphrase-06",
+          "semantic-en-contextual-06",
+          "semantic-en-direct-07",
+          "semantic-en-paraphrase-07",
+          "semantic-en-contextual-07",
+          "semantic-zh-direct-01",
+          "semantic-zh-paraphrase-01",
+          "semantic-zh-contextual-01",
+          "semantic-zh-direct-02",
+          "semantic-zh-paraphrase-02",
+          "semantic-zh-contextual-02",
+          "semantic-zh-paraphrase-03",
+          "semantic-zh-contextual-03",
+          "semantic-zh-direct-04",
+          "semantic-zh-paraphrase-04",
+          "semantic-zh-contextual-04",
+          "semantic-zh-direct-05",
+          "semantic-zh-paraphrase-05",
+          "semantic-zh-contextual-05",
+          "semantic-zh-direct-06",
+          "semantic-zh-paraphrase-06",
+          "semantic-zh-contextual-06",
+          "semantic-zh-paraphrase-07",
+          "semantic-zh-contextual-07",
+          "semantic-mixed-direct-01",
+          "semantic-mixed-paraphrase-01",
+          "semantic-mixed-contextual-01",
+          "semantic-mixed-direct-02",
+          "semantic-mixed-paraphrase-02",
+          "semantic-mixed-contextual-02",
+          "semantic-mixed-direct-03",
+          "semantic-mixed-paraphrase-03",
+          "semantic-mixed-contextual-03",
+          "semantic-mixed-direct-04",
+          "semantic-mixed-paraphrase-04",
+          "semantic-mixed-contextual-04",
+          "semantic-mixed-direct-05",
+          "semantic-mixed-paraphrase-05",
+          "semantic-mixed-contextual-05",
+          "semantic-mixed-direct-06",
+          "semantic-mixed-paraphrase-06",
+          "semantic-mixed-contextual-06",
+          "semantic-mixed-direct-07",
+          "semantic-mixed-paraphrase-07",
+          "semantic-mixed-contextual-07"
+        ],
+        "byLanguage": {
+          "en": {
+            "queries": 21,
+            "hitAt1": 0,
+            "hitAt3": 0,
+            "missesAt1": [
+              "semantic-en-direct-01",
+              "semantic-en-paraphrase-01",
+              "semantic-en-contextual-01",
+              "semantic-en-direct-02",
+              "semantic-en-paraphrase-02",
+              "semantic-en-contextual-02",
+              "semantic-en-direct-03",
+              "semantic-en-paraphrase-03",
+              "semantic-en-contextual-03",
+              "semantic-en-direct-04",
+              "semantic-en-paraphrase-04",
+              "semantic-en-contextual-04",
+              "semantic-en-direct-05",
+              "semantic-en-paraphrase-05",
+              "semantic-en-contextual-05",
+              "semantic-en-direct-06",
+              "semantic-en-paraphrase-06",
+              "semantic-en-contextual-06",
+              "semantic-en-direct-07",
+              "semantic-en-paraphrase-07",
+              "semantic-en-contextual-07"
+            ],
+            "missesAt3": [
+              "semantic-en-direct-01",
+              "semantic-en-paraphrase-01",
+              "semantic-en-contextual-01",
+              "semantic-en-direct-02",
+              "semantic-en-paraphrase-02",
+              "semantic-en-contextual-02",
+              "semantic-en-direct-03",
+              "semantic-en-paraphrase-03",
+              "semantic-en-contextual-03",
+              "semantic-en-direct-04",
+              "semantic-en-paraphrase-04",
+              "semantic-en-contextual-04",
+              "semantic-en-direct-05",
+              "semantic-en-paraphrase-05",
+              "semantic-en-contextual-05",
+              "semantic-en-direct-06",
+              "semantic-en-paraphrase-06",
+              "semantic-en-contextual-06",
+              "semantic-en-direct-07",
+              "semantic-en-paraphrase-07",
+              "semantic-en-contextual-07"
+            ]
+          },
+          "mixed": {
+            "queries": 21,
+            "hitAt1": 0,
+            "hitAt3": 0,
+            "missesAt1": [
+              "semantic-mixed-direct-01",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-contextual-01",
+              "semantic-mixed-direct-02",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-contextual-02",
+              "semantic-mixed-direct-03",
+              "semantic-mixed-paraphrase-03",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-direct-04",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-direct-05",
+              "semantic-mixed-paraphrase-05",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-direct-06",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-contextual-06",
+              "semantic-mixed-direct-07",
+              "semantic-mixed-paraphrase-07",
+              "semantic-mixed-contextual-07"
+            ],
+            "missesAt3": [
+              "semantic-mixed-direct-01",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-contextual-01",
+              "semantic-mixed-direct-02",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-contextual-02",
+              "semantic-mixed-direct-03",
+              "semantic-mixed-paraphrase-03",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-direct-04",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-direct-05",
+              "semantic-mixed-paraphrase-05",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-direct-06",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-contextual-06",
+              "semantic-mixed-direct-07",
+              "semantic-mixed-paraphrase-07",
+              "semantic-mixed-contextual-07"
+            ]
+          },
+          "zh": {
+            "queries": 21,
+            "hitAt1": 2,
+            "hitAt3": 2,
+            "missesAt1": [
+              "semantic-zh-direct-01",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-contextual-01",
+              "semantic-zh-direct-02",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-contextual-02",
+              "semantic-zh-paraphrase-03",
+              "semantic-zh-contextual-03",
+              "semantic-zh-direct-04",
+              "semantic-zh-paraphrase-04",
+              "semantic-zh-contextual-04",
+              "semantic-zh-direct-05",
+              "semantic-zh-paraphrase-05",
+              "semantic-zh-contextual-05",
+              "semantic-zh-direct-06",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-contextual-06",
+              "semantic-zh-paraphrase-07",
+              "semantic-zh-contextual-07"
+            ],
+            "missesAt3": [
+              "semantic-zh-direct-01",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-contextual-01",
+              "semantic-zh-direct-02",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-contextual-02",
+              "semantic-zh-paraphrase-03",
+              "semantic-zh-contextual-03",
+              "semantic-zh-direct-04",
+              "semantic-zh-paraphrase-04",
+              "semantic-zh-contextual-04",
+              "semantic-zh-direct-05",
+              "semantic-zh-paraphrase-05",
+              "semantic-zh-contextual-05",
+              "semantic-zh-direct-06",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-contextual-06",
+              "semantic-zh-paraphrase-07",
+              "semantic-zh-contextual-07"
+            ]
+          }
+        },
+        "byMode": {
+          "contextual": {
+            "queries": 21,
+            "hitAt1": 0,
+            "hitAt3": 0,
+            "missesAt1": [
+              "semantic-en-contextual-01",
+              "semantic-en-contextual-02",
+              "semantic-en-contextual-03",
+              "semantic-en-contextual-04",
+              "semantic-en-contextual-05",
+              "semantic-en-contextual-06",
+              "semantic-en-contextual-07",
+              "semantic-zh-contextual-01",
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-03",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07",
+              "semantic-mixed-contextual-01",
+              "semantic-mixed-contextual-02",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-contextual-06",
+              "semantic-mixed-contextual-07"
+            ],
+            "missesAt3": [
+              "semantic-en-contextual-01",
+              "semantic-en-contextual-02",
+              "semantic-en-contextual-03",
+              "semantic-en-contextual-04",
+              "semantic-en-contextual-05",
+              "semantic-en-contextual-06",
+              "semantic-en-contextual-07",
+              "semantic-zh-contextual-01",
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-03",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07",
+              "semantic-mixed-contextual-01",
+              "semantic-mixed-contextual-02",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-contextual-06",
+              "semantic-mixed-contextual-07"
+            ]
+          },
+          "direct": {
+            "queries": 21,
+            "hitAt1": 2,
+            "hitAt3": 2,
+            "missesAt1": [
+              "semantic-en-direct-01",
+              "semantic-en-direct-02",
+              "semantic-en-direct-03",
+              "semantic-en-direct-04",
+              "semantic-en-direct-05",
+              "semantic-en-direct-06",
+              "semantic-en-direct-07",
+              "semantic-zh-direct-01",
+              "semantic-zh-direct-02",
+              "semantic-zh-direct-04",
+              "semantic-zh-direct-05",
+              "semantic-zh-direct-06",
+              "semantic-mixed-direct-01",
+              "semantic-mixed-direct-02",
+              "semantic-mixed-direct-03",
+              "semantic-mixed-direct-04",
+              "semantic-mixed-direct-05",
+              "semantic-mixed-direct-06",
+              "semantic-mixed-direct-07"
+            ],
+            "missesAt3": [
+              "semantic-en-direct-01",
+              "semantic-en-direct-02",
+              "semantic-en-direct-03",
+              "semantic-en-direct-04",
+              "semantic-en-direct-05",
+              "semantic-en-direct-06",
+              "semantic-en-direct-07",
+              "semantic-zh-direct-01",
+              "semantic-zh-direct-02",
+              "semantic-zh-direct-04",
+              "semantic-zh-direct-05",
+              "semantic-zh-direct-06",
+              "semantic-mixed-direct-01",
+              "semantic-mixed-direct-02",
+              "semantic-mixed-direct-03",
+              "semantic-mixed-direct-04",
+              "semantic-mixed-direct-05",
+              "semantic-mixed-direct-06",
+              "semantic-mixed-direct-07"
+            ]
+          },
+          "paraphrase": {
+            "queries": 21,
+            "hitAt1": 0,
+            "hitAt3": 0,
+            "missesAt1": [
+              "semantic-en-paraphrase-01",
+              "semantic-en-paraphrase-02",
+              "semantic-en-paraphrase-03",
+              "semantic-en-paraphrase-04",
+              "semantic-en-paraphrase-05",
+              "semantic-en-paraphrase-06",
+              "semantic-en-paraphrase-07",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-paraphrase-03",
+              "semantic-zh-paraphrase-04",
+              "semantic-zh-paraphrase-05",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-paraphrase-07",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-paraphrase-03",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-paraphrase-05",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ],
+            "missesAt3": [
+              "semantic-en-paraphrase-01",
+              "semantic-en-paraphrase-02",
+              "semantic-en-paraphrase-03",
+              "semantic-en-paraphrase-04",
+              "semantic-en-paraphrase-05",
+              "semantic-en-paraphrase-06",
+              "semantic-en-paraphrase-07",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-paraphrase-03",
+              "semantic-zh-paraphrase-04",
+              "semantic-zh-paraphrase-05",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-paraphrase-07",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-paraphrase-03",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-paraphrase-05",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ]
+          }
+        },
+        "falsePositives": [
+          "no-answer-9"
+        ],
+        "falsePositiveDenominator": 15
+      },
+      "hybrid": {
+        "queries": 63,
+        "hitAt1": 44,
+        "hitAt3": 44,
+        "missesAt1": [
+          "semantic-en-paraphrase-04",
+          "semantic-en-direct-05",
+          "semantic-en-paraphrase-06",
+          "semantic-zh-paraphrase-01",
+          "semantic-zh-paraphrase-02",
+          "semantic-zh-contextual-02",
+          "semantic-zh-contextual-04",
+          "semantic-zh-contextual-05",
+          "semantic-zh-paraphrase-06",
+          "semantic-zh-contextual-06",
+          "semantic-zh-contextual-07",
+          "semantic-mixed-paraphrase-01",
+          "semantic-mixed-paraphrase-02",
+          "semantic-mixed-contextual-03",
+          "semantic-mixed-paraphrase-04",
+          "semantic-mixed-contextual-04",
+          "semantic-mixed-contextual-05",
+          "semantic-mixed-paraphrase-06",
+          "semantic-mixed-paraphrase-07"
+        ],
+        "missesAt3": [
+          "semantic-en-paraphrase-04",
+          "semantic-en-direct-05",
+          "semantic-en-paraphrase-06",
+          "semantic-zh-paraphrase-01",
+          "semantic-zh-paraphrase-02",
+          "semantic-zh-contextual-02",
+          "semantic-zh-contextual-04",
+          "semantic-zh-contextual-05",
+          "semantic-zh-paraphrase-06",
+          "semantic-zh-contextual-06",
+          "semantic-zh-contextual-07",
+          "semantic-mixed-paraphrase-01",
+          "semantic-mixed-paraphrase-02",
+          "semantic-mixed-contextual-03",
+          "semantic-mixed-paraphrase-04",
+          "semantic-mixed-contextual-04",
+          "semantic-mixed-contextual-05",
+          "semantic-mixed-paraphrase-06",
+          "semantic-mixed-paraphrase-07"
+        ],
+        "byLanguage": {
+          "en": {
+            "queries": 21,
+            "hitAt1": 18,
+            "hitAt3": 18,
+            "missesAt1": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-direct-05",
+              "semantic-en-paraphrase-06"
+            ],
+            "missesAt3": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-direct-05",
+              "semantic-en-paraphrase-06"
+            ]
+          },
+          "mixed": {
+            "queries": 21,
+            "hitAt1": 13,
+            "hitAt3": 13,
+            "missesAt1": [
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ],
+            "missesAt3": [
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ]
+          },
+          "zh": {
+            "queries": 21,
+            "hitAt1": 13,
+            "hitAt3": 13,
+            "missesAt1": [
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07"
+            ],
+            "missesAt3": [
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-paraphrase-06",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07"
+            ]
+          }
+        },
+        "byMode": {
+          "contextual": {
+            "queries": 21,
+            "hitAt1": 13,
+            "hitAt3": 13,
+            "missesAt1": [
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05"
+            ],
+            "missesAt3": [
+              "semantic-zh-contextual-02",
+              "semantic-zh-contextual-04",
+              "semantic-zh-contextual-05",
+              "semantic-zh-contextual-06",
+              "semantic-zh-contextual-07",
+              "semantic-mixed-contextual-03",
+              "semantic-mixed-contextual-04",
+              "semantic-mixed-contextual-05"
+            ]
+          },
+          "direct": {
+            "queries": 21,
+            "hitAt1": 20,
+            "hitAt3": 20,
+            "missesAt1": [
+              "semantic-en-direct-05"
+            ],
+            "missesAt3": [
+              "semantic-en-direct-05"
+            ]
+          },
+          "paraphrase": {
+            "queries": 21,
+            "hitAt1": 11,
+            "hitAt3": 11,
+            "missesAt1": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-paraphrase-06",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-paraphrase-06",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ],
+            "missesAt3": [
+              "semantic-en-paraphrase-04",
+              "semantic-en-paraphrase-06",
+              "semantic-zh-paraphrase-01",
+              "semantic-zh-paraphrase-02",
+              "semantic-zh-paraphrase-06",
+              "semantic-mixed-paraphrase-01",
+              "semantic-mixed-paraphrase-02",
+              "semantic-mixed-paraphrase-04",
+              "semantic-mixed-paraphrase-06",
+              "semantic-mixed-paraphrase-07"
+            ]
+          }
+        },
+        "falsePositives": [
+          "no-answer-3",
+          "no-answer-4",
+          "no-answer-6",
+          "no-answer-9",
+          "no-answer-11",
+          "no-answer-12"
+        ],
+        "falsePositiveDenominator": 15
+      }
+    },
+    "unfilteredDenseDiagnostic": {
+      "queries": 63,
+      "hitAt1": 47,
+      "hitAt3": 61,
+      "missesAt1": [
+        "semantic-en-paraphrase-01",
+        "semantic-en-paraphrase-03",
+        "semantic-zh-paraphrase-01",
+        "semantic-zh-contextual-01",
+        "semantic-zh-contextual-02",
+        "semantic-zh-contextual-03",
+        "semantic-zh-contextual-04",
+        "semantic-zh-direct-05",
+        "semantic-zh-paraphrase-05",
+        "semantic-zh-contextual-05",
+        "semantic-mixed-direct-02",
+        "semantic-mixed-paraphrase-02",
+        "semantic-mixed-contextual-02",
+        "semantic-mixed-paraphrase-04",
+        "semantic-mixed-paraphrase-06",
+        "semantic-mixed-contextual-06"
+      ],
+      "missesAt3": [
+        "semantic-mixed-paraphrase-04",
+        "semantic-mixed-contextual-06"
+      ],
+      "byLanguage": {
+        "en": {
+          "queries": 21,
+          "hitAt1": 19,
+          "hitAt3": 21,
+          "missesAt1": [
+            "semantic-en-paraphrase-01",
+            "semantic-en-paraphrase-03"
+          ],
+          "missesAt3": []
+        },
+        "mixed": {
+          "queries": 21,
+          "hitAt1": 15,
+          "hitAt3": 19,
+          "missesAt1": [
+            "semantic-mixed-direct-02",
+            "semantic-mixed-paraphrase-02",
+            "semantic-mixed-contextual-02",
+            "semantic-mixed-paraphrase-04",
+            "semantic-mixed-paraphrase-06",
+            "semantic-mixed-contextual-06"
+          ],
+          "missesAt3": [
+            "semantic-mixed-paraphrase-04",
+            "semantic-mixed-contextual-06"
+          ]
+        },
+        "zh": {
+          "queries": 21,
+          "hitAt1": 13,
+          "hitAt3": 21,
+          "missesAt1": [
+            "semantic-zh-paraphrase-01",
+            "semantic-zh-contextual-01",
+            "semantic-zh-contextual-02",
+            "semantic-zh-contextual-03",
+            "semantic-zh-contextual-04",
+            "semantic-zh-direct-05",
+            "semantic-zh-paraphrase-05",
+            "semantic-zh-contextual-05"
+          ],
+          "missesAt3": []
+        }
+      },
+      "byMode": {
+        "contextual": {
+          "queries": 21,
+          "hitAt1": 14,
+          "hitAt3": 20,
+          "missesAt1": [
+            "semantic-zh-contextual-01",
+            "semantic-zh-contextual-02",
+            "semantic-zh-contextual-03",
+            "semantic-zh-contextual-04",
+            "semantic-zh-contextual-05",
+            "semantic-mixed-contextual-02",
+            "semantic-mixed-contextual-06"
+          ],
+          "missesAt3": [
+            "semantic-mixed-contextual-06"
+          ]
+        },
+        "direct": {
+          "queries": 21,
+          "hitAt1": 19,
+          "hitAt3": 21,
+          "missesAt1": [
+            "semantic-zh-direct-05",
+            "semantic-mixed-direct-02"
+          ],
+          "missesAt3": []
+        },
+        "paraphrase": {
+          "queries": 21,
+          "hitAt1": 14,
+          "hitAt3": 20,
+          "missesAt1": [
+            "semantic-en-paraphrase-01",
+            "semantic-en-paraphrase-03",
+            "semantic-zh-paraphrase-01",
+            "semantic-zh-paraphrase-05",
+            "semantic-mixed-paraphrase-02",
+            "semantic-mixed-paraphrase-04",
+            "semantic-mixed-paraphrase-06"
+          ],
+          "missesAt3": [
+            "semantic-mixed-paraphrase-04"
+          ]
+        }
+      },
+      "falsePositives": [
+        "no-answer-1",
+        "no-answer-2",
+        "no-answer-3",
+        "no-answer-4",
+        "no-answer-5",
+        "no-answer-6",
+        "no-answer-7",
+        "no-answer-8",
+        "no-answer-9",
+        "no-answer-10",
+        "no-answer-11",
+        "no-answer-12",
+        "no-answer-13",
+        "no-answer-14",
+        "no-answer-15"
+      ],
+      "falsePositiveDenominator": 15
+    },
+    "sourceReadbacks": 42,
+    "indexBytes": 64512,
+    "threads": 4,
+    "timing": {
+      "lexical": {
+        "hostStartupMs": 1518.049547,
+        "indexMs": 27.368715000000066,
+        "coldFirstMs": 10.540813999999955,
+        "warm": {
+          "samples": 100,
+          "p50Ms": 4.321553000000222,
+          "p95Ms": 6.7302270000000135
+        },
+        "peakHostRssKiB": 360188
+      },
+      "dense": {
+        "modelLoadMs": 821.9434288330376,
+        "indexMs": 788.983782986179,
+        "coldFirstMs": 6.260154070332646,
+        "warm": {
+          "samples": 100,
+          "p50Ms": 6.060163956135511,
+          "p95Ms": 8.344104047864676
+        },
+        "peakProcessRssKiB": 1195556
+      },
+      "hybrid": {
+        "warmDenseAndFusion": {
+          "samples": 100,
+          "p50Ms": 6.068401038646698,
+          "p95Ms": 8.402740117162466
+        },
+        "projectedSequentialWarm": {
+          "samples": 100,
+          "p50Ms": 10.845673063559843,
+          "p95Ms": 13.33891587733956
+        },
+        "fusionTimingScope": "Independent native RPC and dense+fusion measurements. No integrated host."
+      }
+    }
+  },
+  "regression": {
+    "original": {
+      "corpusDigest": "8056a9bd95c607b6a654c745d58238db07a5dad1dda836f5c903cf25b64908e5",
+      "quality": {
+        "lexical": {
+          "queries": 60,
+          "hitAt1": 36,
+          "hitAt3": 39,
+          "falsePositives": [],
+          "falsePositiveDenominator": 6
+        },
+        "dense": {
+          "queries": 60,
+          "hitAt1": 11,
+          "hitAt3": 11,
+          "falsePositives": [],
+          "falsePositiveDenominator": 6
+        },
+        "hybrid": {
+          "queries": 60,
+          "hitAt1": 38,
+          "hitAt3": 41,
+          "falsePositives": [],
+          "falsePositiveDenominator": 6
+        }
+      }
+    },
+    "keyword-navigation": {
+      "corpusDigest": "ab2aa823a81dc7ee986f0b4f200861eeacc957354f82bc9d52b5180f8af0a8f2",
+      "quality": {
+        "lexical": {
+          "queries": 54,
+          "hitAt1": 54,
+          "hitAt3": 54,
+          "falsePositives": [],
+          "falsePositiveDenominator": 6
+        },
+        "dense": {
+          "queries": 54,
+          "hitAt1": 7,
+          "hitAt3": 7,
+          "falsePositives": [],
+          "falsePositiveDenominator": 6
+        },
+        "hybrid": {
+          "queries": 54,
+          "hitAt1": 54,
+          "hitAt3": 54,
+          "falsePositives": [],
+          "falsePositiveDenominator": 6
+        }
+      }
+    },
+    "natural": {
+      "corpusDigest": "9ab183fd0c49b7787d79e43547e28a7bdd2a63e0fd2d9649862fea42cb4d856e",
+      "quality": {
+        "lexical": {
+          "queries": 54,
+          "hitAt1": 26,
+          "hitAt3": 27,
+          "falsePositives": [],
+          "falsePositiveDenominator": 9
+        },
+        "dense": {
+          "queries": 54,
+          "hitAt1": 5,
+          "hitAt3": 5,
+          "falsePositives": [],
+          "falsePositiveDenominator": 9
+        },
+        "hybrid": {
+          "queries": 54,
+          "hitAt1": 28,
+          "hitAt3": 29,
+          "falsePositives": [],
+          "falsePositiveDenominator": 9
+        }
+      }
+    },
+    "final-natural": {
+      "corpusDigest": "0ef54d26764807f0577a83f549a3e3e84819011d7b1de180bbd786de1e317bcd",
+      "quality": {
+        "lexical": {
+          "queries": 36,
+          "hitAt1": 14,
+          "hitAt3": 15,
+          "falsePositives": [],
+          "falsePositiveDenominator": 9
+        },
+        "dense": {
+          "queries": 36,
+          "hitAt1": 5,
+          "hitAt3": 5,
+          "falsePositives": [],
+          "falsePositiveDenominator": 9
+        },
+        "hybrid": {
+          "queries": 36,
+          "hitAt1": 15,
+          "hitAt3": 16,
+          "falsePositives": [],
+          "falsePositiveDenominator": 9
+        }
+      }
+    }
+  },
+  "freshProcessRepeats": {
+    "lexical": {
+      "corpusDigest": "8cc8b097957a80494094d4e6e16b49c8c3646504e6878c45e7e66fc892731012",
+      "freshProcessRuns": 10,
+      "metric": "Nearest-rank percentiles. Native process restarts leave filesystem caches intact. No concurrent native host runs in this repeat series.",
+      "hostStartupMs": {
+        "samples": 10,
+        "min": 1520.858286,
+        "p50": 1530.036607,
+        "p95": 2030.316057,
+        "max": 2030.316057
+      },
+      "indexMs": {
+        "samples": 10,
+        "min": 26.955758999999944,
+        "p50": 27.560269999999946,
+        "p95": 31.765418999999838,
+        "max": 31.765418999999838
+      },
+      "coldFirstMs": {
+        "samples": 10,
+        "min": 10.513999000000013,
+        "p50": 11.000890000000027,
+        "p95": 11.580608999999868,
+        "max": 11.580608999999868
+      },
+      "coldIndexAndSearchMs": {
+        "samples": 10,
+        "min": 37.892614000000094,
+        "p50": 38.56115999999997,
+        "p95": 43.20162600000003,
+        "max": 43.20162600000003
+      },
+      "warmMs": {
+        "samples": 1000,
+        "min": 3.3968369999997776,
+        "p50": 4.179574999999886,
+        "p95": 7.160077999999885,
+        "max": 10.630395000000135
+      },
+      "peakRssKiB": {
+        "samples": 10,
+        "min": 355488,
+        "p50": 358144,
+        "p95": 361944,
+        "max": 361944
+      },
+      "exactRanksAndVerifiedSourceDigestsStable": true
+    },
+    "dense": {
+      "samples": 10,
+      "rankingsReproduced": true,
+      "modelLoadMs": {
+        "p50": 787.4014780391008,
+        "p95": 815.3083100914955,
+        "max": 815.3083100914955
+      },
+      "indexMs": {
+        "p50": 730.1506330259144,
+        "p95": 758.2097048871219,
+        "max": 758.2097048871219
+      },
+      "coldFirstMs": {
+        "p50": 6.055562058463693,
+        "p95": 6.962276995182037,
+        "max": 6.962276995182037
+      },
+      "peakProcessRssKiB": {
+        "p50": 1195696,
+        "p95": 1195980,
+        "max": 1195980
+      },
+      "totalMs": {
+        "p50": 1521.7010111082345,
+        "p95": 1566.2189999129623,
+        "max": 1566.2189999129623
+      }
+    }
+  },
+  "reportDigests": {
+    "calibration-lexical": "7cf4d194d1d22abbab51b2fb7cd3ec226959071bb53f3cef598db8518ea1f514",
+    "policy": "58edf4a27d775768b1c4482a947ba5f59b5f093485f8552117e1e4b2f4170ace",
+    "holdout-lexical": "53e39ae61a939ef544bcb43c75d8db1cb47af717aa4e2431f67854cf2700303b",
+    "holdout-semantic": "be89c36c25ae357b15abbf09bfb9c1748fd1d210d277adc9980214504adcf536"
+  }
+}

@@ -1,0 +1,443 @@
+{
+  "rubric": {
+    "role": "Calibration only. Thresholds are selected here before scoring the independent holdout."
+  },
+  "documents": {
+    "en/lighthouse.md": "# lighthouse\n\nThe lighthouse fog log stays in the orange box beside the radio.\n",
+    "en/lighthouse-related.md": "# Related note\n\nThe lighthouse visitor book is kept under the stairs.\n",
+    "en/book-cart.md": "# book-cart\n\nThe library's book cart wheels are serviced each April.\n",
+    "en/book-cart-related.md": "# Related note\n\nThe library desk drawers are serviced in August.\n",
+    "en/resin.md": "# resin\n\nThe casting workshop waits six hours before opening the resin mould.\n",
+    "en/resin-related.md": "# Related note\n\nThe casting workshop washes the reusable mould every Friday.\n",
+    "en/aquarium.md": "# aquarium\n\nThe aquarium swaps the feeding shift with the night keeper when the pier closes.\n",
+    "en/aquarium-related.md": "# Related note\n\nThe aquarium night keeper also records water temperature.\n",
+    "en/tapestry.md": "# tapestry\n\nThe tapestry exhibition uses a grey curtain to block midday sunlight.\n",
+    "en/tapestry-related.md": "# Related note\n\nThe tapestry exhibition uses a green rope to guide visitors.\n",
+    "en/bread.md": "# bread\n\nThe bakery puts unsold rye loaves on the bottom shelf for donation.\n",
+    "en/bread-related.md": "# Related note\n\nThe bakery puts fresh wheat rolls on the top shelf.\n",
+    "en/clock.md": "# clock\n\nThe clock museum closes its bell exhibit after a hearing alarm.\n",
+    "en/clock-related.md": "# Related note\n\nThe clock museum opens its pendulum exhibit every morning.\n",
+    "en/waterwheel.md": "# waterwheel\n\nThe mill opens the bypass gate before inspecting the waterwheel.\n",
+    "en/waterwheel-related.md": "# Related note\n\nThe mill paints its main gate every winter.\n",
+    "zh/陶印.md": "# 陶印\n\n陶艺室的印坯必须放在通风架上晾两天。\n",
+    "zh/陶印-related.md": "# Related note\n\n陶艺室的木制印章每月用干布清理。\n",
+    "zh/岩洞.md": "# 岩洞\n\n岩洞步道在雨量超过二十毫米时关闭。\n",
+    "zh/岩洞-related.md": "# Related note\n\n岩洞售票窗在周二下午关闭。\n",
+    "zh/织线.md": "# 织线\n\n修复员用米白色棉线缝补织物背面。\n",
+    "zh/织线-related.md": "# Related note\n\n陈列员用灰色绳索划出参观路线。\n",
+    "zh/茶炉.md": "# 茶炉\n\n值班人用蓝色木牌标记已经熄火的茶炉。\n",
+    "zh/茶炉-related.md": "# Related note\n\n会议室用绿色纸条标记已清洁的桌面。\n",
+    "zh/口琴.md": "# 口琴\n\n初学者的口琴练习集中在东边的小教室。\n",
+    "zh/口琴-related.md": "# Related note\n\n口琴维修工具放在西边的柜子里。\n",
+    "zh/芦苇.md": "# 芦苇\n\n研究员每隔三天记录一次芦苇样地水位。\n",
+    "zh/芦苇-related.md": "# Related note\n\n研究员每周记录一次芦苇样地的鸟类。\n",
+    "zh/火车.md": "# 火车\n\n观景火车遇到大风时只开到松林站。\n",
+    "zh/火车-related.md": "# Related note\n\n观景火车平日会停在湖边站拍照。\n",
+    "zh/灯笼.md": "# 灯笼\n\n制作灯笼时，先用细竹条固定底框，再包纸。\n",
+    "zh/灯笼-related.md": "# Related note\n\n灯笼游行结束后，先把纸罩取下。\n",
+    "mixed/binder.md": "# binder\n\nBinder C 的交接页由夜班主管签字。\n",
+    "mixed/binder-related.md": "# Related note\n\nBinder C 的借用日期由前台填写。\n",
+    "mixed/loom-7.md": "# loom-7\n\nLoom 7 的经纱断裂时，把脚踏杆锁在抬起位置。\n",
+    "mixed/loom-7-related.md": "# Related note\n\nLoom 7 空闲时把线轴放在右侧。\n",
+    "mixed/aurora.md": "# aurora\n\nAurora tray 的冷藏贴纸到周五傍晚作废。\n",
+    "mixed/aurora-related.md": "# Related note\n\nAurora tray 的搬运标签上写着手推车号。\n",
+    "mixed/cedar.md": "# cedar\n\nCedar Pass 关闭时，包裹集中到河边的临时收件站。\n",
+    "mixed/cedar-related.md": "# Related note\n\nCedar Pass 的行人绕道从果园经过。\n",
+    "mixed/sable.md": "# sable\n\nSable kit 的备用螺丝用紫色袋子装。\n",
+    "mixed/sable-related.md": "# Related note\n\nSable kit 的损坏螺丝放在红色罐子里。\n",
+    "mixed/echo.md": "# echo\n\nEcho dock 在暴雨期间暂停非紧急装卸。\n",
+    "mixed/echo-related.md": "# Related note\n\nEcho dock 常规装卸在工作日进行。\n",
+    "mixed/iris.md": "# iris\n\nIris map 所有破损的地标页交给制图员重画。\n",
+    "mixed/iris-related.md": "# Related note\n\nIris map 原件由资料管理员保存。\n",
+    "mixed/opal.md": "# opal\n\nOpal rack 的湿布下班前要挂到有通风孔的支架上。\n",
+    "mixed/opal-related.md": "# Related note\n\nOpal rack 干布摆放在抽屉里面。\n"
+  },
+  "queries": [
+    {
+      "id": "cal-en-lighthouse",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Where do the keepers put their record of poor visibility?",
+      "relevant": [
+        {
+          "path": "en/lighthouse.md",
+          "anchor": "The lighthouse fog log stays in the orange box beside the radio."
+        }
+      ]
+    },
+    {
+      "id": "cal-en-book-cart",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "When does the rolling shelf get its annual tune-up?",
+      "relevant": [
+        {
+          "path": "en/book-cart.md",
+          "anchor": "The library's book cart wheels are serviced each April."
+        }
+      ]
+    },
+    {
+      "id": "cal-en-resin",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "How long must a poured piece sit before it is removed?",
+      "relevant": [
+        {
+          "path": "en/resin.md",
+          "anchor": "The casting workshop waits six hours before opening the resin mould."
+        }
+      ]
+    },
+    {
+      "id": "cal-en-aquarium",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Who takes over the food round when access from the dock stops?",
+      "relevant": [
+        {
+          "path": "en/aquarium.md",
+          "anchor": "The aquarium swaps the feeding shift with the night keeper when the pier closes."
+        }
+      ]
+    },
+    {
+      "id": "cal-en-tapestry",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "What shields the woven display from direct noon light?",
+      "relevant": [
+        {
+          "path": "en/tapestry.md",
+          "anchor": "The tapestry exhibition uses a grey curtain to block midday sunlight."
+        }
+      ]
+    },
+    {
+      "id": "cal-en-bread",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "Where do the leftover dark breads wait for charity pickup?",
+      "relevant": [
+        {
+          "path": "en/bread.md",
+          "anchor": "The bakery puts unsold rye loaves on the bottom shelf for donation."
+        }
+      ]
+    },
+    {
+      "id": "cal-en-clock",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "When does the ringing gallery stop admitting visitors?",
+      "relevant": [
+        {
+          "path": "en/clock.md",
+          "anchor": "The clock museum closes its bell exhibit after a hearing alarm."
+        }
+      ]
+    },
+    {
+      "id": "cal-en-waterwheel",
+      "language": "en",
+      "mode": "paraphrase",
+      "query": "What diverts the flow while the rotating machinery is checked?",
+      "relevant": [
+        {
+          "path": "en/waterwheel.md",
+          "anchor": "The mill opens the bypass gate before inspecting the waterwheel."
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-陶印",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "刚压好的陶章要放多久才干？",
+      "relevant": [
+        {
+          "path": "zh/陶印.md",
+          "anchor": "陶艺室的印坯必须放在通风架上晾两天。"
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-岩洞",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "什么时候游客不能走地下洞穴的路线？",
+      "relevant": [
+        {
+          "path": "zh/岩洞.md",
+          "anchor": "岩洞步道在雨量超过二十毫米时关闭。"
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-织线",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "修补旧布的背面用哪种线？",
+      "relevant": [
+        {
+          "path": "zh/织线.md",
+          "anchor": "修复员用米白色棉线缝补织物背面。"
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-茶炉",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "怎么辨认哪只煮茶炉已经关火？",
+      "relevant": [
+        {
+          "path": "zh/茶炉.md",
+          "anchor": "值班人用蓝色木牌标记已经熄火的茶炉。"
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-口琴",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "吹奏新手到哪个房间集合？",
+      "relevant": [
+        {
+          "path": "zh/口琴.md",
+          "anchor": "初学者的口琴练习集中在东边的小教室。"
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-芦苇",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "多久测一次这片湿地的深度？",
+      "relevant": [
+        {
+          "path": "zh/芦苇.md",
+          "anchor": "研究员每隔三天记录一次芦苇样地水位。"
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-火车",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "风很大时这趟车在哪一站折返？",
+      "relevant": [
+        {
+          "path": "zh/火车.md",
+          "anchor": "观景火车遇到大风时只开到松林站。"
+        }
+      ]
+    },
+    {
+      "id": "cal-zh-灯笼",
+      "language": "zh",
+      "mode": "paraphrase",
+      "query": "糊纸之前，圆灯笼的架子该做什么？",
+      "relevant": [
+        {
+          "path": "zh/灯笼.md",
+          "anchor": "制作灯笼时，先用细竹条固定底框，再包纸。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-binder",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Binder C 换班时谁确认转手记录？",
+      "relevant": [
+        {
+          "path": "mixed/binder.md",
+          "anchor": "Binder C 的交接页由夜班主管签字。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-loom-7",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Loom 7 线绷断以后，踏板要保持什么状态？",
+      "relevant": [
+        {
+          "path": "mixed/loom-7.md",
+          "anchor": "Loom 7 的经纱断裂时，把脚踏杆锁在抬起位置。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-aurora",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Aurora tray 标签到什么时候不能用了？",
+      "relevant": [
+        {
+          "path": "mixed/aurora.md",
+          "anchor": "Aurora tray 的冷藏贴纸到周五傍晚作废。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-cedar",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Cedar Pass 不能走之后，货物在哪儿统一接收？",
+      "relevant": [
+        {
+          "path": "mixed/cedar.md",
+          "anchor": "Cedar Pass 关闭时，包裹集中到河边的临时收件站。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-sable",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Sable kit 里的额外紧固件用什么颜色收纳？",
+      "relevant": [
+        {
+          "path": "mixed/sable.md",
+          "anchor": "Sable kit 的备用螺丝用紫色袋子装。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-echo",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Echo dock 下大雨时要停掉哪类作业？",
+      "relevant": [
+        {
+          "path": "mixed/echo.md",
+          "anchor": "Echo dock 在暴雨期间暂停非紧急装卸。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-iris",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Iris map 有坏掉的地点页，哪个角色负责重新绘制？",
+      "relevant": [
+        {
+          "path": "mixed/iris.md",
+          "anchor": "Iris map 所有破损的地标页交给制图员重画。"
+        }
+      ]
+    },
+    {
+      "id": "cal-mixed-opal",
+      "language": "mixed",
+      "mode": "paraphrase",
+      "query": "Opal rack 收工时，潮湿的擦拭用品放哪里？",
+      "relevant": [
+        {
+          "path": "mixed/opal.md",
+          "anchor": "Opal rack 的湿布下班前要挂到有通风孔的支架上。"
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "Who painted the orange box for the lighthouse fog log?"
+    },
+    {
+      "language": "en",
+      "query": "What wheel diameter does the library book cart use?"
+    },
+    {
+      "language": "en",
+      "query": "Who supplied the resin mould to the casting workshop?"
+    },
+    {
+      "language": "en",
+      "query": "How many grams of food does the night keeper give the fish?"
+    },
+    {
+      "language": "en",
+      "query": "Who manufactured the grey curtain for the tapestry exhibition?"
+    },
+    {
+      "language": "en",
+      "query": "How much do the donated rye loaves weigh?"
+    },
+    {
+      "language": "en",
+      "query": "What pitch is the clock museum's warning bell?"
+    },
+    {
+      "language": "en",
+      "query": "Who approved the mill bypass gate installation?"
+    },
+    {
+      "language": "zh",
+      "query": "陶艺室的陶章由哪个厂家生产？"
+    },
+    {
+      "language": "zh",
+      "query": "岩洞步道最窄的地方有多宽？"
+    },
+    {
+      "language": "zh",
+      "query": "米白色棉线一共有多少米？"
+    },
+    {
+      "language": "zh",
+      "query": "哪一年购入标记茶炉的蓝色木牌？"
+    },
+    {
+      "language": "zh",
+      "query": "东边教室能坐多少名口琴学员？"
+    },
+    {
+      "language": "zh",
+      "query": "芦苇样地水位计的最大量程是多少？"
+    },
+    {
+      "language": "zh",
+      "query": "松林站的观景火车票多少钱？"
+    },
+    {
+      "language": "zh",
+      "query": "灯笼底框的细竹条有多少根？"
+    },
+    {
+      "language": "mixed",
+      "query": "Binder C 的交接页用的是什么印刷纸？"
+    },
+    {
+      "language": "mixed",
+      "query": "Loom 7 的脚踏杆用了哪种合金？"
+    },
+    {
+      "language": "mixed",
+      "query": "Aurora tray 的冷藏贴纸总共重多少克？"
+    },
+    {
+      "language": "mixed",
+      "query": "Cedar Pass 临时收件站的电话是多少？"
+    },
+    {
+      "language": "mixed",
+      "query": "Sable kit 紫袋中的备用螺丝有多少颗？"
+    },
+    {
+      "language": "mixed",
+      "query": "Echo dock 装卸工作在几点钟开始？"
+    },
+    {
+      "language": "mixed",
+      "query": "Iris map 重画的地标页用多少克的纸？"
+    },
+    {
+      "language": "mixed",
+      "query": "Opal rack 通风支架是哪一年购入的？"
+    }
+  ]
+}
