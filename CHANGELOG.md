@@ -18,6 +18,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Start leased Chromium tasks from a clean tarball installation by sharing the pinned DSH host's MCP and scope packages.
 - Retry interrupted media output downloads without rerendering, and preserve GPU exclusion for persisted media jobs even when media configuration is disabled.
 - Remove unavailable Today panels when the local Inbox refreshes into restore-only mode.
+- Refuse to publish a GitHub test draft when its approved head already exists, including at the same commit.
 
 - Improve local knowledge keyword ranking with stronger document-body matches and priority for exact filenames and relative paths.
 
