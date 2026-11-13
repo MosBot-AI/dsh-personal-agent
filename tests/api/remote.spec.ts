@@ -3,10 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { expect, it, onTestFinished } from 'vitest'
+import { createMobileApprovals } from '../../packages/personal-agent/src/api/approvals.js'
 import {
-  attemptIdSchema, clientIdSchema, conversationSchema, deviceIdSchema, mandateRefSchema,
-  ownerIdSchema, profileIdSchema, profileSchema, projectSchema, taskIdSchema, utcInstantSchema,
+  accountIdSchema, attemptIdSchema, clientIdSchema, conversationSchema, deviceIdSchema, mandateRefSchema,
+  operationIdSchema, ownerIdSchema, profileIdSchema, profileSchema, projectSchema, sourceInstanceIdSchema,
+  taskIdSchema, utcInstantSchema,
 } from '../../packages/personal-agent/src/domain/model.js'
+import type { ActionBinding } from '../../packages/personal-agent/src/policy/grants.js'
 import { createIdentityBoundary } from '../../packages/personal-agent/src/policy/identity.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { SCHEMA_VERSION } from '../../packages/personal-agent/src/storage/schema.js'
@@ -45,7 +48,7 @@ function fixture() {
 }
 
 function requireSuccess<T extends { ok: boolean }>(result: T): Extract<T, { ok: true }> {
-  if (!result.ok) throw new Error('Expected mobile enrollment success')
+  if (!result.ok) throw new Error('Expected mobile operation to succeed')
   return result as Extract<T, { ok: true }>
 }
 
@@ -173,6 +176,71 @@ function seedWork(store: WorkStore, owner = scope, label = 'primary') {
     return requireSuccess(result).state.task
   }
 }
+
+it('keeps assigned mobile review lists and revisions independent of the bounded work inbox', () => {
+  const f = fixture()
+  const { store, ledger } = f
+  const target = requireSuccess(ledger.enroll(requireSuccess(ledger.begin('Assigned phone')).pairingCode))
+  const second = requireSuccess(ledger.enroll(requireSuccess(ledger.begin('Other phone')).pairingCode))
+  const route = {
+    sourceInstanceId: sourceInstanceIdSchema.parse('fixture-source'), accountId: accountIdSchema.parse('fixture-account'),
+    kind: 'fixture-notice',
+    resourceRef: 'fixture-resource', dataScope: ['fixture-scope'], limits: { maxUses: 1 },
+  } satisfies ActionBinding
+  const now = utcInstantSchema.parse(instant)
+  const identity = createIdentityBoundary(profileId => profileId === scope.profileId ? profileSchema.parse({
+    ownerId: scope.ownerId, id: profileId, policyVersion: 'mobile-test',
+    verifiedDevices: [{ deviceId: 'local-device', verifiedAt: now }, ...ledger.verifiedDevices()],
+    verifiedAccounts: [{ sourceInstanceId: route.sourceInstanceId, accountId: route.accountId, verifiedAt: now }],
+  }) : undefined)
+  const owner = identity.bindOwner({ ...scope, deviceId: 'local-device', clientId: 'local-web', sessionId: 'local-session' })
+  expect(owner).toBeDefined()
+  const gate = store.createActionGate({ identity, now: () => now, routes: [{
+    binding: route, permitsPayload: () => true,
+    handoff() { throw new Error('A review list must not dispatch a fixture action') },
+  }] })
+  const mobile = createMobileApprovals(scope, ledger, identity, gate)
+  const create = seedWork(store)
+
+  function assign(name: string, visible: boolean) {
+    const task = create(name, visible)
+    const review = gate.prepareOwnerAction({
+      ...scope, ...route, taskId: task.id, attemptId: attemptIdSchema.parse('attempt-' + task.id),
+      operationId: operationIdSchema.parse('operation-' + name), generation: 1, policyVersion: 'mobile-test',
+      payload: { text: 'Exact payload for ' + name },
+    }, { requestId: 'review-' + name, expiresAt: '2026-11-08T14:55:00.000Z' }, owner, task.version)
+    if (review.decision !== 'ask') throw new Error('Could not prepare fixture approval: ' + JSON.stringify(review))
+    const fence = { requestId: review.approval.id, digest: review.approval.action.payloadDigest, expectedVersion: review.version }
+    expect(mobile.assign(fence, owner, target.device.deviceId)).toEqual({ ok: true })
+    return { task, fence: { ...fence, expectedVersion: review.version + 1 } }
+  }
+
+  const original = assign('original', true)
+  assign('internal', false)
+  const expected = {
+    id: original.fence.requestId, taskId: original.task.id, version: original.fence.expectedVersion,
+    digest: original.fence.digest, mobileDeviceId: target.device.deviceId,
+  }
+  const expectedRevision = JSON.stringify([[expected.id, expected.version]])
+  expect(mobile.list(target.credential)).toMatchObject({ ok: true, approvals: [expected] })
+  expect(mobile.revision(target.credential)).toEqual({ ok: true, value: expectedRevision })
+
+  for (let index = 0; index < 64; index++) create('newer-' + index)
+  const recent = store.listInboxWork(scope).map(({ task }) => task.id)
+  expect(recent).toHaveLength(64)
+  expect(recent).not.toContain(original.task.id)
+
+  expect.soft(mobile.list(target.credential)).toMatchObject({ ok: true, approvals: [expected] })
+  expect.soft(mobile.revision(target.credential)).toEqual({ ok: true, value: expectedRevision })
+  expect(mobile.list(second.credential)).toEqual({ ok: true, approvals: [] })
+  expect(mobile.revision(second.credential)).toEqual({ ok: true, value: '[]' })
+  expect(mobile.respond(second.credential, { ...original.fence, decision: 'approve' }))
+    .toEqual({ ok: false, code: 'not_found' })
+
+  expect(gate.assignMobileReview(original.fence, owner, null)).toEqual({ ok: true })
+  expect(mobile.list(target.credential)).toEqual({ ok: true, approvals: [] })
+  expect(mobile.revision(target.credential)).toEqual({ ok: true, value: '[]' })
+})
 
 it('reads the same task IDs from a scoped mobile projection and resumes after a durable cursor', () => {
   const f = fixture()

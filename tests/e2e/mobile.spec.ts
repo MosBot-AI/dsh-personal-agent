@@ -63,6 +63,8 @@ async function tlsProxy(root: string, upstreamPort: number) {
   let available = true
   let silenceEvents = false
   let mutedFrames = 0
+  let eventStreams = 0
+  let approvalHints = 0
   let invalidateCursor = false
   const sharedRequests: { path: string; cursor: boolean; status: number }[] = []
   const server = createHttpsServer({ key: readFileSync(keyPath), cert }, (request, response) => {
@@ -84,7 +86,12 @@ async function tlsProxy(root: string, upstreamPort: number) {
       response.writeHead(status, incoming.headers)
       if (incoming.headers['content-type']?.startsWith('text/event-stream')) {
         response.flushHeaders()
+        eventStreams++
+        let partial = ''
         incoming.on('data', chunk => {
+          const frames = (partial + chunk.toString()).split('\n\n')
+          partial = frames.pop()!
+          approvalHints += frames.filter(frame => frame === 'event: approvals\ndata: {}').length
           if (silenceEvents) mutedFrames++
           else if (!response.write(chunk)) {
             incoming.pause()
@@ -116,6 +123,8 @@ async function tlsProxy(root: string, upstreamPort: number) {
     cert, port: address.port, origin: `https://127.0.0.1:${address.port}`,
     silenceEvents(value: boolean) { silenceEvents = value },
     mutedFrames: () => mutedFrames,
+    eventStreams: () => eventStreams,
+    approvalHints: () => approvalHints,
     sharedRequests,
     invalidateNextCursor() { invalidateCursor = true },
     setAvailable(value: boolean) {
@@ -125,7 +134,7 @@ async function tlsProxy(root: string, upstreamPort: number) {
   }
 }
 
-async function openMobile(approvals = false, { seedPages = false } = {}) {
+async function openMobile(approvals = false, { seedPages = false, crowdReviews = false } = {}) {
   const port = await availablePort()
   const prepared = approvals ? prepareWebHost(probe) : undefined
   if (prepared) onTestFinished(() => rmSync(prepared.root, { recursive: true, force: true }))
@@ -133,7 +142,7 @@ async function openMobile(approvals = false, { seedPages = false } = {}) {
   const origin = proxy?.origin ?? 'https://mobile.test'
   const mobileHost = new URL(origin).host
   if (prepared) writeFileSync(join(prepared.root, 'mobile-review.json'),
-    JSON.stringify({ origin, port, seedPages }), { mode: 0o600 })
+    JSON.stringify({ origin, port, seedPages, crowdReviews }), { mode: 0o600 })
   const host = await openWebHost(probe, prepared ? { prepared } : { patch: [
     '- id: dshpa', '  config:', '    inbox:',
     "      storageDirectory: !!js dshHomePath('mobile-inbox')", '      workRoot: !!js process.cwd()',
@@ -565,12 +574,13 @@ it.skipIf(!chromePath)('rejects an expired pairing code and clears an expired de
   expect(await chrome.evaluate("fetch('/v1/snapshot').then(response => response.status)")).toBe(401)
 }, 30_000 + chromeStartupRetryAllowanceMs)
 
-it.skipIf(!chromePath)('fences a displayed approval that expires and recalls a review in a real browser', async () => {
-  const { host, inbox, origin, proxy } = await openMobile(true)
+it.skipIf(!chromePath)('expires and recalls assigned approvals beyond recent work in a real browser', async () => {
+  const { host, inbox, mobile, origin, pairDevice, proxy } = await openMobile(true, { seedPages: true, crowdReviews: true })
   assert.ok(proxy && chromePath)
   const chrome = await openHeadlessChrome(chromePath, join(host.root, 'chrome-review-expiry'), proxy.cert)
   await chrome.send('Page.navigate', { url: origin + '/' })
   await chrome.waitFor("document.querySelector('#pair')?.hidden === false")
+  const other = await pairDevice('Other enrolled phone')
   const pair = await inbox({ type: 'mobile_pair', label: 'Approval expiry phone' })
   assert.ok(pair.ok && pair.kind === 'mobile_pair')
   await chrome.evaluate(`document.querySelector('#code').value = ${JSON.stringify(pair.pairingCode)}; document.querySelector('#pair').requestSubmit()`)
@@ -580,8 +590,11 @@ it.skipIf(!chromePath)('fences a displayed approval that expires and recalls a r
   const phone = snapshot.snapshot.mobileReviewers?.find(device => device.label === 'Approval expiry phone')
   const first = snapshot.snapshot.approvals.find(approval => approval.id === 'mobile-review-approve')
   assert.ok(phone && first)
+  await vi.waitFor(() => expect(proxy.approvalHints()).toBeGreaterThan(0))
+  const streams = proxy.eventStreams()
   expect(await inbox({ type: 'mobile_review', requestId: first.id, expectedVersion: first.version, digest: first.digest, deviceId: phone.deviceId })).toMatchObject({ ok: true })
   await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload approve')")
+  const hintsBeforeExpiry = proxy.approvalHints()
   const path = join(host.root, 'home', 'mobile-approval-inbox', DATABASE_FILENAME)
   const db = new DatabaseSync(path)
   try { db.prepare("UPDATE action_approvals SET record = json_set(record, '$.expiresAt', ?) WHERE request_id = ?")
@@ -596,13 +609,51 @@ it.skipIf(!chromePath)('fences a displayed approval that expires and recalls a r
   const next = await inbox({ type: 'snapshot' })
   assert.ok(next.ok && next.kind === 'snapshot')
   const recall = next.snapshot.approvals.find(approval => approval.id === 'mobile-review-recall')
-  assert.ok(recall)
-  expect(await inbox({ type: 'mobile_review', requestId: recall.id, expectedVersion: recall.version, digest: recall.digest, deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  assert.ok(recall && next.snapshot.tasks.some(task => task.id === recall.taskId))
+  for (let index = 1; index <= 2; index++) {
+    expect(await inbox({ type: 'create_task', projectId: 'mobile-review-project', sessionId: 'mobile-fixture-chat',
+      commandId: 'newer-approval-fixture-task-' + index, outcome: 'Newer approval fixture task ' + index })).toMatchObject({ ok: true })
+  }
+  const recent = await inbox({ type: 'snapshot' })
+  assert.ok(recent.ok && recent.kind === 'snapshot')
+  expect(recent.snapshot.tasks).toHaveLength(64)
+  expect(recent.snapshot.tasks.some(task => task.id === recall.taskId)).toBe(false)
+  await chrome.waitFor("document.querySelector('#tasks').textContent.includes('Newer approval fixture task 2')")
+  const mobileRecent = await chrome.evaluate<{ ok: boolean; tasks: { id: string }[] }>(
+    "fetch('/v1/snapshot').then(response => response.json())")
+  expect(mobileRecent.ok).toBe(true)
+  expect(mobileRecent.tasks).toHaveLength(64)
+  expect(mobileRecent.tasks.some(task => task.id === recall.taskId)).toBe(false)
+  await vi.waitFor(() => expect(proxy.approvalHints()).toBeGreaterThan(hintsBeforeExpiry), { timeout: 6_000 })
+
+  const listOnChrome = () => chrome.evaluate<{ ok: boolean; approvals: InboxApproval[] }>(
+    "fetch('/v1/approvals').then(response => response.json())")
+  const listOnOther = async () => {
+    const response = await mobile('/v1/approvals', { headers: { cookie: other.cookie } })
+    expect(response.status).toBe(200)
+    return response.json()
+  }
+  const handoff = (approval: InboxApproval, deviceId: string | null) => inbox({ type: 'mobile_review',
+    requestId: approval.id, expectedVersion: approval.version, digest: approval.digest, deviceId })
+  expect(await listOnChrome()).toEqual({ ok: true, approvals: [] })
+  const hintsBeforeAssignment = proxy.approvalHints()
+  expect(await handoff(recall, phone.deviceId)).toMatchObject({ ok: true })
+  const assigned = { ...recall, version: recall.version + 1, mobileDeviceId: phone.deviceId }
+  expect(await listOnChrome()).toEqual({ ok: true, approvals: [assigned] })
+  expect(await listOnOther()).toEqual({ ok: true, approvals: [] })
+  const otherResponse = await mobile('/v1/approvals/' + encodeURIComponent(recall.id) + '/responses', {
+    method: 'POST', headers: { origin, 'content-type': 'application/json', cookie: other.cookie },
+    body: JSON.stringify({ expectedVersion: assigned.version, digest: assigned.digest, decision: 'approve' }),
+  })
+  expect(otherResponse.status).toBe(404)
+  expect(await otherResponse.json()).toEqual({ ok: false, code: 'not_found' })
   await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
-  const delegated = await inbox({ type: 'snapshot' })
-  assert.ok(delegated.ok && delegated.kind === 'snapshot')
-  const current = delegated.snapshot.approvals.find(approval => approval.id === recall.id)
-  assert.ok(current)
-  expect(await inbox({ type: 'mobile_review', requestId: current.id, expectedVersion: current.version, digest: current.digest, deviceId: null })).toMatchObject({ ok: true })
+  expect(proxy.approvalHints()).toBeGreaterThan(hintsBeforeAssignment)
+
+  const hintsBeforeRecall = proxy.approvalHints()
+  expect(await handoff(assigned, null)).toMatchObject({ ok: true })
   await chrome.waitFor("document.querySelector('#review-items').children.length === 0")
+  expect(proxy.approvalHints()).toBeGreaterThan(hintsBeforeRecall)
+  expect(proxy.eventStreams()).toBe(streams)
+  expect(await listOnChrome()).toEqual({ ok: true, approvals: [] })
 }, 30_000 + chromeStartupRetryAllowanceMs)

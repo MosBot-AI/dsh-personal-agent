@@ -17,7 +17,7 @@ export function projectApproval({ approval, action, version, mobileDeviceId }: P
 
 /** Mobile credentials can act only on reviews assigned through the local owner inbox. */
 export function createMobileApprovals(scope: MobileDeviceScope, devices: MobileDeviceLedger, identity: IdentityBoundary,
-  store: WorkStore, gate: ReturnType<WorkStore['createActionGate']>) {
+  gate: ReturnType<WorkStore['createActionGate']>) {
   function bindDevice(deviceId: string): OwnerToken | undefined {
     // The identity boundary checks that this exact device is currently enrolled.
     return identity.bindOwner({ ...scope, deviceId, clientId: 'dshpa-mobile-web', sessionId: deviceId })
@@ -31,7 +31,6 @@ export function createMobileApprovals(scope: MobileDeviceScope, devices: MobileD
     finally { identity.release(token) }
   }
 
-  const pending = (token: OwnerToken) => gate.pending(token, store.listInboxWork(scope).map(({ task }) => task.id))
   return Object.freeze({
     assign(fence: unknown, localOwner: unknown, deviceId: string) {
       if (!devices.verifiedDevices().some(device => device.deviceId === deviceId)) {
@@ -45,12 +44,12 @@ export function createMobileApprovals(scope: MobileDeviceScope, devices: MobileD
     list(credential: unknown) {
       return withDevice(credential, token => ({
         ok: true as const,
-        approvals: pending(token).map(projectApproval),
+        approvals: gate.pendingMobile(token).map(projectApproval),
       }))
     },
     revision(credential: unknown) {
       return withDevice(credential, token => ({
-        ok: true as const, value: JSON.stringify(pending(token).map(({ approval, version }) => [approval.id, version])),
+        ok: true as const, value: JSON.stringify(gate.pendingMobile(token).map(({ approval, version }) => [approval.id, version])),
       }))
     },
     respond(credential: unknown, response: unknown) {

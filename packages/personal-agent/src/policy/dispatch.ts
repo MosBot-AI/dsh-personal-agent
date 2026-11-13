@@ -92,6 +92,7 @@ const approverSchema = z.strictObject({
 })
 const reviewable = new Set(['queued', 'running', 'verifying', 'waiting_approval'])
 const dispatchable = new Set(['running', 'verifying'])
+const pendingReviewLimit = 64
 const fail = (code: DenialCode): Failure => ({ ok: false, code })
 const deny = (code: DenialCode): ActionDecision => ({ decision: 'deny', code })
 
@@ -396,10 +397,29 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     })
   }
 
-  /** Show pending reviews only to the original owner client and the exact assigned device. */
+  function collectPendingReviews(db: DatabaseSync, rows: readonly Record<string, unknown>[], owner: OwnerIdentity,
+    assignedOnly = false): PendingApproval[] {
+    const result: PendingApproval[] = []
+    const at = now()
+    for (const row of rows) {
+      const operation = operationIdSchema.safeParse(row.operation_id)
+      if (!operation.success) return corrupt()
+      const entry = readApproval(db, operation.data)
+      if (!entry) return corrupt()
+      const assigned = entry.mobile && isApprover(entry, owner, entry.mobile)
+      if (!assigned && (assignedOnly || !isApprover(entry, owner))) continue
+      const review = currentReview(db, entry, at)
+      if (!review.ok) continue
+      result.push({ decision: 'ask', action: review.proposal.action, approval: entry.approval, version: entry.version,
+        ...(entry.mobile ? { mobileDeviceId: entry.mobile.deviceId } : {}) })
+    }
+    return result
+  }
+
+  /** Show pending reviews for the requested work items to their bound owner or assigned device. */
   function pending(ownerToken: unknown, taskIds: readonly TaskId[]): PendingApproval[] {
     const owner = identity.resolveOwner(ownerToken)
-    const ids = taskIds.slice(0, 64)
+    const ids = taskIds.slice(0, pendingReviewLimit)
     if (!owner || ids.length === 0) return []
     const binding = [owner.clientId, owner.sessionId, owner.deviceId, owner.verifiedAt] as const
     return access(db => transaction(db, () => {
@@ -409,22 +429,27 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
           AND ((a.client_id = ? AND a.session_id = ? AND a.device_id = ? AND a.device_verified_at = ?)
             OR (m.client_id = ? AND m.session_id = ? AND m.device_id = ? AND m.device_verified_at = ?))
           AND a.task_id IN (${ids.map(() => '?').join(', ')})
-        ORDER BY a.rowid DESC LIMIT 64
+        ORDER BY a.rowid DESC LIMIT ${pendingReviewLimit}
       `).all(owner.ownerId, owner.profileId, ...binding, ...binding, ...ids)
-      const result: PendingApproval[] = []
-      const at = now()
-      for (const row of rows) {
-        const operation = operationIdSchema.safeParse(row.operation_id)
-        if (!operation.success) return corrupt()
-        const entry = readApproval(db, operation.data)
-        if (!entry) return corrupt()
-        if (!isApprover(entry, owner) && !(entry.mobile && isApprover(entry, owner, entry.mobile))) continue
-        const review = currentReview(db, entry, at)
-        if (!review.ok) continue
-        result.push({ decision: 'ask', action: review.proposal.action, approval: entry.approval, version: entry.version,
-          ...(entry.mobile ? { mobileDeviceId: entry.mobile.deviceId } : {}) })
-      }
-      return result
+      return collectPendingReviews(db, rows, owner)
+    }))
+  }
+
+  /** Select this device's pending assignments across its visible tasks. */
+  function pendingMobile(ownerToken: unknown): PendingApproval[] {
+    const owner = identity.resolveOwner(ownerToken)
+    if (!owner) return []
+    return access(db => transaction(db, () => {
+      const rows = db.prepare(`
+        SELECT a.operation_id
+        FROM mobile_approval_reviews m
+        JOIN action_approvals a ON a.request_id = m.request_id
+        JOIN tasks t ON t.id = a.task_id AND t.owner_id = a.owner_id AND t.profile_id = a.profile_id
+        WHERE a.owner_id = ? AND a.profile_id = ? AND a.status = 'pending' AND t.conversation_id IS NOT NULL
+          AND m.device_id = ? AND m.client_id = ? AND m.session_id = ? AND m.device_verified_at = ?
+        ORDER BY a.rowid DESC LIMIT ${pendingReviewLimit}
+      `).all(owner.ownerId, owner.profileId, owner.deviceId, owner.clientId, owner.sessionId, owner.verifiedAt)
+      return collectPendingReviews(db, rows, owner, true)
     }))
   }
 
@@ -628,7 +653,7 @@ export function createActionGate(access: DatabaseAccess, options: ActionGateOpti
     }
   }
 
-  return Object.freeze({ review, inspect, pending, assignMobileReview, respond, revoke, dispatch })
+  return Object.freeze({ review, inspect, pending, pendingMobile, assignMobileReview, respond, revoke, dispatch })
 }
 
 function writeEffect(db: DatabaseSync, effect: Effect, status: 'authorized' | 'dispatching', grantId: GrantId): void {
