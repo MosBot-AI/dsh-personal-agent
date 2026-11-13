@@ -77,3 +77,11 @@ E05 有委派动作门禁及本地 HTTPS 审批证据。E07 和 E13 有限定范
 移动端测试夹具现在先为 `Browser.getVersion` 设置独立的十秒启动期限，再创建标签页。常规 DevTools 命令仍限八秒。故障输出记录命令、耗时、首次响应时间和退出状态，省略浏览器标准错误输出、Profile 路径和 DevTools 载荷。受控测试覆盖启动超时、启动响应后的命令超时、管道关闭和进程提前退出。现有移动端断言覆盖配对、审批、可见性切换、重连和撤销设备。
 
 本地使用 Node.js 24.14.1 和 Chromium 154.0.8037.92 验证，379 项无密钥测试及全部五项原生移动端用例通过。移动端测试使用隔离的 Chromium Profile 和私有回环 TLS 代理。已部署 HTTPS 和实体设备的验收范围未变。
+
+## Chrome 握手卡住后的恢复
+
+[Issue #111](https://github.com/MosBot-AI/dsh-personal-agent/issues/111) 跟踪 [`356803a` 的主线 CI 故障](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43387484823/attempts/1)。浏览器在 10,003 毫秒内未回应 `Browser.getVersion`，也未报告退出或信号。[代码未改动的第二次运行](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43387484823/attempts/2)通过。
+
+首次握手超过十秒时，夹具记录超时并等待最多四秒，直到首个进程及其管道关闭。发出 SIGTERM 两秒后仍未退出时升级为 SIGKILL。只有清理成功后才会用全新的一次性 Profile 启动一次替代进程，并给该次握手八秒。握手预算最多增加十二秒。管道关闭、进程退出、显式拒绝或握手后的失败仍会直接报告。常规 DevTools 命令仍限八秒。移动端业务断言未改动。
+
+八项确定性夹具测试通过，覆盖进程退出后继续等待关闭、持续卡住时不进行第三次启动，以及清理失败时不启动替代进程。使用 Chromium 154.0.8037.92 的五项原生移动端用例全部通过。另一次运行让首个进程保持存活且不回应 DevTools，仅在启动替代进程时调用真实 Chromium。现有的配对、审批、可见性切换、重连和撤销设备用例通过。运行记录显示恰好两次启动，输出保留了首次握手超时。

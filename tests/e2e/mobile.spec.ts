@@ -12,7 +12,7 @@ import { Script } from 'node:vm'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { INBOX_RPC_ENDPOINT, type InboxApproval, type InboxRequest, type InboxResponse } from '../../packages/personal-agent/src/inbox/protocol.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
-import { openHeadlessChrome } from './fixtures/headless-chrome.js'
+import { chromeStartupRetryAllowanceMs, openHeadlessChrome } from './fixtures/headless-chrome.js'
 import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/mobile-flow-probe.mjs', import.meta.url))
@@ -390,7 +390,7 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   await chrome.waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#tasks')?.textContent.includes('Review after Chrome reconnect') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
   expect(await inbox({ type: 'mobile_revoke', deviceId: phone.deviceId })).toMatchObject({ ok: true })
   await chrome.waitFor("document.querySelector('#pair')?.hidden === false && document.querySelector('#work')?.hidden === true && document.querySelector('#review-items')?.children.length === 0")
-}, 45_000)
+}, 45_000 + chromeStartupRetryAllowanceMs)
 
 it.skipIf(!chromePath)('rejects an expired pairing code and clears an expired device in a real browser', async () => {
   const { host, inbox, origin, proxy } = await openMobile(true)
@@ -419,7 +419,7 @@ it.skipIf(!chromePath)('rejects an expired pairing code and clears an expired de
   mutateExpiry('active')
   await chrome.waitFor("document.querySelector('#pair')?.hidden === false && document.querySelector('#work')?.hidden === true && document.querySelector('#tasks')?.children.length === 0 && document.querySelector('#review-items')?.children.length === 0")
   expect(await chrome.evaluate("fetch('/v1/snapshot').then(response => response.status)")).toBe(401)
-}, 30_000)
+}, 30_000 + chromeStartupRetryAllowanceMs)
 
 it.skipIf(!chromePath)('fences a displayed approval that expires and recalls a review in a real browser', async () => {
   const { host, inbox, origin, proxy } = await openMobile(true)
@@ -461,4 +461,4 @@ it.skipIf(!chromePath)('fences a displayed approval that expires and recalls a r
   assert.ok(current)
   expect(await inbox({ type: 'mobile_review', requestId: current.id, expectedVersion: current.version, digest: current.digest, deviceId: null })).toMatchObject({ ok: true })
   await chrome.waitFor("document.querySelector('#review-items').children.length === 0")
-}, 30_000)
+}, 30_000 + chromeStartupRetryAllowanceMs)
