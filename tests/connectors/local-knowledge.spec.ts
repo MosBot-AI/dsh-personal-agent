@@ -32,6 +32,103 @@ function fixture() {
 }
 
 describe.skipIf(!supported)('descriptor-relative local knowledge', () => {
+  it.each([
+    { path: 'cargo.md', query: 'Where is the cargo manifest stored?',
+      text: '# Cargo manifest\nThe cargo manifest is stored in the north cabinet.' },
+    { path: '供电.md', query: '调度中心的备用电源放在哪里？',
+      text: '# 调度中心\n调度中心的备用电源位于东侧机房。' },
+    { path: 'gateway.md', query: 'MQTT 网关的备用链路何时切换？',
+      text: '# MQTT 网关\nMQTT 网关的备用链路每天凌晨两点切换。' },
+  ])('recovers $query and keeps exact source reads scoped', async ({ path, query, text }) => {
+    const f = fixture()
+    const target = join(f.root, path)
+    writeFileSync(target, text)
+    mkdirSync(f.missing)
+    writeFileSync(join(f.missing, 'other.md'), text)
+    const connector = f.open()
+
+    const result = await f.search(connector, query, 'local')
+    assert.ok(result.ok && result.kind === 'knowledge_search')
+    expect(result.hits.map(hit => hit.path)).toEqual([path])
+    const source = result.hits[0]!
+    expect(source.ref.rootId).toBe('local')
+    const read = { type: 'knowledge_read', ref: source.ref, revision: source.revision }
+    expect(await connector.handle(read, current))
+      .toMatchObject({ kind: 'knowledge_page', text, source: { ref: source.ref, revision: source.revision } })
+    expect(await f.search(connector, query, 'llmwiki')).toMatchObject({ hits: [
+      expect.objectContaining({ path: 'other.md', ref: expect.objectContaining({ rootId: 'llmwiki' }) }),
+    ] })
+    writeFileSync(target, text + '\nThis edition replaced the previous one.')
+    expect(await connector.handle(read, current)).toEqual({ ok: false, code: 'stale_source' })
+  })
+
+  it('keeps exact filenames and strict rankings ahead of natural-question matches', async () => {
+    const f = fixture()
+    const query = 'Where is the cargo manifest stored?'
+    const exact = 'cargo manifest.md'
+    writeFileSync(join(f.root, exact), 'Named file.')
+    writeFileSync(join(f.root, 'body.md'), '# Instructions\n' + query + '\nSee cargo manifest.md.')
+    writeFileSync(join(f.root, 'partial.md'), 'The cargo manifest is stored in the north cabinet.')
+    const connector = f.open()
+
+    const strict = await f.search(connector, query)
+    assert.ok(strict.ok && strict.kind === 'knowledge_search')
+    expect(strict.hits.map(hit => hit.path)).toEqual(['body.md'])
+    const navigation = await f.search(connector, exact)
+    assert.ok(navigation.ok && navigation.kind === 'knowledge_search')
+    expect(navigation.hits.map(hit => hit.path)).toEqual([exact, 'body.md'])
+  })
+
+  it('returns no results for unrelated questions or tied natural-question matches', async () => {
+    const f = fixture()
+    const text = '# Cargo manifest\nThe cargo manifest is stored in the north cabinet.'
+    writeFileSync(join(f.root, 'first.md'), text)
+    writeFileSync(join(f.root, 'second.md'), text)
+    const connector = f.open()
+
+    expect(await f.search(connector, 'Where is the volcanic ash certificate stored?'))
+      .toMatchObject({ ok: true, kind: 'knowledge_search', hits: [] })
+    expect(await f.search(connector, 'Where is the cargo manifest stored?'))
+      .toMatchObject({ ok: true, kind: 'knowledge_search', hits: [] })
+  })
+
+  it('keeps long natural questions scoped and rejects long ordinary keyword queries', async () => {
+    const f = fixture()
+    writeFileSync(join(f.root, 'cargo.md'), '# Cargo manifest\nStored in the north cabinet.')
+    mkdirSync(f.missing)
+    writeFileSync(join(f.missing, 'other.md'), '# Cargo manifest\nStored in the south cabinet.')
+    const connector = f.open()
+    const query = 'Where is the cargo manifest stored, and could you please tell me about it when you have a moment?'
+
+    expect(await f.search(connector, query, 'local')).toMatchObject({ ok: true, kind: 'knowledge_search', hits: [
+      { path: 'cargo.md', ref: { rootId: 'local' } },
+    ] })
+    expect(await f.search(connector, 'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec'))
+      .toEqual({ ok: false, code: 'invalid_input' })
+  })
+
+  it('does not combine unrelated sentences into natural-question evidence', async () => {
+    const f = fixture()
+    writeFileSync(join(f.root, 'training.md'),
+      'Records are stored in the north cabinet. The employee training certificate is filed elsewhere.')
+
+    expect(await f.search(f.open(), 'Where is the volcanic ash certificate stored?'))
+      .toMatchObject({ ok: true, kind: 'knowledge_search', hits: [] })
+  })
+
+  it('requires a matching measurement in the relevant passage', async () => {
+    const f = fixture()
+    const path = join(f.root, 'sample.md')
+    const query = 'How much does the calibration sample weigh?'
+    writeFileSync(path, '# Calibration sample\nThe calibration sample weighs less after drying. Storage room 120 contains reference materials.')
+    const connector = f.open()
+
+    expect(await f.search(connector, query)).toMatchObject({ ok: true, kind: 'knowledge_search', hits: [] })
+
+    writeFileSync(path, '# Calibration sample\nThe calibration sample weighs 8 g after drying.')
+    expect(await f.search(connector, query)).toMatchObject({ ok: true, kind: 'knowledge_search', hits: [{ path: 'sample.md' }] })
+  })
+
   it('ranks matching document text ahead of a keyword-heavy file name and title', async () => {
     const f = fixture()
     const archive = '00-webhook-重放.md'

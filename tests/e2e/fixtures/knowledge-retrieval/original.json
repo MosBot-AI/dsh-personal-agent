@@ -1,0 +1,802 @@
+{
+  "rubric": {
+    "scope": "Owner-authenticated native DSH Web local knowledge keyword search. Synthetic sources. No personal memory, Worker retrieval or semantic answer generation.",
+    "positiveQueries": "60 pre-annotated synthetic cases, one pre-annotated relevant source and literal answer span per case. 20 per language, half keyword and half natural formulations, paired on 30 unique source topics. 12 extra topical notes are distractors.",
+    "sourcedHit": "Relevant path returned within rank k whose exact ref/revision read matches the frozen source bytes and expected answer span.",
+    "denominator": "All 60 positive queries, including empty or irrelevant results. Readback rate separately counts exact source opens over all returned hits.",
+    "negativeControls": "Six non-answerable searches, reported separately. No control counts in positive retrieval rates.",
+    "target": "Documented 80% sourced relevant results. Predeclared primary: strict sourced hit@1 per positive query. Report hit@3 and precision@k as diagnostics, and lexical and exploratory natural formulations separately. The target does not define a rank or require semantic search."
+  },
+  "documents": {
+    "service/checkout-retry.md": "# Checkout error handling\nThe Checkout gateway records a request fingerprint before it contacts the payment sandbox.\nA retry waits 45 seconds after a temporary upstream failure.\nThe dashboard alert means the retry was queued. It does not mean a card was charged.\n",
+    "operations/restore-rehearsal.md": "# Database restoration rehearsal\nThe recovery operator uses a read-only replica for the first backup verification.\nThe restored work store remains fenced until the owner reviews the outstanding receipts.\nThe rehearsal must preserve the original encryption keys.\n",
+    "release/signed-package.md": "# Signed release package\nThe Release team approves an SBOM before making the Linux archive available.\nThe Linux archive is signed by the build service and verified independently.\nA checksum alone does not replace package signing.\n",
+    "research/search-participants.md": "# Search study participants\nThe search usability study recruits 12 participants from the field operations team.\nParticipants use separate testing accounts and may skip any question.\nRecruitment closes after the pilot session.\n",
+    "operations/field-handbook.md": "# Field handbook\nEvery field kiosk has a sealed envelope containing the printed emergency phone tree.\nThe only offline handbook is the red binder in the dispatch cabinet.\nOperators record the incident number on paper before reconnecting.\n",
+    "reporting/weekly-costs.md": "# Weekly costs\nThe Friday cost report separates known charges from provisional amounts.\nThe reporting cutoff for the Friday cost report is Thursday at 17:00 UTC.\nThe finance analyst excludes promotional credits from the comparison.\n",
+    "support/access-requests.md": "# Support access requests\nAn owner confirms the requesting employee's identity before issuing temporary support access.\nThe access approval expires after four hours.\nCustomer records may only be read inside the approved troubleshooting workspace.\n",
+    "data/inventory-export.md": "# Inventory export process\nThe inventory export is a UTF-8 CSV ordered by stable item ID.\nThe export job omits inactive warehouses but includes backordered items.\nIts output is first written to a private staging directory.\n",
+    "operations/warehouse-maintenance.md": "# Warehouse scanner maintenance\nThe scanner upgrade happens in the Tuesday maintenance window.\nThe technician must calibrate each scanner after updating its firmware.\nThe inventory database remains online for the entire maintenance window.\n",
+    "release/rollout-cohorts.md": "# Rollout cohorts\nThe canary rollout begins with internal accounts in the North region.\nThe second cohort starts 48 hours after the canary completes if error rates remain stable.\nThe release owner may pause further rollout independently of the previous cohort.\n",
+    "服务/审批日志.md": "# 审批日志\n采购系统的审批日志保留九十天。超期记录转入只读归档，项目负责人可以申请查阅。\n拒绝的采购请求仍保留审批时间，但不会扣减预算。\n",
+    "运营/设备巡检.md": "# 设备巡检\n仓库设备巡检要求每周三检查冷库传感器。\n现场人员先记下报警代码，再清洁探头。\n传感器校准记录随巡检单交给值班主管。\n",
+    "研究/问卷回收.md": "# 问卷回收\n本轮满意度问卷的回收截止时间是六月十八日。\n问卷要求匿名提交，可以跳过开放题。完成率按送达邀请计数。\n",
+    "财务/报销批次.md": "# 报销批次\n交通报销每月十日和二十五日打款。\n节假日前一个工作日完成批次复核，超过限额的票据另外登记。\n",
+    "发布/桌面试用.md": "# 桌面试用\n桌面试用先开放给客服二组，持续七天。\n试用包默认不开启远程控制功能，用户可以自行退出。\n",
+    "数据/备份保留.md": "# 备份保留\n本地备份保留十四天，每天生成一份压缩快照。\n恢复时先验证摘要，再确认账户权限。临时导出不进入备份保留周期。\n",
+    "运营/门禁值班.md": "# 门禁值班\n夜班门禁告警由南区值班台负责。\n维护人员可在值班台借用备用卡，离场时须归还登记。\n",
+    "项目/采购交期.md": "# 采购交期\n摄影支架的采购交期为八个工作日。\n机身到货后先核对序列号，镜头和支架单独签收。\n",
+    "研究/色彩校对.md": "# 色彩校对\n本次包装色彩校对在自然光下与印刷打样比较。\n最终确认由设计和生产两方签字，档案中保留两张照片。\n",
+    "支持/工单移交.md": "# 工单移交\n遇到登录故障，工单应移交身份验证小组。\n移交前先收集错误代码，聊天记录只附必要片段。\n",
+    "integrations/webhook-ownership.md": "# Webhook 归属\nWebhook 回调重放由平台工程组值班同学批准。\nThe upstream event identifier must stay fixed across retries.\n测试环境以外的回放需要另行审批。\n",
+    "release/ios-pilot.md": "# iOS Pilot\niOS 内测通过 TestFlight 分发给十二名现场工程师。\n旧邀请在新版本发布当天作废。\n",
+    "reporting/sla-escalation.md": "# SLA 告警处理\nSLA 响应目标为 30 分钟。超过目标后，Support Lead 接管处理。\n夜间由值班经理确认优先级。\n",
+    "research/a11y-audit.md": "# Accessibility audit\nAccessibility 审计要求记录键盘焦点顺序和对比度。\nThe report uses WCAG 2.2 AA as the declared reference.\n第三方组件也纳入检查。\n",
+    "service/api-downtime.md": "# API 维护窗口\nAPI 维护窗口从周六 02:00 UTC 开始，预计持续一小时。\nStatus page 通知在开始前半小时发布。\n",
+    "operations/vpn-device.md": "# VPN 设备接入\nVPN 设备注册只允许资产清单中的受管电脑。\n设备证书有效期为九十天；续期由 IT Desk 审核。\n",
+    "data/json-import.md": "# JSON 导入\nJSON 导入支持 UTF-8，单个上传限额为 8 MiB。\n系统在提交之前显示行级错误，任何一行无效则拒绝整批。\n",
+    "release/android-signing.md": "# Android 签名\nAndroid 内测包使用专门的 debug keystore。\n生产签名密钥不允许用于内测，签名指纹保存在发布表中。\n",
+    "research/ux-interview.md": "# UX 访谈\nUX 访谈先进行十分钟产品背景介绍，再进入观察环节。\n每位参与者的录音保留三十天，同意书与录音分开保存。\n",
+    "project/cache-cutover.md": "# Cache 迁移\nCache 迁移演练先预热 staging 再执行流量切换。\nThe rollback owner is the database on-call engineer.\n测试期间禁用自动容量扩展。\n",
+    "service/checkout-retry-dashboard.md": "# Checkout retry dashboard\nThis dashboard includes event identifiers and restart counters. It does not define payment timing.\n",
+    "operations/backup-verification-archive.md": "# Backup verification archive\nThis historical folder keeps quarterly backup verification results for the retired reporting job.\n",
+    "research/search-study-recruitment-update.md": "# Search study recruitment update\nThis recruitment reminder changed the signup form but did not change study size.\n",
+    "support/scanner-maintenance-safety.md": "# Scanner maintenance safety\nDisconnect power before opening the scanner enclosure. Refer to the warehouse maintenance calendar for timing.\n",
+    "发布/桌面试用反馈.md": "# 桌面试用反馈\n客服人员可通过内部表单反馈桌面试用问题。首批名单见发布计划。\n",
+    "数据/本地备份保留审计.md": "# 本地备份保留审计\n此处登记上季度本地备份保留策略的评审时间。实际保留期限见当前运维规则。\n",
+    "运营/夜班门禁告警演练.md": "# 夜班门禁告警演练\n测试环境的夜班门禁告警演练结束后清除测试记录，按现行值班表确认职责。\n",
+    "支持/登录工单移交历史.md": "# 登录工单移交历史\n此页归档已移交的登录工单编号和关闭时间，不描述当前移交队列。\n",
+    "integrations/webhook-回调-重放清单.md": "# Webhook 回调重放清单\n保留演练的回调样本和检验摘要。批准归属以当前操作说明为准。\n",
+    "service/API-维护-UTC日志.md": "# API 维护 UTC 日志\n旧版本维护事件按 UTC 归档。后续时间由当前维护窗口通知确定。\n",
+    "data/JSON-导入-限额历史.md": "# JSON 导入限额历史\n此表仅归档旧系统的限额说明。当前导入限制以生产操作指南为准。\n",
+    "release/Android-内测-签名归档.md": "# Android 内测签名归档\n只保留历史签名的指纹摘要。当前密钥选择见发布操作说明。\n"
+  },
+  "queries": [
+    {
+      "id": "en-01",
+      "language": "en",
+      "mode": "keyword",
+      "query": "checkout retry",
+      "relevant": [
+        {
+          "path": "service/checkout-retry.md",
+          "anchor": "A retry waits 45 seconds"
+        }
+      ]
+    },
+    {
+      "id": "en-02",
+      "language": "en",
+      "mode": "natural",
+      "query": "How long does checkout wait before trying again?",
+      "relevant": [
+        {
+          "path": "service/checkout-retry.md",
+          "anchor": "A retry waits 45 seconds"
+        }
+      ]
+    },
+    {
+      "id": "en-03",
+      "language": "en",
+      "mode": "keyword",
+      "query": "backup verification",
+      "relevant": [
+        {
+          "path": "operations/restore-rehearsal.md",
+          "anchor": "read-only replica"
+        }
+      ]
+    },
+    {
+      "id": "en-04",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should the team verify a database copy before restoring it?",
+      "relevant": [
+        {
+          "path": "operations/restore-rehearsal.md",
+          "anchor": "read-only replica"
+        }
+      ]
+    },
+    {
+      "id": "en-05",
+      "language": "en",
+      "mode": "keyword",
+      "query": "Linux archive signing",
+      "relevant": [
+        {
+          "path": "release/signed-package.md",
+          "anchor": "signed by the build service"
+        }
+      ]
+    },
+    {
+      "id": "en-06",
+      "language": "en",
+      "mode": "natural",
+      "query": "Who signs the Linux release archive?",
+      "relevant": [
+        {
+          "path": "release/signed-package.md",
+          "anchor": "signed by the build service"
+        }
+      ]
+    },
+    {
+      "id": "en-07",
+      "language": "en",
+      "mode": "keyword",
+      "query": "search study recruitment",
+      "relevant": [
+        {
+          "path": "research/search-participants.md",
+          "anchor": "recruits 12 participants"
+        }
+      ]
+    },
+    {
+      "id": "en-08",
+      "language": "en",
+      "mode": "natural",
+      "query": "How many people will take part in the search usability study?",
+      "relevant": [
+        {
+          "path": "research/search-participants.md",
+          "anchor": "recruits 12 participants"
+        }
+      ]
+    },
+    {
+      "id": "en-09",
+      "language": "en",
+      "mode": "keyword",
+      "query": "offline handbook",
+      "relevant": [
+        {
+          "path": "operations/field-handbook.md",
+          "anchor": "red binder in the dispatch cabinet"
+        }
+      ]
+    },
+    {
+      "id": "en-10",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where is the handbook kept for use without an internet connection?",
+      "relevant": [
+        {
+          "path": "operations/field-handbook.md",
+          "anchor": "red binder in the dispatch cabinet"
+        }
+      ]
+    },
+    {
+      "id": "en-11",
+      "language": "en",
+      "mode": "keyword",
+      "query": "Friday report cutoff",
+      "relevant": [
+        {
+          "path": "reporting/weekly-costs.md",
+          "anchor": "Thursday at 17:00 UTC"
+        }
+      ]
+    },
+    {
+      "id": "en-12",
+      "language": "en",
+      "mode": "natural",
+      "query": "When do we stop counting costs for the Friday report?",
+      "relevant": [
+        {
+          "path": "reporting/weekly-costs.md",
+          "anchor": "Thursday at 17:00 UTC"
+        }
+      ]
+    },
+    {
+      "id": "en-13",
+      "language": "en",
+      "mode": "keyword",
+      "query": "support access approval",
+      "relevant": [
+        {
+          "path": "support/access-requests.md",
+          "anchor": "expires after four hours"
+        }
+      ]
+    },
+    {
+      "id": "en-14",
+      "language": "en",
+      "mode": "natural",
+      "query": "How long does temporary support access remain valid?",
+      "relevant": [
+        {
+          "path": "support/access-requests.md",
+          "anchor": "expires after four hours"
+        }
+      ]
+    },
+    {
+      "id": "en-15",
+      "language": "en",
+      "mode": "keyword",
+      "query": "inventory export warehouses",
+      "relevant": [
+        {
+          "path": "data/inventory-export.md",
+          "anchor": "omits inactive warehouses"
+        }
+      ]
+    },
+    {
+      "id": "en-16",
+      "language": "en",
+      "mode": "natural",
+      "query": "Does the inventory download include closed warehouses?",
+      "relevant": [
+        {
+          "path": "data/inventory-export.md",
+          "anchor": "omits inactive warehouses"
+        }
+      ]
+    },
+    {
+      "id": "en-17",
+      "language": "en",
+      "mode": "keyword",
+      "query": "scanner maintenance",
+      "relevant": [
+        {
+          "path": "operations/warehouse-maintenance.md",
+          "anchor": "Tuesday maintenance window"
+        }
+      ]
+    },
+    {
+      "id": "en-18",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which day are warehouse scanners upgraded?",
+      "relevant": [
+        {
+          "path": "operations/warehouse-maintenance.md",
+          "anchor": "Tuesday maintenance window"
+        }
+      ]
+    },
+    {
+      "id": "en-19",
+      "language": "en",
+      "mode": "keyword",
+      "query": "canary rollout cohort",
+      "relevant": [
+        {
+          "path": "release/rollout-cohorts.md",
+          "anchor": "starts 48 hours"
+        }
+      ]
+    },
+    {
+      "id": "en-20",
+      "language": "en",
+      "mode": "natural",
+      "query": "When does the second group get the release after the canary?",
+      "relevant": [
+        {
+          "path": "release/rollout-cohorts.md",
+          "anchor": "starts 48 hours"
+        }
+      ]
+    },
+    {
+      "id": "zh-01",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "审批 日志 保留",
+      "relevant": [
+        {
+          "path": "服务/审批日志.md",
+          "anchor": "审批日志保留九十天"
+        }
+      ]
+    },
+    {
+      "id": "zh-02",
+      "language": "zh",
+      "mode": "natural",
+      "query": "系统会把采购签核记录存多久？",
+      "relevant": [
+        {
+          "path": "服务/审批日志.md",
+          "anchor": "审批日志保留九十天"
+        }
+      ]
+    },
+    {
+      "id": "zh-03",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "冷库 传感器 巡检",
+      "relevant": [
+        {
+          "path": "运营/设备巡检.md",
+          "anchor": "每周三检查冷库传感器"
+        }
+      ]
+    },
+    {
+      "id": "zh-04",
+      "language": "zh",
+      "mode": "natural",
+      "query": "哪个工作日要去查看冷藏区的测温设备？",
+      "relevant": [
+        {
+          "path": "运营/设备巡检.md",
+          "anchor": "每周三检查冷库传感器"
+        }
+      ]
+    },
+    {
+      "id": "zh-05",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "问卷 回收 截止",
+      "relevant": [
+        {
+          "path": "研究/问卷回收.md",
+          "anchor": "截止时间是六月十八日"
+        }
+      ]
+    },
+    {
+      "id": "zh-06",
+      "language": "zh",
+      "mode": "natural",
+      "query": "这次调研最晚什么时候可以交表？",
+      "relevant": [
+        {
+          "path": "研究/问卷回收.md",
+          "anchor": "截止时间是六月十八日"
+        }
+      ]
+    },
+    {
+      "id": "zh-07",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "交通 报销 打款",
+      "relevant": [
+        {
+          "path": "财务/报销批次.md",
+          "anchor": "每月十日和二十五日打款"
+        }
+      ]
+    },
+    {
+      "id": "zh-08",
+      "language": "zh",
+      "mode": "natural",
+      "query": "员工垫付的车费通常哪几天到账？",
+      "relevant": [
+        {
+          "path": "财务/报销批次.md",
+          "anchor": "每月十日和二十五日打款"
+        }
+      ]
+    },
+    {
+      "id": "zh-09",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "桌面 试用 客服",
+      "relevant": [
+        {
+          "path": "发布/桌面试用.md",
+          "anchor": "先开放给客服二组"
+        }
+      ]
+    },
+    {
+      "id": "zh-10",
+      "language": "zh",
+      "mode": "natural",
+      "query": "最先体验新版客户端的是哪个小队？",
+      "relevant": [
+        {
+          "path": "发布/桌面试用.md",
+          "anchor": "先开放给客服二组"
+        }
+      ]
+    },
+    {
+      "id": "zh-11",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "本地 备份 保留",
+      "relevant": [
+        {
+          "path": "数据/备份保留.md",
+          "anchor": "备份保留十四天"
+        }
+      ]
+    },
+    {
+      "id": "zh-12",
+      "language": "zh",
+      "mode": "natural",
+      "query": "这些数据副本过多长时间会被清掉？",
+      "relevant": [
+        {
+          "path": "数据/备份保留.md",
+          "anchor": "备份保留十四天"
+        }
+      ]
+    },
+    {
+      "id": "zh-13",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "夜班 门禁 告警",
+      "relevant": [
+        {
+          "path": "运营/门禁值班.md",
+          "anchor": "由南区值班台负责"
+        }
+      ]
+    },
+    {
+      "id": "zh-14",
+      "language": "zh",
+      "mode": "natural",
+      "query": "夜里刷卡设备报警应该打给谁？",
+      "relevant": [
+        {
+          "path": "运营/门禁值班.md",
+          "anchor": "由南区值班台负责"
+        }
+      ]
+    },
+    {
+      "id": "zh-15",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "采购 支架 交期",
+      "relevant": [
+        {
+          "path": "项目/采购交期.md",
+          "anchor": "交期为八个工作日"
+        }
+      ]
+    },
+    {
+      "id": "zh-16",
+      "language": "zh",
+      "mode": "natural",
+      "query": "订购相机三脚架要等多久？",
+      "relevant": [
+        {
+          "path": "项目/采购交期.md",
+          "anchor": "交期为八个工作日"
+        }
+      ]
+    },
+    {
+      "id": "zh-17",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "包装 色彩 校对",
+      "relevant": [
+        {
+          "path": "研究/色彩校对.md",
+          "anchor": "在自然光下与印刷打样比较"
+        }
+      ]
+    },
+    {
+      "id": "zh-18",
+      "language": "zh",
+      "mode": "natural",
+      "query": "印出来的颜色应该在什么环境下核对？",
+      "relevant": [
+        {
+          "path": "研究/色彩校对.md",
+          "anchor": "在自然光下与印刷打样比较"
+        }
+      ]
+    },
+    {
+      "id": "zh-19",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "登录 工单 移交",
+      "relevant": [
+        {
+          "path": "支持/工单移交.md",
+          "anchor": "移交身份验证小组"
+        }
+      ]
+    },
+    {
+      "id": "zh-20",
+      "language": "zh",
+      "mode": "natural",
+      "query": "客户无法进入账户时该转给哪组？",
+      "relevant": [
+        {
+          "path": "支持/工单移交.md",
+          "anchor": "移交身份验证小组"
+        }
+      ]
+    },
+    {
+      "id": "mixed-01",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "Webhook 回调 重放",
+      "relevant": [
+        {
+          "path": "integrations/webhook-ownership.md",
+          "anchor": "由平台工程组值班同学批准"
+        }
+      ]
+    },
+    {
+      "id": "mixed-02",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "谁可以批准再发一次 webhook？",
+      "relevant": [
+        {
+          "path": "integrations/webhook-ownership.md",
+          "anchor": "由平台工程组值班同学批准"
+        }
+      ]
+    },
+    {
+      "id": "mixed-03",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "iOS 内测 TestFlight",
+      "relevant": [
+        {
+          "path": "release/ios-pilot.md",
+          "anchor": "通过 TestFlight 分发"
+        }
+      ]
+    },
+    {
+      "id": "mixed-04",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "iPhone 试用版用什么 app 安装？",
+      "relevant": [
+        {
+          "path": "release/ios-pilot.md",
+          "anchor": "通过 TestFlight 分发"
+        }
+      ]
+    },
+    {
+      "id": "mixed-05",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "SLA 响应 Support Lead",
+      "relevant": [
+        {
+          "path": "reporting/sla-escalation.md",
+          "anchor": "Support Lead 接管处理"
+        }
+      ]
+    },
+    {
+      "id": "mixed-06",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "SLA 超时以后工单转给谁？",
+      "relevant": [
+        {
+          "path": "reporting/sla-escalation.md",
+          "anchor": "Support Lead 接管处理"
+        }
+      ]
+    },
+    {
+      "id": "mixed-07",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "Accessibility 审计 WCAG",
+      "relevant": [
+        {
+          "path": "research/a11y-audit.md",
+          "anchor": "WCAG 2.2 AA"
+        }
+      ]
+    },
+    {
+      "id": "mixed-08",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "这次 a11y review 按哪版标准？",
+      "relevant": [
+        {
+          "path": "research/a11y-audit.md",
+          "anchor": "WCAG 2.2 AA"
+        }
+      ]
+    },
+    {
+      "id": "mixed-09",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "API 维护 UTC",
+      "relevant": [
+        {
+          "path": "service/api-downtime.md",
+          "anchor": "预计持续一小时"
+        }
+      ]
+    },
+    {
+      "id": "mixed-10",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "API 周末计划停多久？",
+      "relevant": [
+        {
+          "path": "service/api-downtime.md",
+          "anchor": "预计持续一小时"
+        }
+      ]
+    },
+    {
+      "id": "mixed-11",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "VPN 设备 证书",
+      "relevant": [
+        {
+          "path": "operations/vpn-device.md",
+          "anchor": "设备证书有效期为九十天"
+        }
+      ]
+    },
+    {
+      "id": "mixed-12",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "VPN device cert 多久过期？",
+      "relevant": [
+        {
+          "path": "operations/vpn-device.md",
+          "anchor": "设备证书有效期为九十天"
+        }
+      ]
+    },
+    {
+      "id": "mixed-13",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "JSON 导入 限额",
+      "relevant": [
+        {
+          "path": "data/json-import.md",
+          "anchor": "单个上传限额为 8 MiB"
+        }
+      ]
+    },
+    {
+      "id": "mixed-14",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "JSON upload 文件最大可以有多大？",
+      "relevant": [
+        {
+          "path": "data/json-import.md",
+          "anchor": "单个上传限额为 8 MiB"
+        }
+      ]
+    },
+    {
+      "id": "mixed-15",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "Android 内测 签名",
+      "relevant": [
+        {
+          "path": "release/android-signing.md",
+          "anchor": "使用专门的 debug keystore"
+        }
+      ]
+    },
+    {
+      "id": "mixed-16",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Android beta 该用哪一把 key？",
+      "relevant": [
+        {
+          "path": "release/android-signing.md",
+          "anchor": "使用专门的 debug keystore"
+        }
+      ]
+    },
+    {
+      "id": "mixed-17",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "UX 访谈 录音",
+      "relevant": [
+        {
+          "path": "research/ux-interview.md",
+          "anchor": "录音保留三十天"
+        }
+      ]
+    },
+    {
+      "id": "mixed-18",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "UX interview 的录音会留多久？",
+      "relevant": [
+        {
+          "path": "research/ux-interview.md",
+          "anchor": "录音保留三十天"
+        }
+      ]
+    },
+    {
+      "id": "mixed-19",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "Cache 迁移 staging",
+      "relevant": [
+        {
+          "path": "project/cache-cutover.md",
+          "anchor": "the database on-call engineer"
+        }
+      ]
+    },
+    {
+      "id": "mixed-20",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Cache cutover 失败谁来回滚？",
+      "relevant": [
+        {
+          "path": "project/cache-cutover.md",
+          "anchor": "the database on-call engineer"
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "volcanic ash clearance certificate"
+    },
+    {
+      "language": "en",
+      "query": "Orbital elevator permits"
+    },
+    {
+      "language": "zh",
+      "query": "盐湖水文观测报告"
+    },
+    {
+      "language": "zh",
+      "query": "温室 栽培 病虫害"
+    },
+    {
+      "language": "mixed",
+      "query": "SAML 观鸟站 firmware"
+    },
+    {
+      "language": "mixed",
+      "query": "NFC 深海浮标 定位"
+    }
+  ]
+}
