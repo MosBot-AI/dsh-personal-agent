@@ -10,7 +10,7 @@ import {
   type ProviderResult,
 } from '@mosbot-ai/dshpa-plugin-api'
 import { z } from 'zod'
-import { BackendError, createComfyHttp, originSchema, readBounded } from './http.js'
+import { BackendError, createComfyHttp, originSchema, readBounded, ResponseLimitError } from './http.js'
 import { verifyOutput } from './verify.js'
 
 const manifest = { kind: 'media', pluginId: '@mosbot-ai/dshpa-media-comfyui', pluginVersion: '0.1.0', apiVersion: CAPABILITY_API_VERSION } as const
@@ -122,25 +122,39 @@ function makeProvider(pin: ProviderPin<'media'>, config: Config): MediaProvider 
     if (!hasCompute) throw new BackendError('busy')
   }
 
-  async function observe(request: MediaJobRequest, signal: AbortSignal) {
+  async function observeHistory(request: MediaJobRequest, signal: AbortSignal) {
     const id = request.handle.handleId
-    const tag = bindingFor(request)
-    const queue = await http.json('/queue', queueSchema, signal)
-    const running = queue.queue_running.find(item => item[1] === id)
-    const pending = queue.queue_pending.find(item => item[1] === id)
-    const item = running ?? pending
-    if (item) {
-      if (item[3].dshpa_binding !== tag) throw new BackendError('permission_denied')
-      return { state: running ? 'running' : 'queued' } as const
-    }
     const result = await http.json('/history/' + id, z.record(z.string(), historyEntry), signal)
     const entry = result[id]
     if (!entry) return { state: 'unknown' } as const
-    if (entry.prompt[1] !== id || entry.prompt[3].dshpa_binding !== tag) throw new BackendError('permission_denied')
+    if (entry.prompt[1] !== id || entry.prompt[3].dshpa_binding !== bindingFor(request)) {
+      throw new BackendError('permission_denied')
+    }
     const interrupted = entry.status.messages?.some(message => Array.isArray(message) && message[0] === 'execution_interrupted')
     const state = interrupted ? 'cancelled' : entry.status.status_str === 'error' ? 'failed'
       : entry.status.completed ? 'succeeded' : 'unknown'
     return { state, entry } as const
+  }
+
+  async function observe(request: MediaJobRequest, signal: AbortSignal, recoverOversizedQueue = false) {
+    let queue: z.output<typeof queueSchema>
+    try {
+      queue = await http.json('/queue', queueSchema, signal)
+    } catch (error) {
+      if (!recoverOversizedQueue || !(error instanceof ResponseLimitError)) throw error
+      const history = await observeHistory(request, signal)
+      if (history.state === 'unknown') throw error
+      return history
+    }
+    const id = request.handle.handleId
+    const running = queue.queue_running.find(item => item[1] === id)
+    const pending = queue.queue_pending.find(item => item[1] === id)
+    const item = running ?? pending
+    if (item) {
+      if (item[3].dshpa_binding !== bindingFor(request)) throw new BackendError('permission_denied')
+      return { state: running ? 'running' : 'queued' } as const
+    }
+    return observeHistory(request, signal)
   }
 
   async function scoped<T>(raw: MediaJobRequest, signal: AbortSignal,
@@ -223,7 +237,7 @@ function makeProvider(pin: ProviderPin<'media'>, config: Config): MediaProvider 
       },
     },
     inspect: (request, signal) => scoped<MediaJobStatus>(request, signal, async bound => {
-      const { state } = await observe(bound, signal)
+      const { state } = await observe(bound, signal, true)
       return ok({ state })
     }),
     cancel: (request, signal) => scoped<MediaJobStatus>(request, signal, async bound => {
@@ -235,8 +249,8 @@ function makeProvider(pin: ProviderPin<'media'>, config: Config): MediaProvider 
       return ok({ state: before.state === 'queued' && reply.cancelled && after.state === 'unknown' ? 'cancelled' : after.state })
     }),
     collect: (request, signal) => scoped<MediaOutput[]>(request, signal, async bound => {
-      const observation = await observe(bound, signal)
-      if (observation.state !== 'succeeded' || !('entry' in observation)) return fail('busy')
+      const observation = await observeHistory(bound, signal)
+      if (observation.state !== 'succeeded') return fail('busy')
       const results: MediaOutput[] = []
       const refs = new Set<string>()
       let remainingBytes = config.maxOutputBytes

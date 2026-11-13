@@ -8,6 +8,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Recover completed ComfyUI renders when unrelated jobs make the provider queue response too large.
 - Reconnect the mobile work view when the event stream silently stalls and restore tasks and approvals through fresh authenticated reads.
 - Retry verification of completed ComfyUI output after local temporary storage fills up or reaches its quota, retaining the original render and media lease.
 - Count Unicode code points in shared task cursor queries so clients receive the pagination restart error for undecodable cursors within the contract limit.

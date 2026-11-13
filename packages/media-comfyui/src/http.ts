@@ -5,6 +5,10 @@ export class BackendError extends Error {
   constructor(readonly code: ProviderFailureCode) { super(code) }
 }
 
+export class ResponseLimitError extends BackendError {
+  constructor() { super('invalid_result') }
+}
+
 export const originSchema = z.string().refine(value => {
   try {
     const url = new URL(value)
@@ -28,7 +32,7 @@ export async function readBounded(response: Response, limit: number): Promise<Bu
       })
       if (done) return Buffer.concat(chunks, size)
       size += value.byteLength
-      if (size > limit) throw new BackendError('invalid_result')
+      if (size > limit) throw new ResponseLimitError()
       chunks.push(value)
     }
   } finally {

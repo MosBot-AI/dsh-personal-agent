@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -28,22 +29,24 @@ export async function comfyFixture() {
   const directory = mkdtempSync(join(tmpdir(), 'dshpa-comfy-fixture-'))
   const submissions: Submission[] = []
   const cancelled: string[] = []
+  const requests: string[] = []
   let onSubmit: ((submission: Submission) => void) | undefined
   let onView: (() => void) | undefined
   const pending = new Map<string, unknown[]>()
   const running = new Map<string, unknown[]>()
   const history = new Map<string, unknown>()
   const outputs = new Map<string, Buffer>()
-  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, redirect: false, viewStatus: 200, interruptView: false, stallView: false, loseCancelResponse: false }
+  const faults = { loseResponse: false, holdResponse: false, missing: false, rateLimit: false, apiNode: false, cancelRace: false, invalidQueue: false, queueStatus: 200, redirect: false, viewStatus: 200, interruptView: false, stallView: false, loseCancelResponse: false }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url!, 'http://fixture')
     const path = url.pathname
+    requests.push(request.method + ' ' + path)
     if (path === '/system_stats') return faults.rateLimit ? json(response, {}, 429)
       : json(response, { system: { comfyui_version: '0.44.0', ram_free: 1e9 }, devices: [{ type: 'cpu', vram_free: 1e9 }] })
     if (path.startsWith('/object_info/')) return json(response, { [decodeURIComponent(path.slice(13))]: { api_node: faults.apiNode } })
-    if (path === '/queue') return json(response, {
+    if (path === '/queue') return json(response, faults.invalidQueue || faults.queueStatus !== 200 ? {} : {
       queue_running: [...running.values()], queue_pending: faults.missing ? [] : [...pending.values()],
-    })
+    }, faults.queueStatus)
     if (path.startsWith('/history/')) {
       const id = path.slice(9)
       return json(response, history.has(id) && !faults.missing ? { [id]: history.get(id) } : {})
@@ -122,7 +125,15 @@ export async function comfyFixture() {
   }))
   const config = { origin, outputDirectory: directory, compute: 'cpu', minFreeDiskBytes: 1, minFreeMemoryBytes: 1, workflows }
   return {
-    directory, config, faults, submissions, cancelled, pending, running,
+    directory, config, faults, submissions, cancelled, requests, pending, running,
+    crowdQueue() {
+      const graph = { '1': { class_type: 'FixtureText', inputs: { text: 'x'.repeat(480 * 1024) } } }
+      const ids = Array.from({ length: 9 }, () => randomUUID())
+      for (const [index, id] of ids.entries()) pending.set(id, [index, id, graph, {}, ['1']])
+      const body = JSON.stringify({ queue_running: [...running.values()], queue_pending: [...pending.values()] })
+      if (Buffer.byteLength(body) <= 4 * 1024 * 1024) throw new Error('Expected queue response to exceed the JSON limit')
+      return ids
+    },
     watchSubmit(callback: (submission: Submission) => void) { onSubmit = callback },
     watchView(callback: () => void) { onView = callback },
     async register(configRevision = 1, overrides: { timeoutMs?: number } = {}, decorate?: (provider: MediaProvider) => MediaProvider) {

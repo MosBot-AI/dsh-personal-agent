@@ -340,3 +340,38 @@ it('keeps an unproven cancelled render leased after a lost cancel reply and a co
   expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([id])
   expect(fixture.cancelled).toEqual([id])
 })
+
+it.each(['rendering', 'collecting'] as const)('recovers a completed render from %s while the unrelated queue is oversized', async state => {
+  const fixture = await comfyFixture()
+  const { registry, pin } = await fixture.register()
+  const store = openWorkStore(join(fixture.directory, 'work'))
+  const request = { ...mediaRequest(), access: createAttempt(store, 'queue-overflow') }
+  const ref = { access: request.access, operationId: request.operationId }
+  const config = mediaServiceConfigSchema.parse({ providers: { image: pin } })
+  const jobs = store.createMediaJobs(registry, config, { current: () => true, artifactAllowed: () => false })
+  onTestFinished(async () => { await jobs.close(); await registry.close(); store.close() })
+
+  accepted(jobs.enqueue(request))
+  await jobs.step()
+  const id = accepted(jobs.inspect(ref)).handle!.handleId
+  const bytes = fixture.complete(id, imageSpec)
+  if (state === 'collecting') await jobs.step()
+  expect(accepted(jobs.inspect(ref))).toMatchObject({ state, handle: { handleId: id } })
+  expect(store.mediaLeaseHeld()).toBe(true)
+  const unrelated = fixture.crowdQueue()
+
+  if (state === 'rendering') {
+    await jobs.step()
+    expect(accepted(jobs.inspect(ref))).toMatchObject({ state: 'collecting', handle: { handleId: id } })
+    expect(store.mediaLeaseHeld()).toBe(true)
+  }
+  await jobs.step()
+  expect(accepted(jobs.inspect(ref))).toMatchObject({
+    state: 'succeeded', handle: { handleId: id },
+    outputs: [{ contentHash: createHash('sha256').update(bytes).digest('hex') }],
+  })
+  expect(store.mediaLeaseHeld()).toBe(false)
+  expect(fixture.submissions.map(submission => submission.prompt_id)).toEqual([id])
+  expect(fixture.cancelled).toEqual([])
+  expect([...fixture.pending.keys()]).toEqual(unrelated)
+})
