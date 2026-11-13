@@ -30,7 +30,7 @@ Phase/Release 是原方案阶段及首次交付级别；Priority：基础 alpha 
 ## 3. 每个 agent 的执行流程
 
 1. `git pull --ff-only` 更新工作区前先检查本地变更，不覆盖其他人的修改。阅读 AGENTS、当前 Issue、前置任务证据和相关文档。
-2. 运行 `python3 scripts/project_ready.py --release desktop-alpha` 获取实时候选。该命令只读；若权限或网络失败就报错，不回退成“全部就绪”。
+2. 运行 `python3 scripts/project_ready.py --release desktop-alpha` 查看所选发布范围在清单中的依赖任务。同时检查 Project 的 Ready 视图，查看已明确排入队列的维护 Issue。该命令只读，权限或网络失败时会报错。
 3. 选一个候选，再读一次最新评论、assignee、Execution agent 和 Status。无冲突后自分配、写英文 Claim 评论、填 Execution agent、设置 In progress 和 Last update。
 4. 使用独立 `codex/pa-NNN-short-description` 分支/worktree，任务大小超出一项可评审改动时拆子 issue，并同步计划，不悄悄扩大范围。
 5. 有意义的里程碑、阻塞或交接时写英文进度评论。没有变化不重复刷屏。进度报告关联实际 commit/PR/测试和剩余工作。
@@ -83,7 +83,7 @@ gh issue comment 1 --repo MosBot-AI/dsh-personal-agent --body-file /tmp/dshpa-pr
 
 同步器把 completed + acceptance:verified + Evidence 的任务设为 Done，再提升已满足依赖的 Backlog；未验证关闭不算完成，依赖重新打开会阻塞已启动的下游。In progress、Blocked、In review 和负责人仍由 agent 按真实情况报告，不从评论自由文本推断。PR 事件触发核对，不凭合并自动认可验收。Issue 重新打开时，workflow 用仓库 GITHUB_TOKEN 移除旧 acceptance:verified 标签；重新验收后才能再添加。项目专用 Token 仍只需读取仓库 Issue，项目写入由其 Projects 权限负责。
 
-`python3 scripts/project_sync.py` 默认只读预览，`--apply` 才写入。每次写前重新读取以减少竞争，但不保证原子认领。`project_ready.py` 包含尚未被提升但依赖已满足的 Backlog，并检查 completed + Done + acceptance:verified + Evidence；开始前仍须阅读证据内容。
+`python3 scripts/project_sync.py` 默认只读预览单个快照。使用 `--apply` 时，先对账完成状态，再重新读取 Project 以计算下游变更。每个前置 Issue 都须以 completed 关闭，Project 状态为 Done，具有 `acceptance:verified` 标签且链接了证据，下游才算就绪。就绪查询也会列出符合条件的 Backlog 项。已核实关闭但尚待写入 Done 的任务不会中断进行中的下游工作。两个阶段在每次写入前都会重新读取。代理仍须检查证据并复核认领。
 
 ## 6. 发布视图与维护
 

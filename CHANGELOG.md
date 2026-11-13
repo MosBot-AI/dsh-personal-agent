@@ -8,6 +8,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Confirm prerequisite completion in GitHub Project before promoting dependent tasks to Ready.
 - Recover mobile CI from a stalled Chrome handshake with one isolated browser restart.
 - Distinguish Chrome startup, DevTools command, and process failures in mobile CI diagnostics.
 

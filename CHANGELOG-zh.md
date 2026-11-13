@@ -8,6 +8,7 @@
 
 ### 修复
 
+- GitHub Project 确认前置任务完成后，才将下游任务提升为 Ready。
 - 移动端 CI 的 Chrome 握手卡住时，通过一次隔离浏览器重启恢复测试。
 - 移动端 CI 诊断可区分 Chrome 启动失败、DevTools 命令失败及进程异常。
 

@@ -30,7 +30,7 @@ An unmerged PR, not-planned Issue or documentation/mock alone is not Done. Missi
 ## 3. Agent procedure
 
 1. Inspect local changes before `git pull --ff-only`; preserve others' work. Read AGENTS, the Issue, dependency evidence and relevant docs.
-2. Run `python3 scripts/project_ready.py --release desktop-alpha`. This is read-only and fails visibly on permission/network errors.
+2. Run `python3 scripts/project_ready.py --release desktop-alpha` for the selected release's manifest dependencies. Also check the Project's Ready view for explicitly prioritized maintenance Issues. The command is read-only and fails visibly on permission/network errors.
 3. Re-read comments, assignees, Execution agent and Status. Without conflicts, self-assign, post an English Claim, fill Execution agent and set In progress/Last update.
 4. Use an isolated `codex/pa-NNN-short-description` branch/worktree. Split work exceeding one reviewable change into coordinated sub-issues rather than silently expanding scope.
 5. Report meaningful progress, blockers or handoffs in English with commits/PRs/tests and remaining work; avoid unchanged status spam.
@@ -83,7 +83,7 @@ Two GitHub Actions workflows are included: `Validate implementation plan` checks
 
 The synchronizer marks completed + acceptance:verified + Evidence as Done and promotes eligible Backlog items. Unverified closures are not completion; reopened dependencies block active downstream work. Agents still report In progress, Blocked, In review and ownership explicitly; free-text comments are not executable state instructions. PR events trigger reconciliation, not automatic acceptance based on merge. On Issue reopen, the repository GITHUB_TOKEN removes stale acceptance:verified; add it again only after re-verification. The dedicated Project token still only needs repository Issue read access, plus Projects write access.
 
-`python3 scripts/project_sync.py` defaults to a read-only preview; `--apply` writes. Re-reading before each write reduces races without providing atomic claims. The readiness helper includes eligible Backlog and checks completed + Done + acceptance:verified + Evidence; agents must still inspect the evidence itself.
+`python3 scripts/project_sync.py` defaults to a read-only preview of one snapshot. With `--apply`, it reconciles completion statuses first, then reads the Project again before calculating dependent changes. Readiness requires each prerequisite to be closed as completed, Project Done, labeled `acceptance:verified`, and linked to evidence. The readiness command also lists eligible Backlog items. A verified closure awaiting its Done write does not interrupt active downstream work. Both phases re-read before each write. Agents must still inspect evidence and recheck claims.
 
 ## 6. Views and maintenance
 

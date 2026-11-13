@@ -19,6 +19,17 @@ QUERY = """query($id:ID!){node(id:$id){... on ProjectV2{
 }}}"""
 
 
+def verified_closure(item):
+    issue = item["content"]
+    return (issue["state"] == "CLOSED" and issue["stateReason"] == "COMPLETED"
+            and "acceptance:verified" in {label["name"] for label in issue.get("labels", {}).get("nodes", [])}
+            and bool((item.get("evidence") or {}).get("text", "").strip()))
+
+
+def dependency_done(item):
+    return verified_closure(item) and (item.get("status") or {}).get("name") == "Done"
+
+
 def ready_tasks(manifest, mapping, snapshot, release):
     tasks = {task["id"]: task for task in manifest["tasks"]}
     required = set()
@@ -43,14 +54,6 @@ def ready_tasks(manifest, mapping, snapshot, release):
             raise ValueError(f"{task_id}: missing active Project Issue #{number}")
         live[task_id] = by_number[number]
 
-    def completed(task_id):
-        item = live[task_id]
-        issue = item["content"]
-        return (issue["state"] == "CLOSED" and issue["stateReason"] == "COMPLETED"
-                and "acceptance:verified" in {x["name"] for x in issue.get("labels", {}).get("nodes", [])}
-                and (item.get("status") or {}).get("name") == "Done"
-                and bool((item.get("evidence") or {}).get("text", "").strip()))
-
     ready = []
     for task_id in sorted(required):
         item = live[task_id]
@@ -58,7 +61,7 @@ def ready_tasks(manifest, mapping, snapshot, release):
         if (item["content"]["state"] == "OPEN" and status in {"Ready", "Backlog"}
                 and not (item.get("agent") or {}).get("text", "").strip()
                 and not item["content"].get("assignees", {}).get("nodes", [])
-                and all(completed(dep) for dep in tasks[task_id]["depends_on"])):
+                and all(dependency_done(live[dep]) for dep in tasks[task_id]["depends_on"])):
             ready.append({"id": task_id, "title": tasks[task_id]["title"],
                           "url": item["content"]["url"], "status": status})
     return ready
