@@ -308,6 +308,8 @@
   "desktop.start": "授权并开始桌面工作",
   "desktop.continue": "使用新租约继续桌面工作",
   "desktop.busy": "桌面正在使用中。",
+  "desktop.linux.unavailable": "Linux 目标已配置但尚未就绪：缺少可信会话锁屏检查和应用绑定。不会截图、输入或调用模型。",
+  "desktop.linux.unavailableAction": "Linux 桌面控制尚未就绪",
   "desktop.browser.automation": "Worker 已获浏览器标签页授权",
   "desktop.browser.human": "浏览器自动化已暂停",
   "desktop.browser.draining": "正在停止浏览器自动化",

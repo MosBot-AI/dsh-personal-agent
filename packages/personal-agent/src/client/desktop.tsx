@@ -35,7 +35,8 @@ export function DesktopLaunch({ task, targets, activities, disabled, t, submit }
   const occupied = activities.some(activity => (target?.startUrl ? activity.application === application : !activity.startUrl)
     && (activity.taskId !== task.id || activity.phase !== 'human' || activity.inFlight))
   return <section className="dshpa-card dshpa-form" aria-label={t('desktop.title')}>
-    <p className="dshpa-muted">{t(target?.startUrl ? 'desktop.browser.disclosure' : 'desktop.disclosure')}</p>
+    <p className="dshpa-muted" role={target?.unavailableReason ? 'status' : undefined}>{t(target?.unavailableReason
+      ? 'desktop.linux.unavailable' : target?.startUrl ? 'desktop.browser.disclosure' : 'desktop.disclosure')}</p>
     {task.desktopApplication ? <p>{target?.startUrl ?? task.desktopApplication}</p>
       : <label>{t('desktop.application')}
         <select value={selected} disabled={disabled} onChange={event => setSelected(event.currentTarget.value)}>
@@ -43,9 +44,9 @@ export function DesktopLaunch({ task, targets, activities, disabled, t, submit }
           {targets.map(row => <option key={row.application} value={row.application}>{row.startUrl ?? row.application}</option>)}
         </select>
       </label>}
-    <button type="button" disabled={disabled || occupied || task.runtime !== 'inactive' || !target}
+    <button type="button" disabled={disabled || occupied || task.runtime !== 'inactive' || !target || !!target.unavailableReason}
       onClick={() => submit({ type: 'desktop_start', taskId: task.id, expectedVersion: task.version, cursor: requestId(), application })}>
-      {t(target?.startUrl ? (task.desktopApplication ? 'desktop.browser.continue' : 'desktop.browser.start')
+      {t(target?.unavailableReason ? 'desktop.linux.unavailableAction' : target?.startUrl ? (task.desktopApplication ? 'desktop.browser.continue' : 'desktop.browser.start')
         : (task.desktopApplication ? 'desktop.continue' : 'desktop.start'))}
     </button>
   </section>
