@@ -185,5 +185,5 @@ export async function openWebHost(probe: string, options: { patch?: readonly str
     return { status: response.status, result: message.result }
   }
 
-  return { root, close, get, exchange, rpc, diagnostics: () => recentDiagnostics }
+  return { root, pid: processHandle.pid, close, get, exchange, rpc, diagnostics: () => recentDiagnostics }
 }
