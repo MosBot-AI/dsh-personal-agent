@@ -132,6 +132,14 @@ Linux 笔记本运行未修改的 dshpa main `917e84efaf26c00f7a62b3b02c6253be72
 
 两项持久队列用例都恢复了原始 prompt 并核对 PNG 的 SHA-256，只提交一次且未发出取消请求。提供器测试验证了精确历史的作用域、队列超限时的取消，以及可读取的队列拒绝归属或普通队列响应失败时不会回查历史。这些证据来自受控的回环提供器夹具。
 
+## Chromium 工作台关闭时的常驻媒体运行
+
+在已合并的主分支 `1934e34` 上，DSH 0.2.2-rc.1 将构建好的常驻组件和媒体包加载到一次性配置中。Chromium 154.0.8037.92 以已鉴权的所有者身份打开「待办」，并显示测试任务。真实 ComfyUI 0.44.0 使用本地 SD1.5 检查点、PyTorch 2.15.0+cpu 和 24 步 256×256 工作流，在没有外网路由的私有网络命名空间中运行。
+
+准确的提示任务仍在运行且持久租约仍被占用时，Chromium 关闭了工作台标签页。该标签页消失后，原提示任务仍在运行，且常驻服务源上已无任何标签页。标签页保持关闭期间，同一个常驻进程与就绪实例校验了渲染结果。中继只观察到一次提交。提示任务与准备记录和已提交的值一致，租约随后释放。
+
+提供方文件、中继字节和 WorkStore 的 88,439 字节 PNG 的 SHA-256 均为 `61a2c5afcc900baff57b22fa43bee016f8f9ba0de4a7a3e5b93f5bd6cadb1b2c`。FFmpeg 解码了 256×256 PNG。新的 Chromium 标签页在同一常驻服务中打开「待办」，显示了同一任务。浏览器通过鉴权读取的收件箱快照也返回了该任务。测试进程退出后，私有网络中没有残留的 TCP 监听端口。[E18 工作台关闭验收证据](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6856211291)
+
 ## PA-033 剩余验收项
 
-真实运行覆盖 E06 和 E16 中的 CPU 与 CUDA 图片生成、CPU 视频生成、提交回执丢失恢复、运行中任务取消及限额内的 CUDA 分配失败。常驻测试覆盖 E18 中的宿主重启恢复，以及提供器连接中断期间的前台响应。实体设备的锁屏、休眠唤醒、整机离线行为和电源设置仍需在目标宿主上验证。视觉质量和用户指定约束的符合程度属于 PA-034 的验收范围。PA-033 仍为 In review。[CPU 与常驻验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990) · [GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
+真实运行覆盖 E06 和 E16 中的 CPU 与 CUDA 图片生成、CPU 视频生成、提交回执丢失恢复、运行中任务取消及限额内的 CUDA 分配失败。常驻测试覆盖 E18 中的宿主重启恢复、提供器连接中断期间的前台响应，以及工作台关闭时完成渲染。实体设备的锁屏、休眠唤醒、整机离线行为和电源设置仍需在目标宿主上验证。视觉质量和用户指定约束的符合程度属于 PA-034 的验收范围。PA-033 仍为 In review。[CPU 与常驻验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990) · [GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
