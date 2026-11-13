@@ -308,6 +308,8 @@
   "desktop.start": "Authorize and start desktop work",
   "desktop.continue": "Continue with a new desktop lease",
   "desktop.busy": "The desktop is already in use.",
+  "desktop.linux.unavailable": "Linux target is configured but not ready: trusted session-lock and application binding are unavailable. No screenshot, input or model call will run.",
+  "desktop.linux.unavailableAction": "Linux desktop control is not ready",
   "desktop.browser.automation": "Browser tab assigned to the Worker",
   "desktop.browser.human": "Browser automation is paused",
   "desktop.browser.draining": "Browser automation is stopping",

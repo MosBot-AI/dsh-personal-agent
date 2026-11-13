@@ -22,6 +22,7 @@ import { openWebHost, prepareWebHost } from './fixtures/web-host.js'
 
 const probe = fileURLToPath(new URL('./fixtures/local-flow-probe.mjs', import.meta.url))
 const desktopProbe = fileURLToPath(new URL('./fixtures/desktop-flow-probe.mjs', import.meta.url))
+const linuxDesktopProbe = fileURLToPath(new URL('./fixtures/desktop-linux-probe.mjs', import.meta.url))
 const contextProbe = fileURLToPath(new URL('./fixtures/context-flow-probe.mjs', import.meta.url))
 const memoryProbe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
 const projectProbe = fileURLToPath(new URL('./fixtures/project-flow-probe.mjs', import.meta.url))
@@ -53,7 +54,115 @@ async function waitForTask(
   assert.fail(`Timed out waiting for ${description}: ${JSON.stringify(await read())}\n${diagnostics()}`)
 }
 
+async function loadInboxClient(host: Awaited<ReturnType<typeof openWebHost>>, cookie: string) {
+  const page = await host.get('/', cookie)
+  expect(page.status).toBe(200)
+  const html = await page.text()
+  const manifest = /<script>globalThis\["__DSH_BOOT__"\] = ([^<]+)<\/script>/u.exec(html)?.[1]
+  assert.ok(manifest, 'The native Web frontend did not provide a browser boot manifest')
+  const graph = JSON.parse(manifest) as { entries: { id: string; url: string; inject?: string[] }[] }
+  const entry = graph.entries.find(item => item.id === '@mosbot-ai/dshpa')
+  assert.ok(entry, 'The production bundle must be a browser module in the native graph')
+  expect(entry.inject).toContain('@deepseek-ai/dsh-client-ui-layout')
+  expect(graph.entries.some(item => item.id === '@deepseek-ai/dsh-client-connection')).toBe(true)
+  const browserModule = await host.get(entry.url, cookie)
+  expect(browserModule.status).toBe(200)
+  expect(browserModule.headers.get('content-type')).toMatch(/javascript/)
+  const registered: { id: string; factory(resolve: (specifier: string) => unknown): unknown }[] = []
+  runInNewContext(await browserModule.text(), {
+    URL,
+    window: { __ModuleLoader__: { load: (module: typeof registered[number]) => registered.push(module) } },
+  }, { timeout: 1_000 })
+  expect(registered).toEqual([{ id: '@mosbot-ai/dshpa', factory: expect.any(Function) }])
+  return registered[0]!.factory(specifier => {
+    assert.ok(['react', 'react/jsx-runtime'].includes(specifier), `Unexpected browser module dependency ${specifier}`)
+    return require(specifier)
+  }) as { createInboxPort(connection: { rpc: { call(channel: string, endpoint: string, input: unknown): Promise<unknown> } }): InboxPort }
+}
+
 describe('published DSH Web local inbox', () => {
+  it.skipIf(process.platform !== 'linux')('rejects unbound Linux targets and never reinterprets macOS grants', async () => {
+    const host = await openWebHost(linuxDesktopProbe, { patch: [
+      '- id: dshpa', '  config:', '    inbox:',
+      "      storageDirectory: !!js dshHomePath('desktop-inbox')",
+      '      workRoot: !!js process.cwd()', '      worker:', '        provider: pa031-desktop-fixture',
+      '        model: desktop-worker', '        concurrency: 2', '        unmetered: true',
+      '      desktop:', '        applications: [org.example.Editor]', '        linuxApplications: [chromium]',
+    ] })
+    const cookie = await host.exchange()
+    const inbox: InboxPort = async request => {
+      const reply = await host.rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request, cookie)
+      assert.ok(reply.status === 200 && reply.result?.ok, JSON.stringify(reply))
+      return reply.result.value
+    }
+    const projectId = updated(await inbox({ type: 'create_project', commandId: 'linux-project',
+      title: 'Linux readiness', purpose: 'Verify model admission remains closed.' })).projectId!
+    const taskId = updated(await inbox({ type: 'create_task', projectId, commandId: 'linux-task',
+      sessionId: 'pa031-primary', outcome: 'Linux capability readiness' })).taskId!
+    const read = async () => {
+      const response = await inbox({ type: 'snapshot' })
+      assert.ok(response.ok && response.kind === 'snapshot')
+      return response.snapshot.tasks.find(task => task.id === taskId)!
+    }
+    const initial = await read()
+    const targets = await inbox({ type: 'snapshot' })
+    assert.ok(targets.ok && targets.kind === 'snapshot')
+    expect(targets.snapshot.desktopTargets).toContainEqual({ application: 'linux:chromium', unavailableReason: 'linux_binding_unavailable' })
+    expect(await inbox({ type: 'desktop_start', taskId, expectedVersion: initial.version,
+      cursor: 'linux-no-input', application: 'linux:chromium' })).toEqual({ ok: false, code: 'linux_binding_unavailable' })
+    expect(await read()).toMatchObject({ status: 'queued', version: initial.version, runtime: 'inactive' })
+    updated(await inbox({ type: 'desktop_start', taskId, expectedVersion: initial.version,
+      cursor: 'mac-no-linux-probe', application: 'org.example.Editor' }))
+    const waiting = await waitForTask(read, task => task.status === 'waiting_environment' && task.runtime === 'inactive',
+      'macOS provider unavailable, not substituted with Linux', host.diagnostics)
+    expect(waiting.wait?.referenceId).toBe('dshpa-desktop-wait:driver_unavailable')
+    const db = new DatabaseSync(join(host.root, 'home', 'desktop-inbox', DATABASE_FILENAME), { readOnly: true })
+    try {
+      expect(db.prepare('SELECT status FROM worker_inputs WHERE cursor = ?').get('linux-no-input')).toBeUndefined()
+      expect(db.prepare('SELECT status FROM worker_inputs WHERE cursor = ?').get('mac-no-linux-probe')?.status).toBe('not_delivered')
+    } finally { db.close() }
+  }, 30_000)
+
+  it.each([24, 25, 40])('accepts %d configured desktop targets through the native Inbox client', async count => {
+    const applications = Array.from({ length: 16 }, (_, index) => `org.example.App${index}`)
+    const linuxApplications = Array.from({ length: Math.min(16, count - applications.length) }, (_, index) => `Editor${index}`)
+    const browserProfiles = Array.from({ length: count - applications.length - linuxApplications.length }, (_, index) =>
+      [`          - id: tab${index}`, '            startUrl: https://example.test/']).flat()
+    const host = await openWebHost(linuxDesktopProbe, { patch: [
+      '- id: dshpa', '  config:', '    inbox:',
+      "      storageDirectory: !!js dshHomePath('desktop-target-boundary')",
+      '      workRoot: !!js process.cwd()', '      worker:', '        provider: pa031-desktop-fixture',
+      '        model: desktop-worker', '        concurrency: 2', '        unmetered: true',
+      '      desktop:', `        applications: ${JSON.stringify(applications)}`,
+      `        linuxApplications: ${JSON.stringify(linuxApplications)}`,
+      ...(browserProfiles.length ? ['        browserProfiles:', ...browserProfiles] : []),
+    ] })
+    const cookie = await host.exchange()
+    const compiled = await loadInboxClient(host, cookie)
+    const inbox = compiled.createInboxPort({ rpc: { async call(channel, endpoint, input) {
+      assert.equal(channel, '/api')
+      assert.equal(endpoint, INBOX_RPC_ENDPOINT)
+      const reply = await host.rpc<InboxResponse>(endpoint, input, cookie)
+      assert.equal(reply.status, 200)
+      return reply.result
+    } } })
+
+    const response = await inbox({ type: 'snapshot' })
+    assert.ok(response.ok && response.kind === 'snapshot')
+    const targets = response.snapshot.desktopTargets
+    assert.ok(targets)
+    expect(targets).toHaveLength(count)
+    expect(targets.filter(target => target.unavailableReason === 'linux_binding_unavailable'))
+      .toHaveLength(linuxApplications.length)
+    if (count === 40) {
+      const overflow = { application: 'org.example.Overflow' }
+      const invalid = compiled.createInboxPort({ rpc: { async call() {
+        return { ok: true, value: { ...response, snapshot: { ...response.snapshot, desktopTargets: [...targets, overflow] } } }
+      } } })
+      await expect(invalid({ type: 'snapshot' })).rejects.toThrow('Inbox transport unavailable')
+    }
+  }, 25_000)
+
   it('parks unavailable desktop work, fences input on takeover, and continues on a fresh lease', async () => {
     const host = await openWebHost(desktopProbe, { patch: [
       '- id: dshpa', '  config:', '    inbox:',
@@ -108,6 +217,7 @@ describe('published DSH Web local inbox', () => {
     expect(parked, host.diagnostics()).toMatchObject({ desktopApplication: application, canStartDesktop: true,
       wait: { referenceId: 'dshpa-desktop-wait:permission_required' } })
     expect((await snapshot()).desktopActivities?.[0]).toBeUndefined()
+    expect(await start('pa031-wrong-existing-grant', 'com.apple.Terminal')).toEqual({ ok: false, code: 'invalid_transition' })
     expect(await inbox({ type: 'start', taskId, expectedVersion: parked.version, cursor: 'pa031-bypass' }))
       .toEqual({ ok: false, code: 'invalid_transition' })
     updated(await start('pa031-click'))
@@ -781,28 +891,7 @@ describe('published DSH Web local inbox', () => {
     expect(await host.rpc(INBOX_RPC_ENDPOINT, { type: 'snapshot' }, cookie, 'https://untrusted.invalid'))
       .toMatchObject({ status: 403 })
 
-    const page = await host.get('/', cookie)
-    expect(page.status).toBe(200)
-    const html = await page.text()
-    const manifest = /<script>globalThis\["__DSH_BOOT__"\] = ([^<]+)<\/script>/u.exec(html)?.[1]
-    assert.ok(manifest, 'The native Web frontend did not provide a browser boot manifest')
-    const graph = JSON.parse(manifest) as { entries: { id: string; url: string; inject?: string[] }[] }
-    const entry = graph.entries.find(item => item.id === '@mosbot-ai/dshpa')
-    assert.ok(entry, 'The production bundle must be a browser module in the native graph')
-    expect(entry.inject).toContain('@deepseek-ai/dsh-client-ui-layout')
-    expect(graph.entries.some(item => item.id === '@deepseek-ai/dsh-client-connection')).toBe(true)
-    const browserModule = await host.get(entry.url, cookie)
-    expect(browserModule.status).toBe(200)
-    expect(browserModule.headers.get('content-type')).toMatch(/javascript/)
-    const registered: { id: string; factory(resolve: (specifier: string) => unknown): unknown }[] = []
-    runInNewContext(await browserModule.text(), {
-      window: { __ModuleLoader__: { load: (module: typeof registered[number]) => registered.push(module) } },
-    }, { timeout: 1_000 })
-    expect(registered).toEqual([{ id: '@mosbot-ai/dshpa', factory: expect.any(Function) }])
-    const compiled = registered[0]?.factory(specifier => {
-      assert.ok(['react', 'react/jsx-runtime'].includes(specifier), `Unexpected browser module dependency ${specifier}`)
-      return require(specifier)
-    }) as { createInboxPort(connection: { rpc: { call(channel: string, endpoint: string, input: unknown): Promise<unknown> } }): InboxPort }
+    const compiled = await loadInboxClient(host, cookie)
     const inbox = compiled.createInboxPort({ rpc: { async call(channel, endpoint, input) {
       assert.equal(channel, '/api')
       assert.equal(endpoint, INBOX_RPC_ENDPOINT)

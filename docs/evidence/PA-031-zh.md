@@ -61,6 +61,30 @@ macOS 真机验收需要所有者解锁会话、为签名的 DSH Computer Use he
 
 本次评审不能证明实体 macOS 输入／接管、锁屏／休眠唤醒、实体手机、真实 ComfyUI／GPU 或发布验收通过。PA-031 保持审查中，不添加 `acceptance:verified`，直至完成适用的真实桌面验收。当前 GitHub CLI 未登录，插件也无法操作私有 Project 字段；明确交接及进度记录在 Issue #25。用户知识库 `/Users/charleypeng/Documents/llmwiki` 不可用。
 
+## 历史 Linux 原生就绪检查切片
+
+此前仅验证就绪状态的候选版本识别 Linux 上已经挂载的 `cua-driver-native` 提供者，只在现有桌面租约内执行固定版本的只读权限探针。**不开放**应用发现、截图、输入、模型调用或前台重试。未知 OS 锁屏状态报告为 `session_state_unavailable`；不支持的 Wayland 报告为 `unsupported_desktop`。缺少 X11/AT-SPI/输入能力时仍等待权限。部署守卫继续阻止直接调用原始提供者工具。替换提供者、畸形或错误响应、租约丢失均拒绝放行。原生 D-Bus 地址不会返回给 Worker。
+
+合约审计：DSH 提交 `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159` 的[原生提供者](https://github.com/deepseek-ai/deepseek-harness/tree/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/experimental/computer-use-cua-driver-native)固定依赖 `@trycua/cua-driver@0.28.0`。SDK 源码标签 `cua-driver-rs-v0.28.0` 对应 [trycua/cua](https://github.com/trycua/cua/tree/1b50c02e2d34734f64d2d22f54eb76cc97b4a663/libs/cua-driver/rust) 提交 `1b50c02e2d34734f64d2d22f54eb76cc97b4a663`。Linux 的 `platform-linux/src/tools/impl_.rs` 为 `check_permissions` 定义严格空参数，返回 X11、Wayland、AT-SPI 和输入能力布尔值；macOS 风格的 `{prompt:false}` 不是 Linux 合约。`cua-driver-contract/src/outputs.rs` 明确说明 `desktop_unlocked` 代表截图范围授权，不是 OS 锁屏探针。`platform-linux/src/input/delivery.rs` 警告 Wayland 后台输入可能发往合成器焦点。这些信号都不足以授权安全的精确窗口输入。
+
+剩余实现：可信 OS 会话锁屏观察、Linux XDG 应用身份（不能假定为 macOS Bundle ID）、精确的存活 PID/窗口绑定、每窗口的新鲜 Token，以及仅后台操作的结果验证。物理锁屏、睡眠/唤醒和原生输入验收仍未验证。仅验证就绪状态的候选版本使用反向域名应用标识，并保留进程和窗口标识的权限边界。未改变权限、电源或安全设置，未调用模型，也未尝试真实原生操作。
+
+验证采用无密钥的确定性能力结果，不是原生设备实测。独立审查未发现此仅就绪边界的阻塞安全问题，建议补充在途接管及宿主准入回归，两项均已补充。变更前基线类型检查和构建通过，但全套中一个既有调度恢复断言失败（328/329）；单独重跑全部六项调度测试通过。该基线波动不归因于 Linux 变更。用户知识库路径不可用；以上源码结论均依据固定上游版本核查。
+
+候选版本验证环境：Linux x86_64、Node.js 24.22.1、pnpm 11.28.5。类型检查和构建通过；12 项 Linux 边界测试与两项原生宿主桌面测试通过（11 项无关 Web 用例按名称过滤，未声称通过）。计划校验、12 项协调测试和空白检查通过。完整 `pnpm check` 的 341 项中通过 340 项，同一个变更前已存在的调度恢复断言失败；限制测试并发也复现。因此完整测试门禁**并非全绿**。不请求自动合并或标记验收完成。本次实验界定了上游能力授权可作为会话锁屏证据的范围。
+
+## 显式 Linux 目标配置
+
+[Issue #77](https://github.com/MosBot-AI/dsh-personal-agent/issues/77) 的配置变更整合了 [#74](https://github.com/MosBot-AI/dsh-personal-agent/pull/74) 和 [#78](https://github.com/MosBot-AI/dsh-personal-agent/pull/78) 已评审的范围。`linuxApplications` 接受精确 XDG ID，与现有 macOS `applications` 列表分离。持久授权使用独立 `linux:` 命名空间。切换提供者不能重新解释既有 macOS 任务授权。仅配置标识不会启动或发现原生应用。
+
+已配置 Linux 目标携带 `unavailableReason=linux_binding_unavailable`。今日页面显示本地化不可用说明并禁用启动；服务端独立拒绝直接启动，发生在上下文、租约和 Worker 设置之前。这取代之前仅就绪的启动路径：Linux 目标配置不会占用 Worker 或调用提供者，去重新发现已知缺失的安全边界。最终运行时移除未使用的就绪探针及其两个专用等待原因。现有 macOS 目标不会选择 Linux 提供者。
+
+固定版本 SDK 的 `platform-linux/src/tools/impl_.rs` 以可执行文件基名和歧义启发式把已安装 XDG 条目关联到进程。其 `bundle_id` 不是可信的应用到进程绑定。官方 [logind 文档](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.login1.html) 将 `LockedHint` 定义为桌面环境报告的状态；仅 false 不能证明会话已解锁。不依据这些假设启用发现、快照或输入适配器。进程生命周期/PID 复用保护、精确原生窗口所有权、新鲜 Token 和可信会话/锁屏器集成仍是实现门禁。
+
+历史堆叠验证：35 项桌面单测、两项原生宿主桌面用例和两项双语界面用例通过；类型检查、构建、计划、12 项协调测试和空白检查通过。交叉审查未发现阻塞准入/界面缺陷。精确堆叠候选版本全套通过 360/361，只有此前已复现的 #75 调度竞态失败。临时应用**待合并 PR #76 中仅两个测试文件的变更**后通过 361/361，随后已撤回这些变更，不包含在此 PR 中。组合验证全绿与精确候选仍有基线失败明确区分。在该检查点，两个原 PR 均尚未合并。
+
+整合后的变更让运行时配置与「今日」客户端共用上限：16 个 macOS 应用、16 个 Linux 目标和 8 个浏览器 Profile。固定版本的原生 Web 套件验证了经认证的 24、25 和 40 个目标快照均可读取。实际提供的浏览器 Bundle 拒绝了刻意注入的第 41 个目标。Linux 启动测试验证直接 RPC 返回 `linux_binding_unavailable`，未创建 Worker 输入，且 macOS 授权仍沿原路径处理。实体 Linux 输入、锁屏及睡眠唤醒验收仍由 [Issue #25](https://github.com/MosBot-AI/dsh-personal-agent/issues/25) 跟踪。
+
 ## 全新 tarball 安装的浏览器启动（2026-11-13）
 
 [Issue #102](https://github.com/MosBot-AI/dsh-personal-agent/issues/102) 在已合入的 main `917e84e` 上复现了打包安装特有的故障。全新的 DSH Profile 安装了可选浏览器 tarball，也启动了 Chrome DevTools MCP，但持有租约的 Agent 找不到原生工具，任务在 Chromium 启动前进入 `driver_unavailable` 等待。两份 DSH 作用域模块版本和字节均相同，但 Profile 内的副本创建了独立的作用域标识。在一次性诊断副本中复用固定版本宿主的作用域模块后，同一租约工作流恢复运行。

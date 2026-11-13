@@ -636,6 +636,8 @@ export function createInboxService(options: InboxServiceOptions) {
           if (request.type === 'desktop_start') {
             if (!desktop) return failure('resource_unavailable')
             if (!desktopStartable(state, at) || (application && application !== request.application)) return failure('invalid_transition')
+            const target = desktop.targets.find(row => row.application === request.application)
+            if (target?.unavailableReason) return failure(target.unavailableReason)
           } else if (application || state.task.status !== 'queued') return failure('invalid_transition')
           if (!executor.canStart(ref, worker.presetId)) return failure('budget_exceeded')
           const assembly = options.context

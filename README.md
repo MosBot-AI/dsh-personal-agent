@@ -146,6 +146,21 @@ In **Today**, choose a queued task and application, then select **Authorize and 
 
 **Take over desktop** fences new automated input immediately. The native Worker releases its compute slot after started operations settle. **Continue with a new desktop lease** obtains a new grant and requires fresh observations. The local per-user reservation serializes desktop workflows across profiles. A lock, missing permissions, or an unavailable driver puts the task in an environment wait. The desktop deployment admits only its leased model tool. OS sandboxing requires a separate execution backend with an enforced isolation boundary.
 
+### Configure Linux targets (control not yet enabled)
+
+Keep `applications` for existing macOS bundle IDs. Configure exact Linux XDG IDs separately, without a `.desktop` suffix:
+
+```yaml
+desktop:
+  linuxApplications: [chromium, org.xfce.Mousepad]
+```
+
+A profile supports up to 16 macOS applications, 16 Linux XDG targets and eight browser profiles.
+
+The durable task key is namespaced, for example `linux:chromium`, so changing the installed provider cannot reinterpret a macOS grant. IDs are exact and case-sensitive; paths, commands, implicit suffix removal and fuzzy executable matching are not accepted. The upstream `list_apps` association uses process-name heuristics and is discovery metadata, not an authorization boundary.
+
+Today lists the target with an explicit unavailable disclosure and disabled launch. Direct RPC launch is also rejected before preparing context, acquiring a lease or starting a Worker. No native discovery, screenshot, input, model call or foreground fallback occurs. Linux control still requires trusted OS session-lock proof and exact live application/window binding; `LockedHint=false` and upstream `desktop_unlocked` do not establish those guarantees. Existing macOS and browser targets retain their original authority. [Contract audit](docs/evidence/PA-031.md#explicit-linux-target-configuration)
+
 ### Run an isolated browser task
 
 The optional Chrome bundle gives a task a leased browser profile and tab. Today shows the approved starting URL before launch. The model can observe and operate the isolated tab within its assigned origin. [Chrome provider setup](packages/browser-chrome/README.md)
