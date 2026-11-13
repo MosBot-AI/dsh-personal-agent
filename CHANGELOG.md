@@ -8,6 +8,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Recover mobile CI from a stalled Chrome handshake with one isolated browser restart.
 - Distinguish Chrome startup, DevTools command, and process failures in mobile CI diagnostics.
 
 - Keep mobile tasks and approvals updating on slow connections and after the live event stream reconnects.
