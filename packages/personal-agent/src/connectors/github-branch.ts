@@ -70,8 +70,15 @@ export async function prepareIsolatedBranch(input: DraftBranchInput, remote: Rem
     const head = `refs/heads/${input.head}`
     await run(['update-ref', head, sha])
     return { sha, close, async publish(writeSignal) {
-      await git(directory, [...transport, 'push', '--no-verify', '--porcelain', `--force-with-lease=${head}:`, '--', url,
-        `${sha}:${head}`], writeSignal, network)
+      const refspec = `${sha}:${head}`
+      const output = await git(directory, [...transport, 'push', '--no-verify', '--porcelain', `--force-with-lease=${head}:`,
+        '--', url, refspec], writeSignal, network)
+      // Git can return success for an up-to-date ref even with the empty lease.
+      const updates = output.split('\n').filter(line => line[1] === '\t')
+      const [flag, updatedRef] = updates[0]?.split('\t') ?? []
+      if (updates.length !== 1 || flag !== '*' || updatedRef !== refspec) {
+        throw new Error('Isolated Git did not create the approved draft branch')
+      }
     } }
   } catch (error) {
     close()

@@ -144,7 +144,7 @@ describe('reviewed GitHub draft action', () => {
 })
 
 describe('isolated Git and exact provider readback', () => {
-  it('prepares a deterministic private branch and publishes only that new ref', async () => {
+  function localOrigin() {
     const directory = mkdtempSync(join(tmpdir(), 'dshpa-draft-origin-'))
     onTestFinished(() => rmSync(directory, { recursive: true, force: true }))
     const git = (...args: string[]) => execFileSync('git', args, { cwd: directory, encoding: 'utf8', stdio: 'pipe' }).trim()
@@ -152,18 +152,24 @@ describe('isolated Git and exact provider readback', () => {
     writeFileSync(join(directory, 'README.md'), 'Base file\n')
     git('add', 'README.md')
     git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', '-c', 'commit.gpgSign=false', 'commit', '-m', 'Base')
-    const base = git('rev-parse', 'HEAD')
+    return { git, base: git('rev-parse', 'HEAD'), source: { kind: 'local' as const, directory, binding: config.binding } }
+  }
+
+  it('prepares a deterministic private branch and publishes only that new ref', async () => {
+    const { git, base, source } = localOrigin()
     const operation = `github-draft-${'c'.repeat(64)}`
     const inputBranch = { base: 'main', baseSha: base, head: draftHead(operation), path: draftPath(operation),
       content: input.content, preparedAt: '2026-11-08T01:00:00.000Z' }
-    const source = { kind: 'local' as const, directory, binding: config.binding }
     const signal = AbortSignal.timeout(15_000)
     const one = await prepareIsolatedBranch(inputBranch, source, signal)
     try {
       expect(() => git('rev-parse', '--verify', `refs/heads/${inputBranch.head}`)).toThrow()
       const two = await prepareIsolatedBranch(inputBranch, source, signal)
-      try { expect(two.sha).toBe(one.sha) } finally { two.close() }
-      await one.publish(signal)
+      try {
+        expect(two.sha).toBe(one.sha)
+        await one.publish(signal)
+        await expect(two.publish(signal)).rejects.toThrow('Isolated Git did not create the approved draft branch')
+      } finally { two.close() }
       expect(git('rev-parse', `refs/heads/${inputBranch.head}`)).toBe(one.sha)
       expect(git('show', `${one.sha}:${inputBranch.path}`)).toBe(input.content.trim())
       expect(git('rev-parse', 'refs/heads/main')).toBe(base)
@@ -171,6 +177,39 @@ describe('isolated Git and exact provider readback', () => {
       await expect(one.publish(signal)).rejects.toThrow('Isolated Git operation failed')
       expect(git('rev-parse', `refs/heads/${inputBranch.head}`)).toBe(base)
     } finally { one.close() }
+  })
+
+  it('does not create a draft when the exact approved head appears before handoff', async () => {
+    const { git, base, source } = localOrigin()
+    const createPull = vi.fn(async () => {})
+    const lookup = vi.fn(async () => undefined)
+    const h = await makeDraftHarness(config, {
+      async open(_signal, current) {
+        return { current, async baseHead() { return base },
+          prepare: (input, signal) => prepareIsolatedBranch(input, source, signal), createPull, lookup }
+      },
+    })
+    onTestFinished(() => h.close())
+    const { payload, ...review } = draftView(await h.request({ type: 'github_draft_prepare', taskId: h.taskId,
+      expectedVersion: h.version(), commandId: 'prepare-draft', draft: input }))
+    const signal = AbortSignal.timeout(15_000)
+    const existing = await prepareIsolatedBranch(payload, source, signal)
+    try {
+      expect(existing.sha).toBe(payload.headSha)
+      await existing.publish(signal)
+    } finally { existing.close() }
+
+    expect(await h.approve({ payload, ...review })).toMatchObject({ ok: true })
+    const dispatch = () => h.request({ type: 'github_draft_dispatch', taskId: h.taskId,
+      operationId: payload.operationId, expectedVersion: h.version() })
+    expect(await dispatch()).toMatchObject({ ok: true })
+    const operationId = operationIdSchema.parse(payload.operationId)
+    await vi.waitFor(() => expect(h.store.getEffect(h.ref, operationId)?.status).toBe('uncertain'))
+    expect(createPull).not.toHaveBeenCalled()
+    expect(lookup).toHaveBeenCalledWith(payload, expect.any(AbortSignal))
+    expect(await dispatch()).toMatchObject({ ok: false })
+    expect(git('rev-parse', `refs/heads/${payload.head}`)).toBe(payload.headSha)
+    expect(git('rev-parse', 'refs/heads/main')).toBe(base)
   })
 
   it('calls only the fixed draft endpoint after head/base readback and rejects mismatched or ambiguous receipts', async () => {
