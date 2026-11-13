@@ -43,5 +43,7 @@ OpenAPI 的 `backendSession` Cookie 绑定仅描述当前已实现的 DSH HTTP �
 
 分页测试还覆盖超过 64 条任务、精确公共字段、所有者和 Profile 隔离、隐藏任务、跨设备和篡改游标、重启后游标失效、撤销以及实时插入顺序。夹具使用隔离的本地状态。实体手机、外部部署的 HTTPS 来源和经认证的 Hermes HTTP 仍分别需要验收证据。
 
+原生移动端套件还通过经过证书验证的回环 HTTPS 代理，在构建后的收件箱上检查两条共享路由。配对设备发现 `tasks.list`，从原生 WorkStore 读取两页任务，每页一项。所有者撤销设备后，原设备重用游标时收到 `auth_required`。另一台已注册设备也无法使用该游标。这项本地检查通过 `pnpm test:mobile` 运行。[原生 HTTPS 覆盖 #119](https://github.com/MosBot-AI/dsh-personal-agent/issues/119)
+
 - [能力发现 #79](https://github.com/MosBot-AI/dsh-personal-agent/pull/79) 已合入，提交为 `3900cf4406caef7f15af69d09c9b6840255ce670`。能力发现分支通过了 14 项专项 API 测试。早期全量套件的失败和未运行的原生浏览器阶段均记录在 PR 中。
 - [任务分页 #81](https://github.com/MosBot-AI/dsh-personal-agent/pull/81) 已合入，提交为 `ffbfa1bae6b147e19458269a662337e0d06c24f7`。最终整合版本通过了 19 项专项 API 测试、8 项原生 Chromium 用例、类型检查、构建、12 项协调测试和计划校验。PR 工作流在 Chrome 启动超时后重跑通过，合并提交的主线工作流首轮通过。[整合证据](https://github.com/MosBot-AI/dsh-personal-agent/issues/23#issuecomment-6846471838) · [PR CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43381473515) · [主线 CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43382599557)
