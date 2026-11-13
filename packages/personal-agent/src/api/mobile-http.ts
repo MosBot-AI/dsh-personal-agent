@@ -183,7 +183,7 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
       if ([...url.searchParams.keys()].some(key => key !== 'limit' && key !== 'cursor')
         || url.searchParams.getAll('limit').length > 1 || url.searchParams.getAll('cursor').length > 1
         || (limit !== null && (!/^[1-9]\d?$/u.test(limit) || Number(limit) > 64))
-        || (cursor !== null && (cursor.length < 1 || cursor.length > 2048))) {
+        || (cursor !== null && (cursor === '' || [...cursor].length > 2048))) {
         return json(response, 400, sharedError('invalid_request', 'Invalid task list query.'))
       }
       const result = feed.sharedTasks(credential, limit === null ? 32 : Number(limit), cursor)
