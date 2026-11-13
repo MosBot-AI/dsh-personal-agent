@@ -8,6 +8,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Retry verification of completed ComfyUI output after local temporary storage fills up or reaches its quota, retaining the original render and media lease.
 - Count Unicode code points in shared task cursor queries so clients receive the pagination restart error for undecodable cursors within the contract limit.
 
 - Confirm prerequisite completion in GitHub Project before promoting dependent tasks to Ready.

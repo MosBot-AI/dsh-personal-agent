@@ -33,10 +33,12 @@ export function identify(bytes: Buffer): SupportedMime | undefined {
 }
 
 export async function verifyOutput(bytes: Buffer, assetId: string, signal: AbortSignal): Promise<MediaOutput> {
+  if (signal.aborted) throw new BackendError('cancelled')
   const mediaType = identify(bytes)
   if (!mediaType) throw new BackendError('invalid_result')
-  const directory = await mkdtemp(join(tmpdir(), 'dshpa-media-'))
+  let directory: string | undefined
   try {
+    directory = await mkdtemp(join(tmpdir(), 'dshpa-media-'))
     const file = join(directory, 'output')
     await writeFile(file, bytes, { mode: 0o600 })
     const options = { signal, timeout: 30_000, maxBuffer: 64 * 1024 }
@@ -59,12 +61,13 @@ export async function verifyOutput(bytes: Buffer, assetId: string, signal: Abort
       '-map', '0:v:0', '-f', 'null', '-'], options)
     return result
   } catch (error) {
-    if (signal.aborted) throw new BackendError('cancelled')
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
-      throw new BackendError('provider_unavailable')
-    }
+    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+    if (code === 'ENOSPC' || code === 'EDQUOT') throw new BackendError('busy')
+    if (code === 'ENOENT') throw new BackendError('provider_unavailable')
     throw new BackendError('invalid_result')
   } finally {
-    await rm(directory, { recursive: true, force: true })
+    // Cleanup must not replace the verified result or the primary failure.
+    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+    if (signal.aborted) throw new BackendError('cancelled')
   }
 }

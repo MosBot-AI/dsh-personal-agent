@@ -118,6 +118,12 @@ Linux 笔记本运行未修改的 dshpa main `917e84efaf26c00f7a62b3b02c6253be72
 
 再次重启后，宿主同时挂载两个修订，并为新任务选择修订 2。Prompt `7ce41451-81fa-4300-a4da-93539b75f163` 经修订 1 恢复。排队的 prompt `62b9258d-3b48-4b5a-af34-b7c067f78176` 经修订 2 完成，租约随后释放。每条路由收到一次 POST，只回读各自 prompt 的历史。FFmpeg 独立解码了两张 64×64 PNG。按修订顺序，其 SHA-256 分别为 `ee3c489b8d2710d6f6b04a54e766b9010ca3f5a8dcebd2b73d33b21e0f8ad161` 和 `4dc45eff1ecc24a8d8036f58e59ec0b14e533ec3e5b7a268a952baa6754139bb`，均与 WorkStore 一致。这验证了 E21 的配置路由路径。[配置切换验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825638729)
 
+## 校验临时存储耗尽后的恢复
+
+回环 HTTP 夹具为一个已完成的 prompt 提供由 FFmpeg 生成的有效 PNG。测试分别在校验器创建私有目录和写入输入文件时注入 `ENOSPC` 与 `EDQUOT`。旧实现的四种情况都以 `invalid_result` 失败。适配器现返回 `busy`，任务保持 `collecting`，并在冷重开 WorkStore 后继续持有租约。存储恢复可用后，FFmpeg 解码 PNG，写入的 SHA-256 与夹具一致。每个用例只提交一次 prompt。
+
+文件写入用例同时验证部分写入文件的清理，以及清理报告错误时原容量错误的保留。另一个用例在清理期间取消，确认提供器返回 `cancelled`。已有的损坏输出测试仍返回 `invalid_result`。这些检查使用故障注入和回环提供器夹具。[恢复工单 #123](https://github.com/MosBot-AI/dsh-personal-agent/issues/123)
+
 ## PA-033 剩余验收项
 
 真实运行覆盖 E06 和 E16 中的 CPU 与 CUDA 图片生成、CPU 视频生成、提交回执丢失恢复、运行中任务取消及限额内的 CUDA 分配失败。常驻测试覆盖 E18 中的宿主重启恢复，以及提供器连接中断期间的前台响应。实体设备的锁屏、休眠唤醒、整机离线行为和电源设置仍需在目标宿主上验证。视觉质量和用户指定约束的符合程度属于 PA-034 的验收范围。PA-033 仍为 In review。[CPU 与常驻验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990) · [GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
