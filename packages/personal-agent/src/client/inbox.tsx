@@ -466,24 +466,24 @@ export function Inbox({ t, port, connection, openSession, memory: suppliedMemory
         </div>
         <CreateForm memory={memory} snapshot={snapshot} t={t} writable={writable} changed={changed}
           busy={mutations.current.has(`${memory.form}:create`)} createProject={createProject} createTask={createTask} />
-        {snapshot && connected && <Projects key={connectionKey} projects={writable ? snapshot.projects : []}
+        {snapshot && connected && <Projects key={`projects:${connectionKey}`} projects={writable ? snapshot.projects : []}
           tasks={writable ? snapshot.tasks : []} port={port} mutate={(key, request, acknowledge) => { void mutate(key, request, acknowledge) }}
           chooseTask={chooseTask} current={() => connection.getSnapshot() === connectionKey}
           writable={writable && !snapshot.recoveryMode} busy={mutations.current.has('goal-plan')} t={t} />}
         {snapshot?.usage && <Usage usage={snapshot.usage} t={t} />}
         {snapshot?.mobileConfigured && writable && !snapshot.recoveryMode
-          && <MobileDevices key={connectionKey} port={port} t={t} />}
+          && <MobileDevices key={`mobile:${connectionKey}`} port={port} t={t} />}
         {snapshot?.memoryConfigured && <PersonalMemory t={t} port={port} projects={snapshot.projects} tasks={snapshot.tasks}
           connectionKey={connectionKey} currentConnection={() => connection.getSnapshot()} readable={writable}
           writable={writable && !snapshot.recoveryMode} />}
-        {snapshot && writable && !snapshot.recoveryMode && <ReviewedSkills key={connectionKey} projects={snapshot.projects}
+        {snapshot && writable && !snapshot.recoveryMode && <ReviewedSkills key={`skills:${connectionKey}`} projects={snapshot.projects}
           tasks={snapshot.tasks} port={port} t={t} chooseTask={chooseTask}
           current={() => connection.getSnapshot() === connectionKey} />}
-        {snapshot?.knowledgeConfigured && connected && <LocalKnowledge key={connectionKey} t={t} port={port}
+        {snapshot?.knowledgeConfigured && connected && <LocalKnowledge key={`knowledge:${connectionKey}`} t={t} port={port}
           readable={writable && !snapshot.recoveryMode} current={() => connection.getSnapshot() === connectionKey} />}
-        {snapshot?.githubRead && connected && <GitHubRead key={connectionKey} t={t} port={port} projectId={snapshot.githubRead.projectId}
+        {snapshot?.githubRead && connected && <GitHubRead key={`github:${connectionKey}`} t={t} port={port} projectId={snapshot.githubRead.projectId}
           readable={writable && !snapshot.recoveryMode} current={() => connection.getSnapshot() === connectionKey} />}
-        {snapshot?.proactiveConfigured && connected && <Suggestions key={connectionKey} snapshot={snapshot} port={port} t={t}
+        {snapshot?.proactiveConfigured && connected && <Suggestions key={`suggestions:${connectionKey}`} snapshot={snapshot} port={port} t={t}
           current={() => connection.getSnapshot() === connectionKey} writable={writable && !snapshot.recoveryMode}
           refresh={() => { void refresh() }} />}
         {snapshot?.schedules && <Routines routines={snapshot.schedules.routines} tasks={snapshot.tasks} t={t}

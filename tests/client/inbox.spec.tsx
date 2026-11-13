@@ -108,6 +108,54 @@ async function fill(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelect
 }
 
 describe('native Inbox client', () => {
+  it('retires unavailable panels on refresh and remounts them on reconnect', async () => {
+    const enabled = snapshot({ knowledgeConfigured: true, mobileConfigured: true })
+    let current = enabled
+    const port = vi.fn<InboxPort>(async request => {
+      if (request.type === 'snapshot') return { ok: true, kind: 'snapshot', snapshot: current }
+      if (request.type === 'mobile_devices') return { ok: true, kind: 'mobile_devices', available: true, devices: [] }
+      throw new Error('Unexpected request')
+    })
+    const { node, carrier } = await mount(port)
+    const work = node.querySelector('.dshpa-work')!
+    const panels = (label: Parameters<Translate>[0]) => [...work.querySelectorAll('h2,summary')]
+      .filter(element => element.textContent === t(label))
+    const refresh = () => click(node.querySelector<HTMLButtonElement>('.dshpa-header-actions button')!)
+    const goals = panels('plan.heading')[0]
+    expect(goals).toBeDefined()
+    expect(panels('mobile.title')).toHaveLength(1)
+    expect(panels('knowledge.heading')).toHaveLength(1)
+    expect(panels('skills.title')).toHaveLength(1)
+
+    current = snapshot({ recoveryMode: 'restore' })
+    await refresh()
+    expect(panels('plan.heading')).toHaveLength(1)
+    expect(panels('plan.heading')[0]).toBe(goals)
+    expect(panels('mobile.title')).toHaveLength(0)
+    expect(panels('knowledge.heading')).toHaveLength(0)
+    expect(panels('skills.title')).toHaveLength(0)
+
+    current = enabled
+    await refresh()
+    expect(panels('plan.heading')).toHaveLength(1)
+    expect(panels('plan.heading')[0]).toBe(goals)
+    expect(panels('mobile.title')).toHaveLength(1)
+    expect(panels('knowledge.heading')).toHaveLength(1)
+    expect(panels('skills.title')).toHaveLength(1)
+    await fill(field(node, t('knowledge.query')), 'Prior generation')
+    expect(field(node, t('knowledge.query')).value).toBe('Prior generation')
+
+    await act(async () => carrier.change('disconnected:1'))
+    expect(panels('knowledge.heading')).toHaveLength(0)
+    await act(async () => carrier.change('connected:2'))
+    expect(panels('plan.heading')).toHaveLength(1)
+    expect(panels('plan.heading')[0]).not.toBe(goals)
+    expect(panels('mobile.title')).toHaveLength(1)
+    expect(panels('knowledge.heading')).toHaveLength(1)
+    expect(panels('skills.title')).toHaveLength(1)
+    expect(field(node, t('knowledge.query')).value).toBe('')
+  })
+
   it('requires the exact approved draft before offering publication', async () => {
     const work = task('draft-task')
     const digest = 'd'.repeat(64)
