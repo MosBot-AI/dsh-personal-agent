@@ -63,11 +63,25 @@ async function tlsProxy(root: string, upstreamPort: number) {
   let available = true
   let silenceEvents = false
   let mutedFrames = 0
+  let invalidateCursor = false
+  const sharedRequests: { path: string; cursor: boolean; status: number }[] = []
   const server = createHttpsServer({ key: readFileSync(keyPath), cert }, (request, response) => {
     if (!available) { request.socket.destroy(); return }
-    const upstream = httpRequest({ hostname: '127.0.0.1', port: upstreamPort, path: request.url,
+    const url = new URL(request.url ?? '/', 'https://127.0.0.1')
+    const shared = request.method === 'GET' && (url.pathname === '/v1/capabilities' || url.pathname === '/v1/tasks')
+    const cursor = url.searchParams.has('cursor')
+    let path = request.url
+    if (invalidateCursor && shared && url.pathname === '/v1/tasks' && cursor) {
+      invalidateCursor = false
+      // Exercise the native cursor error over the browser's existing authenticated TLS connection.
+      url.searchParams.set('cursor', 'fixture-invalid')
+      path = url.pathname + url.search
+    }
+    const upstream = httpRequest({ hostname: '127.0.0.1', port: upstreamPort, path,
       method: request.method, headers: request.headers }, incoming => {
-      response.writeHead(incoming.statusCode ?? 502, incoming.headers)
+      const status = incoming.statusCode ?? 502
+      if (shared) sharedRequests.push({ path: url.pathname, cursor, status })
+      response.writeHead(status, incoming.headers)
       if (incoming.headers['content-type']?.startsWith('text/event-stream')) {
         response.flushHeaders()
         incoming.on('data', chunk => {
@@ -102,6 +116,8 @@ async function tlsProxy(root: string, upstreamPort: number) {
     cert, port: address.port, origin: `https://127.0.0.1:${address.port}`,
     silenceEvents(value: boolean) { silenceEvents = value },
     mutedFrames: () => mutedFrames,
+    sharedRequests,
+    invalidateNextCursor() { invalidateCursor = true },
     setAvailable(value: boolean) {
       available = value
       if (!available) server.closeAllConnections()
@@ -109,14 +125,15 @@ async function tlsProxy(root: string, upstreamPort: number) {
   }
 }
 
-async function openMobile(approvals = false) {
+async function openMobile(approvals = false, { seedPages = false } = {}) {
   const port = await availablePort()
   const prepared = approvals ? prepareWebHost(probe) : undefined
   if (prepared) onTestFinished(() => rmSync(prepared.root, { recursive: true, force: true }))
   const proxy = prepared && await tlsProxy(prepared.root, port)
   const origin = proxy?.origin ?? 'https://mobile.test'
   const mobileHost = new URL(origin).host
-  if (prepared) writeFileSync(join(prepared.root, 'mobile-review.json'), JSON.stringify({ origin, port }), { mode: 0o600 })
+  if (prepared) writeFileSync(join(prepared.root, 'mobile-review.json'),
+    JSON.stringify({ origin, port, seedPages }), { mode: 0o600 })
   const host = await openWebHost(probe, prepared ? { prepared } : { patch: [
     '- id: dshpa', '  config:', '    inbox:',
     "      storageDirectory: !!js dshHomePath('mobile-inbox')", '      workRoot: !!js process.cwd()',
@@ -369,22 +386,25 @@ it('serves shared task pages and exact reviews through local HTTPS with native d
 
 
 const chromePath = process.env.DSHPA_CHROME_PATH
-it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome browser with a mobile viewport', async () => {
-  const { host, inbox, origin, proxy } = await openMobile(true)
+it.skipIf(!chromePath)('pairs, browses older tasks, approves, reconnects and revokes in real mobile Chrome', async () => {
+  const { host, inbox, origin, proxy } = await openMobile(true, { seedPages: true })
   assert.ok(proxy && chromePath)
   const chrome = await openHeadlessChrome(chromePath, join(host.root, 'chrome-profile'), proxy.cert)
+  const waitFor = (expression: string) => chrome.waitFor(expression).catch(cause => {
+    throw new Error('Chrome did not reach: ' + expression, { cause })
+  })
   await chrome.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true })
   await chrome.send('Emulation.setTouchEmulationEnabled', { enabled: true })
   await chrome.send('Network.enable')
   await chrome.send('Network.setExtraHTTPHeaders', { headers: { 'Accept-Language': 'en-US' } })
   const navigation = await chrome.send<{ errorText?: string }>('Page.navigate', { url: origin + '/' })
   expect(navigation.errorText).toBeUndefined()
-  await chrome.waitFor("document.querySelector('#pair')?.hidden === false")
+  await waitFor("document.querySelector('#pair')?.hidden === false")
   const pairing = await inbox({ type: 'mobile_pair', label: 'Headless Chrome' })
   assert.ok(pairing.ok && pairing.kind === 'mobile_pair')
   await chrome.evaluate(`document.querySelector('#code').value = ${JSON.stringify(pairing.pairingCode)};
     document.querySelector('#pair').requestSubmit()`)
-  await chrome.waitFor("document.querySelector('#work')?.hidden === false")
+  await waitFor("document.querySelector('#work')?.hidden === false")
   const cookies = await chrome.send<{ cookies: { name: string; secure: boolean; httpOnly: boolean; sameSite: string; path: string }[] }>(
     'Network.getCookies', { urls: [origin] })
   const { name, secure, httpOnly, sameSite, path } = cookies.cookies.find(cookie => cookie.name === '__Host-dshpa-mobile') ?? {}
@@ -398,7 +418,50 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   const eligibility = await chrome.send<{ installabilityErrors: { errorId: string }[] }>('Page.getInstallabilityErrors')
   expect(eligibility.installabilityErrors).toEqual([])
   await chrome.send('Page.reload')
-  await chrome.waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#pair')?.hidden === true")
+  await waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#pair')?.hidden === true")
+
+  const taskRows = () => chrome.evaluate<string[]>("Array.from(document.querySelectorAll('#tasks > li'), row => row.textContent)")
+  const click = (id: string) => chrome.evaluate(`document.querySelector(${JSON.stringify('#' + id)}).click()`)
+  const discovery = { path: '/v1/capabilities', cursor: false, status: 200 }
+  const firstPage = { path: '/v1/tasks', cursor: false, status: 200 }
+  const continuation = { path: '/v1/tasks', cursor: true, status: 200 }
+  const recent = await taskRows()
+  expect(recent).toHaveLength(64)
+  expect(new Set(recent).size).toBe(64)
+  expect(recent.join(' ')).not.toContain('Task outside the recent snapshot')
+  expect(proxy.sharedRequests).toEqual([])
+
+  const nextPageReady = "!document.querySelector('#task-next').hidden && !document.querySelector('#task-next').disabled"
+  const browse = async () => {
+    await click('browse-tasks')
+    await waitFor("document.querySelector('#tasks').children.length === 32 && " + nextPageReady)
+  }
+  await browse()
+  const firstRows = await taskRows()
+  expect(firstRows.join(' ')).toContain('Review approve')
+  expect(firstRows.join(' ')).toContain('Browse fixture task 030')
+  expect(proxy.sharedRequests).toEqual([discovery, firstPage])
+
+  proxy.invalidateNextCursor()
+  await click('task-next')
+  await waitFor("document.querySelector('#task-browse-status').textContent === 'This task page expired. Restart from the first page.'")
+  expect(proxy.sharedRequests).toEqual([discovery, firstPage, { ...continuation, status: 400 }])
+  expect(await chrome.evaluate("!document.querySelector('#task-restart').hidden && !document.querySelector('#task-restart').disabled")).toBe(true)
+  await click('task-restart')
+  await vi.waitFor(() => expect(proxy.sharedRequests.slice(3)).toEqual([discovery, firstPage]))
+  await waitFor(nextPageReady)
+  expect(await taskRows()).toEqual(firstRows)
+
+  await click('task-next')
+  await waitFor("document.querySelector('#tasks').textContent.includes('Browse fixture task 061') && " + nextPageReady)
+  const secondRows = await taskRows()
+  expect(secondRows).toHaveLength(32)
+  expect(secondRows.filter(row => firstRows.includes(row))).toEqual([])
+  await click('task-next')
+  await waitFor("document.querySelector('#tasks').textContent.includes('Task outside the recent snapshot')")
+  expect(await taskRows()).toEqual([expect.stringContaining('Task outside the recent snapshot')])
+  expect(await chrome.evaluate("document.querySelector('#task-next').hidden || document.querySelector('#task-next').disabled")).toBe(true)
+  expect(proxy.sharedRequests.slice(5)).toEqual([continuation, continuation])
 
   const local = await inbox({ type: 'snapshot' })
   assert.ok(local.ok && local.kind === 'snapshot')
@@ -407,9 +470,9 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   assert.ok(review && phone)
   expect(await inbox({ type: 'mobile_review', requestId: review.id, expectedVersion: review.version, digest: review.digest,
     deviceId: phone.deviceId })).toMatchObject({ ok: true })
-  await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload approve')")
+  await waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload approve')")
   await chrome.evaluate("document.querySelector('#review-items .review-actions button').click()")
-  await chrome.waitFor("document.querySelector('#review-status')?.textContent === 'Review response recorded.'")
+  await waitFor("document.querySelector('#review-status')?.textContent === 'Review response recorded.'")
   const decided = await inbox({ type: 'snapshot' })
   assert.ok(decided.ok && decided.kind === 'snapshot')
   expect(decided.snapshot.approvals.some(item => item.id === review.id)).toBe(false)
@@ -417,25 +480,34 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   assert.ok(outstanding)
   expect(await inbox({ type: 'mobile_review', requestId: outstanding.id, expectedVersion: outstanding.version,
     digest: outstanding.digest, deviceId: phone.deviceId })).toMatchObject({ ok: true })
-  await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  await waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  expect(await taskRows()).toEqual([expect.stringContaining('Task outside the recent snapshot')])
+  await click('recent-tasks')
+  await waitFor("document.querySelector('#tasks').children.length === 64")
+  expect((await taskRows()).join(' ')).not.toContain('Task outside the recent snapshot')
+  await browse()
+  const requestsBeforeHide = proxy.sharedRequests.length
 
   await chrome.evaluate(`globalThis.visibilitySamples = [];
     document.addEventListener('visibilitychange', () => globalThis.visibilitySamples.push({
       state: document.visibilityState,
       tasks: document.querySelector('#tasks').children.length,
       reviews: document.querySelector('#review-items').children.length,
+      pagingVisible: ['#task-next', '#task-restart'].some(selector => document.querySelector(selector).getClientRects().length),
     }))`)
   const returnToMobileTab = await chrome.switchToAnotherTab()
-  await chrome.waitFor("document.visibilityState === 'hidden'")
+  await waitFor("document.visibilityState === 'hidden'")
   expect(await inbox({ type: 'create_task', commandId: 'create-while-browser-hidden', projectId: 'mobile-review-project',
     sessionId: 'mobile-fixture-chat', outcome: 'Task created while Chrome was hidden' })).toMatchObject({ ok: true })
   await returnToMobileTab()
-  await chrome.waitFor("globalThis.visibilitySamples.some(sample => sample.state === 'visible')")
+  await waitFor("globalThis.visibilitySamples.some(sample => sample.state === 'visible')")
   expect(await chrome.evaluate('globalThis.visibilitySamples')).toEqual([
-    { state: 'hidden', tasks: 0, reviews: 0 },
-    { state: 'visible', tasks: 0, reviews: 0 },
+    { state: 'hidden', tasks: 0, reviews: 0, pagingVisible: false },
+    { state: 'visible', tasks: 0, reviews: 0, pagingVisible: false },
   ])
-  await chrome.waitFor("document.querySelector('#tasks')?.textContent.includes('Task created while Chrome was hidden') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  await waitFor("document.querySelector('#tasks')?.textContent.includes('Task created while Chrome was hidden') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  expect(await taskRows()).toHaveLength(64)
+  expect(proxy.sharedRequests).toHaveLength(requestsBeforeHide)
 
   const silencedAt = performance.now()
   proxy.silenceEvents(true)
@@ -449,16 +521,19 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   }, { interval: 100, timeout: 35_000 })
   expect(performance.now() - silencedAt).toBeGreaterThan(15_000)
   proxy.silenceEvents(false)
-  await chrome.waitFor("document.querySelector('#tasks')?.textContent.includes('Task created during silent stream') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  await waitFor("document.querySelector('#tasks')?.textContent.includes('Task created during silent stream') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
 
   proxy.setAvailable(false)
-  await chrome.waitFor("document.querySelector('#work')?.hidden === true && document.querySelector('#tasks')?.children.length === 0 && document.querySelector('#review-items')?.children.length === 0")
+  await waitFor("document.querySelector('#work')?.hidden === true && document.querySelector('#tasks')?.children.length === 0 && document.querySelector('#review-items')?.children.length === 0")
   expect(await inbox({ type: 'create_task', commandId: 'create-during-browser-disconnect', projectId: 'mobile-review-project',
     sessionId: 'mobile-fixture-chat', outcome: 'Review after Chrome reconnect' })).toMatchObject({ ok: true })
   proxy.setAvailable(true)
-  await chrome.waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#tasks')?.textContent.includes('Review after Chrome reconnect') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  await waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#tasks')?.textContent.includes('Review after Chrome reconnect') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+  await browse()
   expect(await inbox({ type: 'mobile_revoke', deviceId: phone.deviceId })).toMatchObject({ ok: true })
-  await chrome.waitFor("document.querySelector('#pair')?.hidden === false && document.querySelector('#work')?.hidden === true && document.querySelector('#review-items')?.children.length === 0")
+  await waitFor(`document.querySelector('#pair').hidden === false && document.querySelector('#work').hidden === true
+    && document.querySelector('#tasks').children.length === 0 && document.querySelector('#review-items').children.length === 0
+    && ['#task-next', '#task-restart'].every(selector => document.querySelector(selector).getClientRects().length === 0)`)
 }, 80_000 + chromeStartupRetryAllowanceMs)
 
 it.skipIf(!chromePath)('rejects an expired pairing code and clears an expired device in a real browser', async () => {

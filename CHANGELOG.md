@@ -33,6 +33,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Improve local knowledge keyword ranking with stronger document-body matches and priority for exact filenames and relative paths.
 
 ### Added
+- Let paired mobile devices browse tasks beyond the recent snapshot with authenticated pagination, one page at a time.
 - Add authenticated live shared-task pagination with scope- and device-bound cursors that expire on restart and title previews for long outcomes. Other shared domains remain unavailable.
 
 - Add authenticated shared-client API discovery with pinned Hermes/DSH contract fixtures, explicit unavailable task-list errors, and non-terminal cancellation/reconciliation projections.

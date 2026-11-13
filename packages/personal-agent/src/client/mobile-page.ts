@@ -29,7 +29,14 @@ export function mobilePage(chinese: boolean): string {
     </section>
     <section id="work" aria-labelledby="work-heading" hidden>
       <h2 id="work-heading">${chinese ? '任务' : 'Tasks'}</h2>
+      <button id="browse-tasks" type="button">${chinese ? '浏览全部任务' : 'Browse all tasks'}</button>
+      <button id="recent-tasks" type="button" hidden>${chinese ? '最近任务' : 'Recent tasks'}</button>
+      <p id="task-browse-status" role="status" hidden></p>
       <ul id="tasks"></ul>
+      <div id="task-page-actions" hidden>
+        <button id="task-next" type="button" disabled>${chinese ? '下一页' : 'Next page'}</button>
+        <button id="task-restart" type="button">${chinese ? '从头开始' : 'Restart'}</button>
+      </div>
     </section>
   </main>
 </body>
@@ -58,7 +65,7 @@ label, input, button { display: block; }
 input, button { box-sizing: border-box; min-height: 44px; font: inherit; margin-top: .6rem; border: 1px solid GrayText; border-radius: .5rem; padding: .5rem .75rem; }
 input { width: 100%; }
 button { cursor: pointer; }
-.review-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.review-actions, #task-page-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 dl { margin: .65rem 0; }
 dt { font-weight: 600; }
@@ -78,25 +85,45 @@ function runMobilePage() {
     reconnecting: '正在重新连接…', empty: '暂时没有任务。',
     approve: '批准此动作', deny: '拒绝此动作', recorded: '已记录审批答复。', changed: '审批已变化或不可用，请重新检查。',
     unconfirmed: '无法确认审批答复，请查看刷新后的审批。',
+    loadingTasks: '正在加载任务…', taskBrowseFailed: '无法加载任务，请从头开始重试。',
+    taskCursorExpired: '此任务页已过期，请从第一页重新开始。',
+    tasksUnavailable: '暂时无法浏览全部任务。', tasksUnsupported: '此服务尚未提供全部任务浏览。',
+    tasksDisabled: '全部任务浏览已停用，请联系服务管理员。',
+    tasksIdentityUnavailable: '暂时无法验证任务浏览权限，请联系服务管理员。',
+    tasksForbidden: '当前会话没有浏览全部任务的权限。',
     account: '账户', resource: '资源', recipient: '接收方', scope: '数据范围', digest: '载荷摘要', expires: '过期时间', preview: '完整载荷预览',
   } : {
     connected: 'Connected', pairing: 'Get a pairing code from the local inbox.', rejected: 'Pairing failed. Check that the code is valid.',
     reconnecting: 'Reconnecting…', empty: 'No tasks yet.',
     approve: 'Approve this action', deny: 'Deny this action', recorded: 'Review response recorded.', changed: 'The review changed or is unavailable. Check it again.',
     unconfirmed: 'Could not confirm the response. Check the refreshed review.',
+    loadingTasks: 'Loading tasks…', taskBrowseFailed: 'Could not load tasks. Restart to try again.',
+    taskCursorExpired: 'This task page expired. Restart from the first page.',
+    tasksUnavailable: 'Browsing all tasks is currently unavailable.', tasksUnsupported: 'This service does not support browsing all tasks yet.',
+    tasksDisabled: 'Task browsing is disabled. Contact the service operator.',
+    tasksIdentityUnavailable: 'Task browsing cannot verify your identity. Contact the service operator.',
+    tasksForbidden: 'This session does not have permission to browse all tasks.',
     account: 'Account', resource: 'Resource', recipient: 'Recipient', scope: 'Data scope', digest: 'Payload digest', expires: 'Expires', preview: 'Exact payload preview',
   }
   const translations: Record<string, string> = {
     queued: '已排队', running: '运行中', waiting_input: '等待输入', waiting_approval: '等待审批',
     waiting_resource: '等待资源', waiting_event: '等待事件', waiting_environment: '等待环境', paused: '已暂停',
     blocked: '受阻', reconciliation_required: '等待核对', verifying: '正在验证', completed: '已完成',
-    cancelling: '正在取消', cancelled: '已取消', failed: '失败',
+    cancelling: '正在取消', cancelled: '已取消', failed: '失败', waiting: '等待中', unknown: '未知',
+    verification: '正在验证', input: '输入', approval: '审批', event: '事件', environment: '环境', resource: '资源',
+    dependency: '依赖', cancellation_requested: '已请求取消',
   }
   const status = document.querySelector<HTMLParagraphElement>('#status')!
   const form = document.querySelector<HTMLFormElement>('#pair')!
   const code = document.querySelector<HTMLInputElement>('#code')!
   const work = document.querySelector<HTMLElement>('#work')!
   const tasks = document.querySelector<HTMLUListElement>('#tasks')!
+  const browseTasks = document.querySelector<HTMLButtonElement>('#browse-tasks')!
+  const recentTasks = document.querySelector<HTMLButtonElement>('#recent-tasks')!
+  const taskBrowseStatus = document.querySelector<HTMLParagraphElement>('#task-browse-status')!
+  const taskPageActions = document.querySelector<HTMLDivElement>('#task-page-actions')!
+  const taskNext = document.querySelector<HTMLButtonElement>('#task-next')!
+  const taskRestart = document.querySelector<HTMLButtonElement>('#task-restart')!
   const reviewSection = document.querySelector<HTMLElement>('#reviews')!
   const reviewStatus = document.querySelector<HTMLParagraphElement>('#review-status')!
   const reviewItems = document.querySelector<HTMLUListElement>('#review-items')!
@@ -106,6 +133,155 @@ function runMobilePage() {
   let pending: AbortController | undefined
   let refreshAfterPending = false
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
+  let browsingTasks = false
+  let taskRequest: AbortController | undefined
+  let nextTaskCursor: string | null = null
+  const taskPageSize = 32
+  const sharedSchemaVersion = 'personal.api.v1'
+  const sharedTaskStates = new Set(['queued', 'running', 'waiting', 'paused', 'completed', 'failed', 'cancelled', 'unknown'])
+  const taskAvailability: Record<string, string> = {
+    not_implemented: text.tasksUnsupported,
+    disabled: text.tasksDisabled,
+    identity_unavailable: text.tasksIdentityUnavailable,
+    permission_denied: text.tasksForbidden,
+  }
+
+  function leaveTaskBrowser() {
+    taskRequest?.abort()
+    taskRequest = undefined
+    nextTaskCursor = null
+    browsingTasks = false
+    browseTasks.hidden = false
+    recentTasks.hidden = true
+    taskPageActions.hidden = true
+    taskBrowseStatus.hidden = true
+    taskBrowseStatus.textContent = ''
+    taskNext.disabled = true
+    tasks.replaceChildren()
+  }
+
+  function renderTasks(entries: readonly { title: string; state: string }[]) {
+    const rows = entries.map(task => {
+      const row = document.createElement('li')
+      const title = document.createElement('p')
+      title.textContent = task.title
+      const state = document.createElement('small')
+      state.textContent = task.state
+      row.append(title, state)
+      return row
+    })
+    if (rows.length === 0) {
+      const empty = document.createElement('li')
+      empty.textContent = text.empty
+      rows.push(empty)
+    }
+    tasks.replaceChildren(...rows)
+  }
+
+  function displayTaskState(state: string): string {
+    if (chinese && Object.hasOwn(translations, state)) return translations[state]!
+    return state.replaceAll('_', ' ')
+  }
+
+  function asRecord(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined
+  }
+
+  function sharedTask(value: unknown) {
+    const task = asRecord(value)
+    if (!task || typeof task.id !== 'string' || [...task.id].length < 1 || [...task.id].length > 256
+      || typeof task.title !== 'string' || [...task.title].length > 4096
+      || typeof task.revision !== 'string' || !/^[1-9][0-9]{0,19}$/.test(task.revision)
+      || typeof task.state !== 'string' || !sharedTaskStates.has(task.state)
+      || (task.wait_reason !== null && (typeof task.wait_reason !== 'string' || !task.wait_reason
+        || [...task.wait_reason].length > 256))) {
+      throw new Error('Invalid shared task')
+    }
+    const state = displayTaskState(task.state)
+    return { title: task.title, state: task.wait_reason ? state + ' · ' + displayTaskState(task.wait_reason) : state }
+  }
+
+  async function readTaskData(path: string, controller: AbortController) {
+    const response = await fetch(path, { signal: controller.signal, cache: 'no-store' })
+    if (taskRequest !== controller) return
+    if (controller.signal.aborted) throw new Error('Task request timed out')
+    if (response.status === 401) { showPairing(); return }
+    const payload = asRecord(await response.json())
+    if (taskRequest !== controller) return
+    if (controller.signal.aborted) throw new Error('Task request timed out')
+    if (payload?.schema_version !== sharedSchemaVersion) throw new Error('Invalid shared response')
+    if (response.ok) {
+      const data = asRecord(payload.data)
+      if (!data) throw new Error('Invalid shared response data')
+      return data
+    }
+    const code = asRecord(payload.error)?.code
+    if (response.status === 400 && code === 'cursor_invalid') taskBrowseStatus.textContent = text.taskCursorExpired
+    else if (response.status === 409 && code === 'capability_unavailable') taskBrowseStatus.textContent = text.tasksUnavailable
+    else if (response.status === 403 && code === 'forbidden') taskBrowseStatus.textContent = text.tasksForbidden
+    else taskBrowseStatus.textContent = text.taskBrowseFailed
+  }
+
+  async function browseTaskPage(cursor: string | null) {
+    if (work.hidden || document.hidden || taskRequest) return
+    const controller = new AbortController()
+    taskRequest = controller
+    browsingTasks = true
+    nextTaskCursor = null
+    browseTasks.hidden = true
+    recentTasks.hidden = false
+    taskPageActions.hidden = false
+    taskBrowseStatus.hidden = false
+    taskBrowseStatus.textContent = text.loadingTasks
+    taskNext.disabled = true
+    taskRestart.disabled = true
+    tasks.replaceChildren()
+    const deadline = setTimeout(() => controller.abort(), 10_000)
+    controller.signal.addEventListener('abort', () => clearTimeout(deadline), { once: true })
+    try {
+      if (cursor === null) {
+        const discovery = await readTaskData('/v1/capabilities', controller)
+        if (taskRequest !== controller) return
+        if (!discovery) return
+        if (discovery.contract_version !== '0.1.0' || !Array.isArray(discovery.capabilities)) {
+          throw new Error('Invalid shared capability discovery')
+        }
+        const capability = discovery.capabilities.map(asRecord).find(item => item?.id === 'tasks.list')
+        if (!capability || capability.supported !== true || capability.enabled !== true || capability.available !== true) {
+          const reason = capability?.reason
+          taskBrowseStatus.textContent = typeof reason === 'string' && Object.hasOwn(taskAvailability, reason)
+            ? taskAvailability[reason]!
+            : text.tasksUnavailable
+          return
+        }
+      }
+
+      const params = new URLSearchParams({ limit: String(taskPageSize) })
+      if (cursor !== null) params.set('cursor', cursor)
+      const page = await readTaskData('/v1/tasks?' + params, controller)
+      if (taskRequest !== controller) return
+      if (!page) return
+      const continuation = page.next_cursor
+      if (page.consistency !== 'live' || !Array.isArray(page.items) || page.items.length > taskPageSize
+        || (continuation !== null && (typeof continuation !== 'string' || !continuation || [...continuation].length > 2048))) {
+        throw new Error('Invalid shared task page')
+      }
+      renderTasks(page.items.map(sharedTask))
+      nextTaskCursor = continuation
+      taskBrowseStatus.textContent = ''
+    } catch {
+      if (taskRequest === controller) taskBrowseStatus.textContent = text.taskBrowseFailed
+    } finally {
+      clearTimeout(deadline)
+      if (taskRequest === controller) {
+        taskRequest = undefined
+        taskNext.disabled = nextTaskCursor === null
+        taskRestart.disabled = false
+      }
+    }
+  }
 
   function resetView() {
     stream?.close()
@@ -118,7 +294,7 @@ function runMobilePage() {
     clearTimeout(refreshTimer)
     refreshTimer = undefined
     work.hidden = true
-    tasks.replaceChildren()
+    leaveTaskBrowser()
     reviewSection.hidden = true
     reviewItems.replaceChildren()
     reviewStatus.textContent = ''
@@ -274,21 +450,9 @@ function runMobilePage() {
       const { approvals } = await reviews.json() as { approvals: InboxApproval[] }
       if (controller.signal.aborted) return
       renderReviews(approvals)
-      const rows = snapshot.tasks.map(task => {
-        const row = document.createElement('li')
-        const outcome = document.createElement('p')
-        outcome.textContent = task.outcome
-        const state = document.createElement('small')
-        state.textContent = (chinese && translations[task.status]) || task.status.replaceAll('_', ' ')
-        row.append(outcome, state)
-        return row
-      })
-      if (rows.length === 0) {
-        const empty = document.createElement('li')
-        empty.textContent = text.empty
-        rows.push(empty)
+      if (!browsingTasks) {
+        renderTasks(snapshot.tasks.map(task => ({ title: task.outcome, state: displayTaskState(task.status) })))
       }
-      tasks.replaceChildren(...rows)
       form.hidden = true
       work.hidden = false
       status.textContent = text.connected
@@ -302,6 +466,13 @@ function runMobilePage() {
         if (refreshAfterPending) void refresh()
       }
     }
+  }
+
+  browseTasks.onclick = taskRestart.onclick = () => { void browseTaskPage(null) }
+  taskNext.onclick = () => { if (nextTaskCursor !== null) void browseTaskPage(nextTaskCursor) }
+  recentTasks.onclick = () => {
+    leaveTaskBrowser()
+    void refresh('event')
   }
 
   form.addEventListener('submit', async event => {
