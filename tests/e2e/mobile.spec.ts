@@ -590,7 +590,9 @@ it.skipIf(!chromePath)('expires and recalls assigned approvals beyond recent wor
   const phone = snapshot.snapshot.mobileReviewers?.find(device => device.label === 'Approval expiry phone')
   const first = snapshot.snapshot.approvals.find(approval => approval.id === 'mobile-review-approve')
   assert.ok(phone && first)
-  await vi.waitFor(() => expect(proxy.approvalHints()).toBeGreaterThan(0))
+  const waitForApprovalHint = (count: number) =>
+    vi.waitFor(() => expect(proxy.approvalHints()).toBeGreaterThan(count), { timeout: 6_000 })
+  await waitForApprovalHint(0)
   const streams = proxy.eventStreams()
   expect(await inbox({ type: 'mobile_review', requestId: first.id, expectedVersion: first.version, digest: first.digest, deviceId: phone.deviceId })).toMatchObject({ ok: true })
   await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload approve')")
@@ -624,7 +626,7 @@ it.skipIf(!chromePath)('expires and recalls assigned approvals beyond recent wor
   expect(mobileRecent.ok).toBe(true)
   expect(mobileRecent.tasks).toHaveLength(64)
   expect(mobileRecent.tasks.some(task => task.id === recall.taskId)).toBe(false)
-  await vi.waitFor(() => expect(proxy.approvalHints()).toBeGreaterThan(hintsBeforeExpiry), { timeout: 6_000 })
+  await waitForApprovalHint(hintsBeforeExpiry)
 
   const listOnChrome = () => chrome.evaluate<{ ok: boolean; approvals: InboxApproval[] }>(
     "fetch('/v1/approvals').then(response => response.json())")
@@ -647,13 +649,13 @@ it.skipIf(!chromePath)('expires and recalls assigned approvals beyond recent wor
   })
   expect(otherResponse.status).toBe(404)
   expect(await otherResponse.json()).toEqual({ ok: false, code: 'not_found' })
+  await waitForApprovalHint(hintsBeforeAssignment)
   await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
-  expect(proxy.approvalHints()).toBeGreaterThan(hintsBeforeAssignment)
 
   const hintsBeforeRecall = proxy.approvalHints()
   expect(await handoff(assigned, null)).toMatchObject({ ok: true })
+  await waitForApprovalHint(hintsBeforeRecall)
   await chrome.waitFor("document.querySelector('#review-items').children.length === 0")
-  expect(proxy.approvalHints()).toBeGreaterThan(hintsBeforeRecall)
   expect(proxy.eventStreams()).toBe(streams)
   expect(await listOnChrome()).toEqual({ ok: true, approvals: [] })
 }, 30_000 + chromeStartupRetryAllowanceMs)
