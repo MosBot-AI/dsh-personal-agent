@@ -8,6 +8,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Distinguish Chrome startup, DevTools command, and process failures in mobile CI diagnostics.
+
 - Keep mobile tasks and approvals updating on slow connections and after the live event stream reconnects.
 
 - Separate native schedule tamper-recovery fixture timing from real overdue-wakeup recovery, preserving strict uncertainty and no-delivery checks on slower hosts.
