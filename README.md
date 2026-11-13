@@ -282,7 +282,7 @@ knowledge:
       maxFiles: 256
 ```
 
-In **Today**, open **Local knowledge** and select **Check sources** or enter keywords. A missing root appears as unavailable and the search continues with other configured roots. Search matches Chinese and English terms together and shows paths relative to each root. Open a result to see bounded text pages and its source reference. A reference pairs a stable ID with the SHA-256 revision of the document.
+In **Today**, open **Local knowledge** and select **Check sources** or enter keywords or a question. A missing root appears as unavailable and the search continues with other configured roots. Search matches Chinese and English terms together and shows paths relative to each root. Open a result to see bounded text pages and its source reference. A reference pairs a stable ID with the SHA-256 revision of the document.
 
 The in-memory index reuses unchanged entries and checks current files before returning results. Files and directories must be reachable from their configured root without symlinks. Hidden entries, hard links, binary content and files over the configured limits are skipped. The built-in type allowlist is `.md`, `.markdown`, `.txt`, `.rst`, `.csv` and `.json`. The default types are Markdown and plain text. Each root has a 4 MiB derived text budget. Limited roots may show partial results.
 

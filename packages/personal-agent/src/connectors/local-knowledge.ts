@@ -4,6 +4,7 @@ import { isAbsolute, matchesGlob, posix } from 'node:path'
 import { setImmediate } from 'node:timers/promises'
 import { z } from 'zod'
 import { indexText, keywordScore, keywordSnippet, knowledgeQuery, textPage, type IndexedText } from '../context/search-index.js'
+import { knowledgeQuestion, rankQuestion } from '../context/question-search.js'
 import { sha256DigestSchema } from '../domain/model.js'
 import {
   directoryStat, fileStamp, identity, knowledgeFileOperations, openKnowledgeRoot, readKnowledgeFile, type KnowledgeFiles,
@@ -227,18 +228,40 @@ export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigS
       if (request.type === 'knowledge_status') return { ok: true as const, kind: 'knowledge_status' as const, roots: statuses() }
       if (request.type === 'knowledge_search') {
         const query = knowledgeQuery(request.query)
-        if (!query) return fail('invalid_input')
-        const candidates = [...(root ? [root] : roots.values())].flatMap(origin => [...origin.rows.values()].flatMap(row => {
-          const score = keywordScore(row.text, row.source.path, query)
-          return score ? [{ origin, row, score }] : []
-        })).sort((a, b) => b.score.exactFile - a.score.exactFile || b.score.bodyTerms - a.score.bodyTerms
-          || b.score.bodyMatches - a.score.bodyMatches || b.score.legacyScore - a.score.legacyScore
-          || a.row.source.path.localeCompare(b.row.source.path))
+        const question = knowledgeQuestion(request.query)
+        if (!query && !question) return fail('invalid_input')
+        const sources = [...(root ? [root] : roots.values())].flatMap(origin => [...origin.rows.values()].map(row => ({ origin, row })))
         const hits = []
-        for (const { origin, row } of candidates) {
-          if (!currentRow(origin, row)) continue
-          hits.push({ ...row.source, snippet: keywordSnippet(row.text, query.terms) })
-          if (hits.length >= request.limit) break
+        if (query) {
+          const candidates = sources.flatMap(({ origin, row }) => {
+            const score = keywordScore(row.text, row.source.path, query)
+            return score ? [{ origin, row, score }] : []
+          }).sort((a, b) => b.score.exactFile - a.score.exactFile || b.score.bodyTerms - a.score.bodyTerms
+            || b.score.bodyMatches - a.score.bodyMatches || b.score.legacyScore - a.score.legacyScore
+            || a.row.source.path.localeCompare(b.row.source.path))
+          for (const { origin, row } of candidates) {
+            if (!currentRow(origin, row)) continue
+            hits.push({ ...row.source, snippet: keywordSnippet(row.text, query.terms) })
+            if (hits.length >= request.limit) break
+          }
+        }
+        if (!hits.length && question) {
+          const stillCurrent = () => current() && !closed && !signal?.aborted
+          const ranked = await rankQuestion(question, sources, source => source.row.text, stillCurrent)
+          if (!ranked || !stillCurrent()) return fail('permission_denied')
+          const confirmed = []
+          for (const candidate of ranked) {
+            const { origin, row } = candidate.row
+            if (currentRow(origin, row)) confirmed.push(candidate)
+            // Inspect a runner-up even when the caller requests just one result.
+            if (confirmed.length >= Math.max(2, request.limit)) break
+          }
+          const [best, next] = confirmed
+          if (best && (!next || best.score >= 1.12 * next.score)) {
+            for (const { row: { row }, terms } of confirmed.slice(0, request.limit)) {
+              hits.push({ ...row.source, snippet: keywordSnippet(row.text, terms) })
+            }
+          }
         }
         return { ok: true as const, kind: 'knowledge_search' as const, roots: statuses(), hits }
       }

@@ -8,6 +8,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Find local document candidates for natural questions in English, Chinese, and mixed language when keyword search returns no results.
 - Recover completed ComfyUI renders when unrelated jobs make the provider queue response too large.
 - Reconnect the mobile work view when the event stream silently stalls and restore tasks and approvals through fresh authenticated reads.
 - Retry verification of completed ComfyUI output after local temporary storage fills up or reaches its quota, retaining the original render and media lease.

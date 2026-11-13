@@ -1,0 +1,808 @@
+{
+  "rubric": {
+    "scope": "Independent synthetic local corpus. One answering document and one near-topic distractor per positive query. Questions and answers are frozen before baseline or candidate scoring.",
+    "positiveQueries": "54 natural questions. Eighteen each in en, zh and mixed. Each language has six direct, six paraphrase and six contextual questions, recorded in stable query ID segments.",
+    "sourcedHit": "A returned path is relevant only if annotated as supporting the specific question and its readback at the returned revision matches the exact corpus bytes containing the marked answer anchor.",
+    "denominator": "Report sourced hit@1 and hit@3 over all positive queries and by language. Query IDs retain the elicitation subgroups for optional stratification. Count no-hit and irrelevant-hit queries as misses.",
+    "negativeControls": "Report nine intentionally unanswerable controls separately, including two same-topic requests and one unrelated request per language. List returned results as no-answer false positives.",
+    "target": "Compare against the plan's 80 percent sourced retrieval target and retain exact source readback counts and misses."
+  },
+  "documents": {
+    "park-activities/kite-afternoon.md": "# Kite afternoon field instructions\n\nThe kite workshop checks in at the yellow storage shed beside the west field.\n",
+    "park-activities/kite-afternoon-related-notes.md": "# Kite afternoon field instructions — related notes\n\nKite club photo day also used the west field. Families collected printed pictures from the picnic shelter.\n",
+    "community-art/clay-birds.md": "# Clay bird glazing bench\n\nFor the clay bird session, each participant should bring one shallow plastic tray for carrying the glazed pieces.\n",
+    "community-art/clay-birds-related-notes.md": "# Clay bird glazing bench — related notes\n\nAn older clay bird handout mentioned bringing an apron to the sculpting session. It applies to shaping clay, not carrying glazed work.\n",
+    "building-notices/music-corner.md": "# Music corner opening window\n\nOn Wednesdays, the neighborhood music practice room opens at half past six in the evening.\n",
+    "building-notices/music-corner-related-notes.md": "# Music corner opening window — related notes\n\nThe neighborhood music practice room opens at five on Fridays for the youth ensemble.\n",
+    "library-programs/map-circle.md": "# Map circle material collection\n\nAfter the neighborhood map circle, blank tracing sheets go in the flat blue drawer under the globe.\n",
+    "library-programs/map-circle-related-notes.md": "# Map circle material collection — related notes\n\nMap circle volunteers return finished drawings to the wall clips. The supply cupboard holds pencils and erasers.\n",
+    "food-events/pancake-table.md": "# Pancake morning table labels\n\nDuring the pancake breakfast, place the apple topping in the bowl marked with a green leaf.\n",
+    "food-events/pancake-table-related-notes.md": "# Pancake morning table labels — related notes\n\nThe apple topping for the summer sundae night was served in clear cups. The pancake breakfast volunteers used those cups for syrup samples last year.\n",
+    "repair-meetup/clock-clinic.md": "# Clock clinic visit cards\n\nVisitors bringing a tabletop clock to the repair meetup collect a numbered card from the desk by the ramp.\n",
+    "repair-meetup/clock-clinic-related-notes.md": "# Clock clinic visit cards — related notes\n\nAt the repair meetup, wall clocks for the display are delivered to the back table. That table does not handle visitor check-in.\n",
+    "workshop-stores/fabric-kits.md": "# Patchwork supplies collection\n\nVolunteers leave the quilting starter bundles on the low rack just inside the pottery room.\n",
+    "workshop-stores/fabric-kits-related-notes.md": "# Patchwork supplies collection — related notes\n\nThe patchwork exhibition uses the pottery room for display. Completed fabric panels hang on the high wall rail.\n",
+    "outdoor-club/canoe-locker.md": "# Paddling equipment returns\n\nAfter paddling, set the wooden oars in the open crate by the water gate so they can dry.\n",
+    "outdoor-club/canoe-locker-related-notes.md": "# Paddling equipment returns — related notes\n\nCanoe trip reports mention spare paddles in the locked equipment cage. Those spares were never issued during the trip.\n",
+    "hall-schedule/chess-morning.md": "# Weekend chess room access\n\nThe Saturday chess room admits people at nine, although the first round does not begin until ten.\n",
+    "hall-schedule/chess-morning-related-notes.md": "# Weekend chess room access — related notes\n\nThe weekday chess group starts at seven on Tuesday evening and leaves its tournament boards out overnight.\n",
+    "hobbies/paper-miniatures.md": "# Miniature folding exchange\n\nFor the tiny paper model swap, contributions should fit inside an ordinary matchbox.\n",
+    "hobbies/paper-miniatures-related-notes.md": "# Miniature folding exchange — related notes\n\nThe model showcase accepts larger paper pieces in shoeboxes. Entries for the showcase do not go in the exchange basket.\n",
+    "civic-garden/fountain-basin.md": "# Fountain maintenance sequence\n\nThe crew brushes leaves out of the fountain's dry basin before the water is turned back on.\n",
+    "civic-garden/fountain-basin-related-notes.md": "# Fountain maintenance sequence — related notes\n\nThe fountain crew rinses the paved apron after the water is running. That job concerns the path around the basin.\n",
+    "learning-room/observatory-desk.md": "# Moon viewing equipment\n\nAt the lunar observation evening, handheld binoculars can be borrowed from the front table.\n",
+    "learning-room/observatory-desk-related-notes.md": "# Moon viewing equipment — related notes\n\nFor the daytime observatory tour, the loan shelf holds sun-print paper. The nighttime sign-in desk is moved outside.\n",
+    "theater-volunteers/pantomime-props.md": "# Pantomime prop return checklist\n\nThe papier-mâché castle goes into the locked prop cage only after the stage paint is dry; meanwhile it stays on the back rehearsal table.\n",
+    "theater-volunteers/pantomime-props-related-notes.md": "# Pantomime prop return checklist — related notes\n\nThe pantomime's foam crowns can go straight into the locked prop cage after rehearsal. Wet paint was not used on them.\n",
+    "choir-committee/hall-access.md": "# Choir evening entrance\n\nIf the choir's usual courtyard door is shut, enter through the side door next to the bicycle stands.\n",
+    "choir-committee/hall-access-related-notes.md": "# Choir evening entrance — related notes\n\nChoir members normally use the courtyard entrance. The doors by the loading platform are reserved for instrument cases.\n",
+    "cooking-club/tea-social.md": "# Tea social seating plan\n\nAt the tea social, reserve the small table beside the window for anyone who needs a quieter spot.\n",
+    "cooking-club/tea-social-related-notes.md": "# Tea social seating plan — related notes\n\nFor the tea social photo, organizers use the window as a backdrop and line the speakers up in front of it.\n",
+    "craft-fair/paper-lanterns.md": "# Lantern display weather fallback\n\nIf light rain starts, the paper lantern display moves from the courtyard to the covered walkway in front of the hall.\n",
+    "craft-fair/paper-lanterns-related-notes.md": "# Lantern display weather fallback — related notes\n\nIf the weather stays dry, the craft fair's lantern-making demonstration uses the courtyard near the courtyard drain.\n",
+    "cycle-group/tour-markings.md": "# Cycle tour route markers\n\nWhen a route arrow falls down near the duck pond, volunteers should follow the painted blue dots until the next staffed crossing.\n",
+    "cycle-group/tour-markings-related-notes.md": "# Cycle tour route markers — related notes\n\nIn the bicycle parade, blue ribbons mark parked bikes. Neither those ribbons nor the route map from the parade applies to the tour.\n",
+    "toy-library/board-game-returns.md": "# Board game return exceptions\n\nA returned board game with missing pieces goes in the orange checking basket instead of back on the lending shelves.\n",
+    "toy-library/board-game-returns-related-notes.md": "# Board game return exceptions — related notes\n\nComplete board games go directly onto the lending shelves after return. The yellow basket is for books that need new labels.\n",
+    "社区课程/版画工作坊.md": "# 版画工作坊取材说明\n\n木刻版画课用的试印纸放在水池旁边的灰色抽屉里。\n",
+    "社区课程/版画工作坊-related-notes.md": "# 版画工作坊取材说明 — related notes\n\n版画展撤场时，正式作品收入走廊白色纸箱。试印纸不随作品移交。\n",
+    "公共空间/露台读书会.md": "# 露台读书会入场时间\n\n周日露台读书会下午两点四十分开放入场。\n",
+    "公共空间/露台读书会-related-notes.md": "# 露台读书会入场时间 — related notes\n\n周六室内读书会下午两点开始，地点在前楼。露台不开放。\n",
+    "志愿交接/猫头鹰观察.md": "# 猫头鹰观察活动登记点\n\n参加猫头鹰观察活动的人在石桥南端登记，再跟志愿者进场。\n",
+    "志愿交接/猫头鹰观察-related-notes.md": "# 猫头鹰观察活动登记点 — related notes\n\n去年观鸟讲座的室内签到台设在石桥北侧礼堂，不用于夜间观察活动。\n",
+    "儿童活动/拼图角.md": "# 拼图角收纳约定\n\n拼图角的纸质拼图收进绿色盒子，木片拼图仍留在托盘内。\n",
+    "儿童活动/拼图角-related-notes.md": "# 拼图角收纳约定 — related notes\n\n手工角的彩色拼图板使用蓝色托盘，不能混入拼图角的材料。\n",
+    "街坊日程/种子交换.md": "# 种子交换摊收摊安排\n\n种子交换摊的空纸袋统一送回入口旁的工具车。\n",
+    "街坊日程/种子交换-related-notes.md": "# 种子交换摊收摊安排 — related notes\n\n收摊时，余下的种子交给街坊花园管理员，工具车旁不会存放种子。\n",
+    "楼内公告/换书柜.md": "# 共享换书柜每周整理\n\n大厅的共享换书柜每周四晚上由值班人员清点。\n",
+    "楼内公告/换书柜-related-notes.md": "# 共享换书柜每周整理 — related notes\n\n二楼绘本柜每周一上午整理，绘本不与大厅共享换书柜一起统计。\n",
+    "木工活动/小板凳交接.md": "# 小板凳完工标记\n\n小板凳上蜡完毕后，把麻绳系在右前腿上，表示已经晾干可以领走。\n",
+    "木工活动/小板凳交接-related-notes.md": "# 小板凳完工标记 — related notes\n\n待修小板凳用布条标记，布条绑在座面下。上蜡步骤没有使用布条。\n",
+    "场馆巡查/廊道灯.md": "# 廊道夜间照明交接\n\n关门后，靠河一侧的走廊保留最西端一盏壁灯，供最后离开的人辨认台阶。\n",
+    "场馆巡查/廊道灯-related-notes.md": "# 廊道夜间照明交接 — related notes\n\n白天展览结束后关掉靠河展墙的射灯。展墙射灯和夜间壁灯是两组开关。\n",
+    "演出准备/乐谱包.md": "# 童声合唱排练材料\n\n童声合唱的歌词册夹在借用的谱夹内侧，排练完连谱夹一并归还。\n",
+    "演出准备/乐谱包-related-notes.md": "# 童声合唱排练材料 — related notes\n\n成人合唱的歌词单每人自行保管，和租借来的乐器包分开放。\n",
+    "公益课堂/旧伞修补.md": "# 修伞体验课耗材\n\n修伞体验课的旧布从入口边的布料筐选取，课程不要求学员自己准备。\n",
+    "公益课堂/旧伞修补-related-notes.md": "# 修伞体验课耗材 — related notes\n\n缝纫交流会请大家自带旧布。活动室里另有用来陈列成品雨伞的入口架。\n",
+    "手工展览/纸鹤墙.md": "# 纸鹤墙换位记录\n\n拆下纸鹤墙上的折纸后，把系绳松开再平放进薄木盒，不用重新打结。\n",
+    "手工展览/纸鹤墙-related-notes.md": "# 纸鹤墙换位记录 — related notes\n\n新挂上去的纸鹤先把系绳打成双结，展示结束后不会用原结继续悬挂。\n",
+    "休闲运动/沙包回收.md": "# 投掷练习收尾\n\n沙包投掷练习结束，装砂的小袋先集中到遮阳棚下晾一会儿，再入柜。\n",
+    "休闲运动/沙包回收-related-notes.md": "# 投掷练习收尾 — related notes\n\n练习区的彩旗可直接收入器材柜，晾晒区不收旗子。\n",
+    "活动调整/草地电影.md": "# 草地电影临时换场\n\n如果草地积水，露天电影改到旧仓库的多功能间，原来的开场时间不变。\n",
+    "活动调整/草地电影-related-notes.md": "# 草地电影临时换场 — related notes\n\n晴天草地电影在草坪东角售卖饮料。旧仓库并不是晴天的领票处。\n",
+    "排练室/布景门.md": "# 布景通过排练室窄门\n\n抬布景进排练室时，先拆掉可卸把手，再从有橡胶垫的那扇门推入。\n",
+    "排练室/布景门-related-notes.md": "# 布景通过排练室窄门 — related notes\n\n排练室的另一道门旁有台阶，只供人员进出。小件道具可以走那里。\n",
+    "教室安排/纺线示范.md": "# 纺线示范迟到入场\n\n纺线示范开始后，迟到者先在窗边的空位等候，等老师示意再靠近纺车。\n",
+    "教室安排/纺线示范-related-notes.md": "# 纺线示范迟到入场 — related notes\n\n示范开始前，到场的人可以围着纺车找座。窗边还有展板，不作为提前签到点。\n",
+    "借用流程/餐布归还.md": "# 桌布潮湿时的归还办法\n\n归还潮湿的长桌布时，在洗衣间门口挂开晾干，不要与干布一起叠进筐。\n",
+    "借用流程/餐布归还-related-notes.md": "# 桌布潮湿时的归还办法 — related notes\n\n已经干燥的桌布可折好后投入餐布筐。清洁员第二天负责分拣。\n",
+    "园艺安排/花盆交接.md": "# 花盆卡片脱落处理\n\n如果育苗花盆上的名牌脱落，把盆留在有条纹的托盘上，等领队按登记表补牌。\n",
+    "园艺安排/花盆交接-related-notes.md": "# 花盆卡片脱落处理 — related notes\n\n正常带名牌的花盆按品种送到展架。展架上的卡片不是育苗登记表。\n",
+    "社区演出/观众席.md": "# 小剧场并排座位安排\n\n两位观众一同使用助行器时，可以把第一排靠过道的两把折叠椅移到一边。\n",
+    "社区演出/观众席-related-notes.md": "# 小剧场并排座位安排 — related notes\n\n普通团体座位集中在后三排。折叠椅在午间排练结束后才能移动。\n",
+    "club-operations/loom-kit.md": "# Loom Kit 到场领取说明\n\n报名 Loom Kit 入门活动后，到二楼茶水间门口领取已分袋的经线材料。\n",
+    "club-operations/loom-kit-related-notes.md": "# Loom Kit 到场领取说明 — related notes\n\nLoom Kit 展台设在大厅西侧，用来展示已经完成的织物。材料不会在展台发放。\n",
+    "maker-events/clay-imprint.md": "# Clay Imprint stamp preparation\n\nFor Clay Imprint, put the maple-shaped stamp on the shelf labelled 准备区 before doors open.\n",
+    "maker-events/clay-imprint-related-notes.md": "# Clay Imprint stamp preparation — related notes\n\nClay Imprint workshop photos feature maple leaves. The storage shelf labelled 成品区 is reserved for fired samples.\n",
+    "street-games/petal-walk.md": "# Petal Walk guide copies\n\nPetal Walk 的双语路线单从北门右侧的藤篮取，每位参加者只拿一张。\n",
+    "street-games/petal-walk-related-notes.md": "# Petal Walk guide copies — related notes\n\nPetal Walk 完成后把打孔卡投入南门木箱。北门的藤篮不会收回打孔卡。\n",
+    "music-events/string-circle.md": "# String Circle 等候规则\n\nString Circle 的小提琴乐手在换场时到标有 Pine 的练习室等候。\n",
+    "music-events/string-circle-related-notes.md": "# String Circle 等候规则 — related notes\n\nString Circle 的吉他手换场时留在标有 Cedar 的房间。Pine 不是吉他候场区。\n",
+    "club-services/paint-swap.md": "# Paint Swap material sorting\n\nThe empty Paint Swap tins go to the cart labelled 金属回收 just outside the studio.\n",
+    "club-services/paint-swap-related-notes.md": "# Paint Swap material sorting — related notes\n\nFor Paint Swap, unopened tins are kept on the tall supply rack. Leftover brushes wait by the sink until the supply volunteer collects them.\n",
+    "library-events/story-reel.md": "# Story Reel sharing time\n\nStory Reel 分享环节在 Friday 下午三点开始，放映则在前一小时。\n",
+    "library-events/story-reel-related-notes.md": "# Story Reel sharing time — related notes\n\nStory Reel 的周四场只有放映，不设分享。Friday 仍按原本的两段安排举行。\n",
+    "hobby-meetups/bird-song.md": "# Bird Song borrowing list\n\nThe Bird Song session lends small field recorders from the cabinet marked 器材 at the rear of the room.\n",
+    "hobby-meetups/bird-song-related-notes.md": "# Bird Song borrowing list — related notes\n\nThe Bird Song exhibition includes headphones for listening. Visitors cannot borrow those headphones for field use.\n",
+    "studio-operations/print-night.md": "# Print Night 检视步骤\n\nPrint Night participants look for a silver clip on the drying rack to identify posters that have passed review.\n",
+    "studio-operations/print-night-related-notes.md": "# Print Night 检视步骤 — related notes\n\nA bronze clip marks a poster that still needs a second proof. Reviewers use the same rack for both stages.\n",
+    "market-helpers/lemon-stall.md": "# Lemon Stall washing station\n\nThe Lemon Stall juice jugs are rinsed at the sink beside the greenhouse before being returned to the crate.\n",
+    "market-helpers/lemon-stall-related-notes.md": "# Lemon Stall washing station — related notes\n\nAt the Lemon Stall, wash whole fruit at the entrance tap. The tap is not assigned to rinsing the jugs.\n",
+    "garden-programs/sun-box.md": "# Sun Box transplant labels\n\nIn Sun Box, seedlings ready to move are marked with a white peg; yellow pegs mean they should stay in the nursery.\n",
+    "garden-programs/sun-box-related-notes.md": "# Sun Box transplant labels — related notes\n\nThe Sun Box display uses white paper labels for all model plants. The color rule for nursery pegs does not apply to the models.\n",
+    "cooking-club/dough-lab.md": "# Dough Lab 静置区\n\nDough Lab 揉好以后先把面团放在贴有 Warm Shelf 的搁板上，等下一轮示范。\n",
+    "cooking-club/dough-lab-related-notes.md": "# Dough Lab 静置区 — related notes\n\nDough Lab 的空烤盘放在 Cool Rack；贴 Warm Shelf 的位置不放空盘。\n",
+    "craft-exchange/quilt-circle.md": "# Quilt Circle seam repair desk\n\nThe Quilt Circle corner for fixing loose seams is staffed at the table labelled 返工 next to the entrance.\n",
+    "craft-exchange/quilt-circle-related-notes.md": "# Quilt Circle seam repair desk — related notes\n\nThe Quilt Circle table labelled 展示 collects fully finished panels for photos, not panels needing repairs.\n",
+    "seasonal-events/snow-globe.md": "# Snow Globe spill procedure\n\nIf a Snow Globe display leaks, move its base onto the shallow tray labelled 待查 while a volunteer fetches a towel.\n",
+    "seasonal-events/snow-globe-related-notes.md": "# Snow Globe spill procedure — related notes\n\nDry Snow Globe displays waiting for photographs sit on the white board. The board is not the spill tray.\n",
+    "equipment-share/sound-cart.md": "# Sound Cart component exception\n\nWhen the Sound Cart comes back without its handle strap, put it by the 校验 sign so the custodian can check it.\n",
+    "equipment-share/sound-cart-related-notes.md": "# Sound Cart component exception — related notes\n\nThe Sound Cart spare batteries are kept under the 校验 sign before checkout. A fully equipped cart is returned beside the charging shelf.\n",
+    "film-club/flip-book.md": "# Flip Book rain backup\n\nIf the Flip Book swap moves inside because of rain, the first exchange starts at the table signed 小剧场入口.\n",
+    "film-club/flip-book-related-notes.md": "# Flip Book rain backup — related notes\n\nWhen the weather is clear, the Flip Book photo board is outside by the fountain. No exchanges are held at that board.\n",
+    "event-operations/tile-mural.md": "# Tile Mural leftover handoff\n\nWet Tile Mural tiles that will be used the next morning stay on the Mesh Shelf until they dry.\n",
+    "event-operations/tile-mural-related-notes.md": "# Tile Mural leftover handoff — related notes\n\nExtra dry tiles from Tile Mural can go straight into labelled boxes. Small dry offcuts are counted separately for the mosaic practice class.\n",
+    "choir-outreach/harmony-table.md": "# Harmony Table 曲目交接\n\n如果 Harmony Table 的曲目表改过，先在新页顶部贴橙色圆点，再把旧页交给领唱保留。\n",
+    "choir-outreach/harmony-table-related-notes.md": "# Harmony Table 曲目交接 — related notes\n\nHarmony Table 用绿色圆点标记排练确认的座位卡。座位卡的规则不适用于曲目表。\n",
+    "collection-room/postcard-station.md": "# Postcard Station label exception\n\nIf a Postcard Station card has an unreadable date, clip it to the folder marked 待确认 before sorting by year.\n",
+    "collection-room/postcard-station-related-notes.md": "# Postcard Station label exception — related notes\n\nPostcard Station cards with a readable year go to the dated drawers. Unused labels for drawers are stored in the sorting folder.\n"
+  },
+  "queries": [
+    {
+      "id": "nat-en-direct-01",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where do we check in for the kite workshop on the west field?",
+      "relevant": [
+        {
+          "path": "park-activities/kite-afternoon.md",
+          "anchor": "The kite workshop checks in at the yellow storage shed beside the west field."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-direct-02",
+      "language": "en",
+      "mode": "natural",
+      "query": "What should people bring to carry their pieces after glazing the clay birds?",
+      "relevant": [
+        {
+          "path": "community-art/clay-birds.md",
+          "anchor": "For the clay bird session, each participant should bring one shallow plastic tray for carrying the glazed pieces."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-direct-03",
+      "language": "en",
+      "mode": "natural",
+      "query": "What time does the neighborhood music practice room open on Wednesdays?",
+      "relevant": [
+        {
+          "path": "building-notices/music-corner.md",
+          "anchor": "On Wednesdays, the neighborhood music practice room opens at half past six in the evening."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-direct-04",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should the blank tracing sheets from the map circle go?",
+      "relevant": [
+        {
+          "path": "library-programs/map-circle.md",
+          "anchor": "After the neighborhood map circle, blank tracing sheets go in the flat blue drawer under the globe."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-direct-05",
+      "language": "en",
+      "mode": "natural",
+      "query": "How do I identify the bowl for apple topping at the pancake breakfast?",
+      "relevant": [
+        {
+          "path": "food-events/pancake-table.md",
+          "anchor": "During the pancake breakfast, place the apple topping in the bowl marked with a green leaf."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-direct-06",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where do I get my number if I bring a tabletop clock to the repair meetup?",
+      "relevant": [
+        {
+          "path": "repair-meetup/clock-clinic.md",
+          "anchor": "Visitors bringing a tabletop clock to the repair meetup collect a numbered card from the desk by the ramp."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-paraphrase-01",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where can a newcomer pick up their first set of materials for the patchwork group?",
+      "relevant": [
+        {
+          "path": "workshop-stores/fabric-kits.md",
+          "anchor": "Volunteers leave the quilting starter bundles on the low rack just inside the pottery room."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-paraphrase-02",
+      "language": "en",
+      "mode": "natural",
+      "query": "I have come back from the canoe outing. Where do the things we row with go while they are still wet?",
+      "relevant": [
+        {
+          "path": "outdoor-club/canoe-locker.md",
+          "anchor": "After paddling, set the wooden oars in the open crate by the water gate so they can dry."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-paraphrase-03",
+      "language": "en",
+      "mode": "natural",
+      "query": "How much earlier can the Saturday chess players get in than the start of play?",
+      "relevant": [
+        {
+          "path": "hall-schedule/chess-morning.md",
+          "anchor": "The Saturday chess room admits people at nine, although the first round does not begin until ten."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-paraphrase-04",
+      "language": "en",
+      "mode": "natural",
+      "query": "How big can my folded model be if I want to trade it with someone at the paper craft gathering?",
+      "relevant": [
+        {
+          "path": "hobbies/paper-miniatures.md",
+          "anchor": "For the tiny paper model swap, contributions should fit inside an ordinary matchbox."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-paraphrase-05",
+      "language": "en",
+      "mode": "natural",
+      "query": "What needs doing to the bottom of the fountain before it fills again?",
+      "relevant": [
+        {
+          "path": "civic-garden/fountain-basin.md",
+          "anchor": "The crew brushes leaves out of the fountain's dry basin before the water is turned back on."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-paraphrase-06",
+      "language": "en",
+      "mode": "natural",
+      "query": "Can I get something to look at the Moon more closely if I arrive without my own equipment?",
+      "relevant": [
+        {
+          "path": "learning-room/observatory-desk.md",
+          "anchor": "At the lunar observation evening, handheld binoculars can be borrowed from the front table."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-contextual-01",
+      "language": "en",
+      "mode": "natural",
+      "query": "We have finished painting the castle for the pantomime but it is still tacky. Where should we leave it for now?",
+      "relevant": [
+        {
+          "path": "theater-volunteers/pantomime-props.md",
+          "anchor": "The papier-mâché castle goes into the locked prop cage only after the stage paint is dry; meanwhile it stays on the back rehearsal table."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-contextual-02",
+      "language": "en",
+      "mode": "natural",
+      "query": "The choir courtyard entrance is locked and rehearsal is about to begin. Which other entrance should I try?",
+      "relevant": [
+        {
+          "path": "choir-committee/hall-access.md",
+          "anchor": "If the choir's usual courtyard door is shut, enter through the side door next to the bicycle stands."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-contextual-03",
+      "language": "en",
+      "mode": "natural",
+      "query": "A guest at our tea social would rather sit somewhere quieter. Which table should I show them to?",
+      "relevant": [
+        {
+          "path": "cooking-club/tea-social.md",
+          "anchor": "At the tea social, reserve the small table beside the window for anyone who needs a quieter spot."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-contextual-04",
+      "language": "en",
+      "mode": "natural",
+      "query": "The paper lanterns are already outside and it's begun to drizzle. Where is the display meant to go?",
+      "relevant": [
+        {
+          "path": "craft-fair/paper-lanterns.md",
+          "anchor": "If light rain starts, the paper lantern display moves from the courtyard to the covered walkway in front of the hall."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-contextual-05",
+      "language": "en",
+      "mode": "natural",
+      "query": "The arrow by the duck pond has dropped off during the cycle tour. What should the group follow from there?",
+      "relevant": [
+        {
+          "path": "cycle-group/tour-markings.md",
+          "anchor": "When a route arrow falls down near the duck pond, volunteers should follow the painted blue dots until the next staffed crossing."
+        }
+      ]
+    },
+    {
+      "id": "nat-en-contextual-06",
+      "language": "en",
+      "mode": "natural",
+      "query": "I'm checking a returned board game and one token is gone. Where do I put the game so it doesn't get lent again yet?",
+      "relevant": [
+        {
+          "path": "toy-library/board-game-returns.md",
+          "anchor": "A returned board game with missing pieces goes in the orange checking basket instead of back on the lending shelves."
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-direct-01",
+      "language": "zh",
+      "mode": "natural",
+      "query": "木刻版画课的试印纸在哪里拿？",
+      "relevant": [
+        {
+          "path": "社区课程/版画工作坊.md",
+          "anchor": "木刻版画课用的试印纸放在水池旁边的灰色抽屉里。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-direct-02",
+      "language": "zh",
+      "mode": "natural",
+      "query": "周日露台读书会几点可以入场？",
+      "relevant": [
+        {
+          "path": "公共空间/露台读书会.md",
+          "anchor": "周日露台读书会下午两点四十分开放入场。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-direct-03",
+      "language": "zh",
+      "mode": "natural",
+      "query": "参加猫头鹰观察活动要在石桥哪一边登记？",
+      "relevant": [
+        {
+          "path": "志愿交接/猫头鹰观察.md",
+          "anchor": "参加猫头鹰观察活动的人在石桥南端登记，再跟志愿者进场。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-direct-04",
+      "language": "zh",
+      "mode": "natural",
+      "query": "拼图角的纸质拼图应该装到哪个盒子？",
+      "relevant": [
+        {
+          "path": "儿童活动/拼图角.md",
+          "anchor": "拼图角的纸质拼图收进绿色盒子，木片拼图仍留在托盘内。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-direct-05",
+      "language": "zh",
+      "mode": "natural",
+      "query": "种子交换摊收摊后，空纸袋要送到哪里？",
+      "relevant": [
+        {
+          "path": "街坊日程/种子交换.md",
+          "anchor": "种子交换摊的空纸袋统一送回入口旁的工具车。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-direct-06",
+      "language": "zh",
+      "mode": "natural",
+      "query": "大厅的共享换书柜一般在哪一天清点？",
+      "relevant": [
+        {
+          "path": "楼内公告/换书柜.md",
+          "anchor": "大厅的共享换书柜每周四晚上由值班人员清点。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-paraphrase-01",
+      "language": "zh",
+      "mode": "natural",
+      "query": "去拿木工课做的凳子时，怎么看出来它已经干了、可以带回家？",
+      "relevant": [
+        {
+          "path": "木工活动/小板凳交接.md",
+          "anchor": "小板凳上蜡完毕后，把麻绳系在右前腿上，表示已经晾干可以领走。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-paraphrase-02",
+      "language": "zh",
+      "mode": "natural",
+      "query": "晚上从河边那条过道最后走，管理员会留哪盏灯照台阶？",
+      "relevant": [
+        {
+          "path": "场馆巡查/廊道灯.md",
+          "anchor": "关门后，靠河一侧的走廊保留最西端一盏壁灯，供最后离开的人辨认台阶。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-paraphrase-03",
+      "language": "zh",
+      "mode": "natural",
+      "query": "孩子排练完，唱词纸要从乐谱夹取出来另交吗？",
+      "relevant": [
+        {
+          "path": "演出准备/乐谱包.md",
+          "anchor": "童声合唱的歌词册夹在借用的谱夹内侧，排练完连谱夹一并归还。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-paraphrase-04",
+      "language": "zh",
+      "mode": "natural",
+      "query": "我家里找不到能补伞的布，体验课现场有没有东西可以用？",
+      "relevant": [
+        {
+          "path": "公益课堂/旧伞修补.md",
+          "anchor": "修伞体验课的旧布从入口边的布料筐选取，课程不要求学员自己准备。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-paraphrase-05",
+      "language": "zh",
+      "mode": "natural",
+      "query": "撤展的时候，折好的小鸟要连着绳结直接收起来，还是先把它解开？",
+      "relevant": [
+        {
+          "path": "手工展览/纸鹤墙.md",
+          "anchor": "拆下纸鹤墙上的折纸后，把系绳松开再平放进薄木盒，不用重新打结。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-paraphrase-06",
+      "language": "zh",
+      "mode": "natural",
+      "query": "练习完扔袋子的游戏，能马上把小袋塞进器材柜吗？",
+      "relevant": [
+        {
+          "path": "休闲运动/沙包回收.md",
+          "anchor": "沙包投掷练习结束，装砂的小袋先集中到遮阳棚下晾一会儿，再入柜。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-contextual-01",
+      "language": "zh",
+      "mode": "natural",
+      "query": "晚上要放露天电影，但草坪还泡在水里。我们该去哪儿，时间要不要改？",
+      "relevant": [
+        {
+          "path": "活动调整/草地电影.md",
+          "anchor": "如果草地积水，露天电影改到旧仓库的多功能间，原来的开场时间不变。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-contextual-02",
+      "language": "zh",
+      "mode": "natural",
+      "query": "我们抬的布景进不了窄门，把手能拆，应该怎么把它移进排练室？",
+      "relevant": [
+        {
+          "path": "排练室/布景门.md",
+          "anchor": "抬布景进排练室时，先拆掉可卸把手，再从有橡胶垫的那扇门推入。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-contextual-03",
+      "language": "zh",
+      "mode": "natural",
+      "query": "我到的时候纺线已经开始了，老师还在操作，我该先坐哪儿？",
+      "relevant": [
+        {
+          "path": "教室安排/纺线示范.md",
+          "anchor": "纺线示范开始后，迟到者先在窗边的空位等候，等老师示意再靠近纺车。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-contextual-04",
+      "language": "zh",
+      "mode": "natural",
+      "query": "活动散场下了点雨，借来的长桌布是湿的，不能叠起来的话要放哪里？",
+      "relevant": [
+        {
+          "path": "借用流程/餐布归还.md",
+          "anchor": "归还潮湿的长桌布时，在洗衣间门口挂开晾干，不要与干布一起叠进筐。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-contextual-05",
+      "language": "zh",
+      "mode": "natural",
+      "query": "我找到一个没牌子的育苗盆，没法确定品种，先把它挪到哪个托盘？",
+      "relevant": [
+        {
+          "path": "园艺安排/花盆交接.md",
+          "anchor": "如果育苗花盆上的名牌脱落，把盆留在有条纹的托盘上，等领队按登记表补牌。"
+        }
+      ]
+    },
+    {
+      "id": "nat-zh-contextual-06",
+      "language": "zh",
+      "mode": "natural",
+      "query": "两位带助行器的观众想坐一起。我们可以先从哪儿腾出相邻位置？",
+      "relevant": [
+        {
+          "path": "社区演出/观众席.md",
+          "anchor": "两位观众一同使用助行器时，可以把第一排靠过道的两把折叠椅移到一边。"
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-direct-01",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "参加 Loom Kit 入门活动时，去哪儿领经线？",
+      "relevant": [
+        {
+          "path": "club-operations/loom-kit.md",
+          "anchor": "报名 Loom Kit 入门活动后，到二楼茶水间门口领取已分袋的经线材料。"
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-direct-02",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Clay Imprint 开场前，maple stamp 应该放到哪一格？",
+      "relevant": [
+        {
+          "path": "maker-events/clay-imprint.md",
+          "anchor": "For Clay Imprint, put the maple-shaped stamp on the shelf labelled 准备区 before doors open."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-direct-03",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Petal Walk 的 route sheet 在哪个入口领取？",
+      "relevant": [
+        {
+          "path": "street-games/petal-walk.md",
+          "anchor": "Petal Walk 的双语路线单从北门右侧的藤篮取，每位参加者只拿一张。"
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-direct-04",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "String Circle 换场时，violin 乐手该去哪个房间等？",
+      "relevant": [
+        {
+          "path": "music-events/string-circle.md",
+          "anchor": "String Circle 的小提琴乐手在换场时到标有 Pine 的练习室等候。"
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-direct-05",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Paint Swap 结束后 empty tins 要推到哪里处理？",
+      "relevant": [
+        {
+          "path": "club-services/paint-swap.md",
+          "anchor": "The empty Paint Swap tins go to the cart labelled 金属回收 just outside the studio."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-direct-06",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Friday 的 Story Reel sharing 是几点开始？",
+      "relevant": [
+        {
+          "path": "library-events/story-reel.md",
+          "anchor": "Story Reel 分享环节在 Friday 下午三点开始，放映则在前一小时。"
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-paraphrase-01",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "参加 Bird Song 时忘了带录声音的小机器，现场能从哪儿借？",
+      "relevant": [
+        {
+          "path": "hobby-meetups/bird-song.md",
+          "anchor": "The Bird Song session lends small field recorders from the cabinet marked 器材 at the rear of the room."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-paraphrase-02",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Print Night 的 posters 挂在一起，我怎么知道哪张已经看过可以取了？",
+      "relevant": [
+        {
+          "path": "studio-operations/print-night.md",
+          "anchor": "Print Night participants look for a silver clip on the drying rack to identify posters that have passed review."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-paraphrase-03",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Lemon Stall 收摊时，装果汁的壶要先拿到哪儿冲一遍？",
+      "relevant": [
+        {
+          "path": "market-helpers/lemon-stall.md",
+          "anchor": "The Lemon Stall juice jugs are rinsed at the sink beside the greenhouse before being returned to the crate."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-paraphrase-04",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Sun Box 的小苗要换地方时，怎么认出哪些现在可以移走？",
+      "relevant": [
+        {
+          "path": "garden-programs/sun-box.md",
+          "anchor": "In Sun Box, seedlings ready to move are marked with a white peg; yellow pegs mean they should stay in the nursery."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-paraphrase-05",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "刚把 Dough Lab 的面揉完，老师还没示范下一步，先搁在哪儿？",
+      "relevant": [
+        {
+          "path": "cooking-club/dough-lab.md",
+          "anchor": "Dough Lab 揉好以后先把面团放在贴有 Warm Shelf 的搁板上，等下一轮示范。"
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-paraphrase-06",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Quilt Circle 的布块有条线开了，我想找人补一下，要去哪个摊位？",
+      "relevant": [
+        {
+          "path": "craft-exchange/quilt-circle.md",
+          "anchor": "The Quilt Circle corner for fixing loose seams is staffed at the table labelled 返工 next to the entrance."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-contextual-01",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Snow Globe 有个展品漏水了，我等志愿者拿毛巾时先把它放哪儿？",
+      "relevant": [
+        {
+          "path": "seasonal-events/snow-globe.md",
+          "anchor": "If a Snow Globe display leaks, move its base onto the shallow tray labelled 待查 while a volunteer fetches a towel."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-contextual-02",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "还 Sound Cart 时发现提带不见了，应该把车停哪儿，避免当成正常归还？",
+      "relevant": [
+        {
+          "path": "equipment-share/sound-cart.md",
+          "anchor": "When the Sound Cart comes back without its handle strap, put it by the 校验 sign so the custodian can check it."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-contextual-03",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Flip Book 交换遇到雨改到室内了，我带着本子先去哪个桌子？",
+      "relevant": [
+        {
+          "path": "film-club/flip-book.md",
+          "anchor": "If the Flip Book swap moves inside because of rain, the first exchange starts at the table signed 小剧场入口."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-contextual-04",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Tile Mural 还剩几片明天要用的砖，刚洗完是湿的，要放哪儿过夜？",
+      "relevant": [
+        {
+          "path": "event-operations/tile-mural.md",
+          "anchor": "Wet Tile Mural tiles that will be used the next morning stay on the Mesh Shelf until they dry."
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-contextual-05",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Harmony Table 刚换了一个曲目，已经打印了新版，我怎么标记再把旧的交出去？",
+      "relevant": [
+        {
+          "path": "choir-outreach/harmony-table.md",
+          "anchor": "如果 Harmony Table 的曲目表改过，先在新页顶部贴橙色圆点，再把旧页交给领唱保留。"
+        }
+      ]
+    },
+    {
+      "id": "nat-mixed-contextual-06",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Postcard Station 有张卡的日期糊了，我无法按年份归档，先夹在哪个文件夹？",
+      "relevant": [
+        {
+          "path": "collection-room/postcard-station.md",
+          "anchor": "If a Postcard Station card has an unreadable date, clip it to the folder marked 待确认 before sorting by year."
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "How many kites were repaired during the west field workshop this year?"
+    },
+    {
+      "language": "en",
+      "query": "Which manufacturer supplied the handheld binoculars for the lunar evening?"
+    },
+    {
+      "language": "en",
+      "query": "What is the street address of the glass recycling depot in Redwood Borough?"
+    },
+    {
+      "language": "zh",
+      "query": "露台读书会取消后，报名费最迟在哪一天退回？"
+    },
+    {
+      "language": "zh",
+      "query": "草地电影改场那天实际来了多少位观众？"
+    },
+    {
+      "language": "zh",
+      "query": "星沙镇的陶瓷电炉今年每度电的收费标准是多少？"
+    },
+    {
+      "language": "mixed",
+      "query": "Snow Globe 展品的玻璃罩用的是哪家厂商的型号？"
+    },
+    {
+      "language": "mixed",
+      "query": "Dough Lab 的 Warm Shelf 校准温度是多少度？"
+    },
+    {
+      "language": "mixed",
+      "query": "Maple Harbor 的 scuba permit 可以在哪个网站续期？"
+    }
+  ]
+}

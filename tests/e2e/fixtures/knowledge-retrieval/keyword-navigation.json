@@ -1,0 +1,747 @@
+{
+  "rubric": {
+    "scope": "Independent synthetic multilingual lexical holdout for owner-authenticated native Web local knowledge search. No personal data, semantic answer generation, or model involvement.",
+    "positiveQueries": "36 body-focused keyword queries and 18 exact file navigation queries; each language has 12 keywords, 3 root-relative paths and 3 exact basenames. 60 documents include 24 index, archive or review notes.",
+    "sourcedHit": "Relevant root-relative path appears by rank k and the authenticated exact ref/revision read matches frozen bytes, SHA-256 and the answer span. For keyword cases the authoritative operational fact is relevant; a page merely advertising or referencing the policy is insufficient. For navigation, the explicitly named file is relevant even when the policy text points to it.",
+    "denominator": "Every positive query is in its category denominator, including empty and irrelevant responses. Report per-language and per-mode results, top-1 and top-3, returned-source integrity, and six disjoint no-answer controls.",
+    "target": "Predeclared primary is sourced keyword hit@1 (target at least 80% aggregate), with exact navigation a separate guard (all 18 expected first). Require no baseline regressions by query and exact source verification on every hit. Negative controls must stay empty. Compare the same bytes without tuning holdout cases."
+  },
+  "documents": {
+    "field-service/gantry-encoder-reset-index.md": "# Gantry encoder reset index\nThis page is a link index. Confirm the actual position procedure in the controlled instruction.\n",
+    "field-service/lane-recovery.md": "# Restore overhead track position\nAfter an encoder reset, move the gantry to the north stop before recording the offset.\n\nThe gantry operator records the encoder offset before releasing the lane. A failed reset leaves the lane isolated.\nRelated index: field-service/gantry-encoder-reset-index.md.\n",
+    "field-service/hydraulic-filter-torque-draft.md": "# Hydraulic filter torque outline\nThis outline tracks whether an instruction has been reviewed. Values are maintained in the pump assembly procedure.\n",
+    "field-service/pump-service.md": "# Pump assembly checks\nSet the hydraulic filter cover torque to 18 N·m using the calibrated click wrench.\n\nWrite the filter serial number beside the hydraulic service record. Do not estimate torque from the paint mark.\nRelated index: field-service/hydraulic-filter-torque-draft.md.\n",
+    "field-service/freight-seal-witness-archive.md": "# Freight seal witness archive\nOld photos are indexed by month. The current handover rule lives in a separate instruction.\n",
+    "field-service/loading-signoff.md": "# Trailer handover\nThe receiving lead must witness the freight seal check before the driver signs.\n\nLog the freight seal number and the name of the witness in the handover record.\nRelated index: field-service/freight-seal-witness-archive.md.\n",
+    "field-service/courier-freezer-alarm-drill.md": "# Courier freezer alarm drill\nThis is a catalogue of rehearsals, not an operational instruction.\n",
+    "field-service/cold-chain.md": "# Cold shipment escalation\nWhen the courier freezer alarm sounds, move the shipment to bay F2 and call the duty lead.\n\nThe duty lead clears the freezer alarm after the courier has signed the transfer line.\nRelated index: field-service/courier-freezer-alarm-drill.md.\n",
+    "field-service/projection-lamp-cooldown-videos.md": "# Projection lamp cooldown videos\nRecordings of the training session are listed here. The operating time is maintained separately.\n",
+    "field-service/av-close.md": "# Close the auditorium\nAllow a 12-minute cooldown after switching the projection lamp off.\n\nThe projection controller keeps its fan active during cooldown. Unplugging the lamp early voids the log.\nRelated index: field-service/projection-lamp-cooldown-videos.md.\n",
+    "field-service/invoice-batch-reversal-review.md": "# Invoice batch reversal review history\nThe invoice batch reversal review took place on Tuesday. This entry records attendance and does not give posting authority.\n",
+    "field-service/ledger-recovery.md": "# Correct a grouped posting\nAn invoice batch reversal requires the ledger controller to approve the reason before posting.\n\nOnce the invoice batch reversal is recorded, keep the original totals available for reconciliation.\nRelated index: field-service/invoice-batch-reversal-review.md.\n",
+    "field-service/microscope-oil-cleaning-stub.md": "# Microscope oil cleaning topic\nThe course outline lists this subject, without a procedure.\n",
+    "field-service/optics-benches.md": "# Clean the optics bench\nRemove microscope immersion oil using a fresh lens tissue during cleaning.\n\nDiscard the oil-saturated tissue rather than using it on the next microscope. Cleaning supplies live in drawer C.\n",
+    "field-service/visitor-badge-evacuation-checklist.md": "# Visitor badge evacuation checklist placeholder\nThe old handout has been withdrawn. Follow the roll-call procedure.\n",
+    "field-service/site-roll-call.md": "# Count people during an incident\nDuring evacuation, the visitor badge register travels with the front-desk warden.\n\nCount each visitor at the assembly point, then return the badge register when evacuation ends.\n",
+    "field-service/accessibility-signoff.md": "# Review tactile print proofs\nThe print coordinator sends one braille proof to the contractor before releasing production.\n\nFile the signed proof after the contractor verifies the braille pattern.\n",
+    "field-service/orchard-observations.md": "# Rainfall instrument schedule\nPerform orchard rain gauge calibration on the first Monday of each quarter.\n\nRecord the calibration date on the orchard sheet, then empty the rain gauge.\n",
+    "field-service/street-festival.md": "# Set the festival support cables\nCheck marquee banner tension with the supplied spring gauge before opening.\n\nRecheck marquee banner tension when the wind direction changes.\n",
+    "field-service/workshop-storage.md": "# Secure spare cylinders\nThe spare oxygen cylinder requires a retention chain above its midpoint.\n\nTag each oxygen cylinder with the inspection date after confirming retention.\n",
+    "交接规程/泵站液位校验索引.md": "# 泵站液位校验索引\n这里只保留资料链接，操作要求另见值班规程。\n",
+    "交接规程/集水池值守.md": "# 值班人员操作说明\n泵站进行液位校验时，先把参考尺置于东侧观察孔。\n\n校验结束后将泵站液位写入当班记录，并通知下一班。\n关联索引：交接规程/泵站液位校验索引.md。\n",
+    "交接规程/档案销毁复核会议.md": "# 档案销毁复核会议提纲\n本页仅保存议程，不给出办事要求。\n",
+    "交接规程/纸档处理.md": "# 报废纸质资料\n纸质档案销毁前必须由两名人员独立复核清单。\n\n复核无误后把销毁批次号写回档案台账。\n关联索引：交接规程/档案销毁复核会议.md。\n",
+    "交接规程/脚手架风速停工演练.md": "# 脚手架风速停工演练\n此处汇总旧演练编号，现场标准另见作业说明。\n",
+    "交接规程/高处作业.md": "# 室外施工条件\n脚手架顶端实测风速达到每秒十米时立即停工。\n\n停工后保留脚手架警戒线，待现场重新测量风速。\n关联索引：交接规程/脚手架风速停工演练.md。\n",
+    "交接规程/配电柜绝缘测试目录.md": "# 配电柜绝缘测试目录\n目录只记录文件来源，不包含现场步骤。\n",
+    "交接规程/低压检修.md": "# 开关柜检修说明\n配电柜绝缘测试前必须按顺序拆除临时接地线并登记。\n\n绝缘测试完毕后，核对配电柜铭牌再恢复接线。\n关联索引：交接规程/配电柜绝缘测试目录.md。\n",
+    "交接规程/幼苗遮阳时段旧版.md": "# 幼苗遮阳时段旧版汇总\n这里只存档旧培训材料，现行要求由育苗工作卡提供。\n",
+    "交接规程/苗床管理.md": "# 夏季育苗工作卡\n晴天的幼苗遮阳时段为上午十一点到下午三点。\n\n逢阴天缩短幼苗遮阳时段，实际起止时间登记到苗床记录。\n关联索引：交接规程/幼苗遮阳时段旧版.md。\n",
+    "交接规程/样本标签更换讨论.md": "# 样本标签更换讨论\n样本标签更换已列入讨论议程。此页不记载当前负责人员。\n",
+    "交接规程/留样登记.md": "# 纠正无法读取的编号\n样本标签更换需要由留样员在双人见证下完成。\n\n将更换原因和旧标签编号写入样本留痕记录。\n关联索引：交接规程/样本标签更换讨论.md。\n",
+    "交接规程/展柜湿度报警演示.md": "# 展柜湿度报警演示\n这里放置培训演示入口，正式处置要求另行维护。\n",
+    "交接规程/展陈巡检.md": "# 藏品环境说明\n展柜湿度报警后十五分钟内通知文保员。\n\n文保员确认湿度恢复后才能关闭展柜报警。\n",
+    "交接规程/保温箱封条转运草稿.md": "# 保温箱封条转运草稿\n本文是空白模板，没有填写实际交接要求。\n",
+    "交接规程/取送交接.md": "# 运输前检查\n保温箱转运前由发件人和接件人核对封条编号。\n\n封条磨损的保温箱暂缓转运，先请库房确认。\n",
+    "交接规程/乐团行李.md": "# 出行打包\n木质乐器运输前必须先安装四角防震垫。\n\n把防震垫批次号记在乐器运输卡片上。\n",
+    "交接规程/排水巡检.md": "# 雨季维护\n雨水沟沉砂厚度超过八厘米时安排清掏。\n\n清掏后检查雨水沟转角是否还留有沉砂。\n",
+    "交接规程/会议记录.md": "# 修订听证材料\n听证笔录更正时由记录员和发言人逐页签名。\n\n将更正页放回听证笔录原位并保留原编号。\n",
+    "交接规程/门钥管理.md": "# 钥匙发放\n外包人员配钥匙后的领用和交回须由保安同一窗口登记。\n\n配钥匙数量发生变动时同步更新领用与交回台账。\n",
+    "现场协同/LoRa-网关-续租索引.md": "# LoRa 网关续租索引\n本页只提供往期文件目录，当前操作规则另见现场手册。\n",
+    "现场协同/边缘站点.md": "# 现场网关交接\nLoRa 网关续租由现场负责人在设备证书到期前七天发起。\n\n完成续租后先检查 LoRa 网关是否回到正常上报状态。\n关联索引：现场协同/LoRa-网关-续租索引.md。\n",
+    "现场协同/UPS-旁路-合闸评审.md": "# UPS 旁路合闸评审\n评审材料只包含议程，没有下达操作要求。\n",
+    "现场协同/机柜维护.md": "# 机房电力处置\nUPS 进入旁路前，合闸动作需要配电负责人在现场确认。\n\n合闸后把 UPS 旁路起止时间登记在电力检查表。\n关联索引：现场协同/UPS-旁路-合闸评审.md。\n",
+    "现场协同/SFTP-到期-轮换历史.md": "# SFTP 到期轮换历史\n档案只登记旧凭据交接时间，现行步骤另见收件手册。\n",
+    "现场协同/外部收件.md": "# 密钥生命周期\nSFTP 凭据到期前五个工作日完成轮换，并由接收方做一次试传。\n\n轮换完成后移除即将到期的 SFTP 凭据，保留试传回执。\n关联索引：现场协同/SFTP-到期-轮换历史.md。\n",
+    "现场协同/PDF-印章-复审样式.md": "# PDF 印章复审样式\n本页保留测试样式，真实外发审批另行维护。\n",
+    "现场协同/对外批次.md": "# 外发件检查\n外发 PDF 的印章复审由第二审核员逐页确认。\n\n复审通过后把印章页数写入 PDF 批次的发送台账。\n关联索引：现场协同/PDF-印章-复审样式.md。\n",
+    "现场协同/CAD-图层-锁定培训.md": "# CAD 图层锁定培训\n培训材料不代替当前交付要求。\n",
+    "现场协同/制图交付.md": "# 出图前检查\nCAD 交付前锁定标记为批准的图层，并导出一份校验清单。\n\n收到审图意见后先解除对应 CAD 图层的锁定。\n关联索引：现场协同/CAD-图层-锁定培训.md。\n",
+    "现场协同/RFID-托盘-盘点回顾.md": "# RFID 托盘盘点回顾\nRFID 托盘盘点已经纳入回顾。此处只留复盘时间，不提供操作岗位。\n",
+    "现场协同/出入库管理.md": "# 库位核对说明\nRFID 托盘盘点由当班仓管员在出库前完成。\n\n盘点差异须用 RFID 读取结果和托盘纸卡共同确认。\n关联索引：现场协同/RFID-托盘-盘点回顾.md。\n",
+    "现场协同/CSV-列名-校对纪要.md": "# CSV 列名校对纪要\n这里汇总讨论条目，不规定最终的导出格式。\n",
+    "现场协同/名录导出.md": "# 发布名录前检查\n名录 CSV 发布前由编辑校对列名，统一保留首行。\n\n校对发现 CSV 列名遗漏时，先修正模板再重新导出。\n",
+    "现场协同/VPN-临时-借用待办.md": "# VPN 临时借用待办\n本页只列历史待办，不描述现行授权条件。\n",
+    "现场协同/供应商接入.md": "# 短期外部访问\n外部人员临时借用 VPN 必须填入任务编号和计划到期时间。\n\n临时借用到期后由值班员核对 VPN 会话已退出。\n",
+    "现场协同/应急设备.md": "# 核对设备标签\n巡检 NFC 贴纸时先确认设备编号与标签内容一致。\n\n贴纸损坏须记录在 NFC 巡检表后才可换新。\n",
+    "现场协同/网关交接.md": "# 网关失效准备\nHTTPS 备援证书应由值班员在切换前完成独立校验。\n\n演练结束后关闭 HTTPS 备援入口并归档证书指纹。\n",
+    "现场协同/舞台设备.md": "# 观众进场前检查\nLED 屏幕亮度在开演前调到现场批复值。\n\n调亮 LED 屏幕后重新记录亮度和确认人。\n",
+    "现场协同/访谈工作.md": "# 收回访谈数据\n访谈录音从 USB 导入后，应在当天完成双份归档。\n\n抽听录音无误后才可擦除已归档的 USB 介质。\n"
+  },
+  "queries": [
+    {
+      "id": "en-navigation-01",
+      "language": "en",
+      "mode": "navigation",
+      "query": "field-service/gantry-encoder-reset-index.md",
+      "relevant": [
+        {
+          "path": "field-service/gantry-encoder-reset-index.md",
+          "anchor": "This page is a link index. Confirm the actual position procedure in the controlled instruction."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-01",
+      "language": "en",
+      "mode": "keyword",
+      "query": "gantry encoder reset",
+      "relevant": [
+        {
+          "path": "field-service/lane-recovery.md",
+          "anchor": "After an encoder reset, move the gantry to the north stop before recording the offset."
+        }
+      ]
+    },
+    {
+      "id": "en-navigation-02",
+      "language": "en",
+      "mode": "navigation",
+      "query": "hydraulic-filter-torque-draft.md",
+      "relevant": [
+        {
+          "path": "field-service/hydraulic-filter-torque-draft.md",
+          "anchor": "This outline tracks whether an instruction has been reviewed. Values are maintained in the pump assembly procedure."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-02",
+      "language": "en",
+      "mode": "keyword",
+      "query": "hydraulic filter torque",
+      "relevant": [
+        {
+          "path": "field-service/pump-service.md",
+          "anchor": "Set the hydraulic filter cover torque to 18 N·m using the calibrated click wrench."
+        }
+      ]
+    },
+    {
+      "id": "en-navigation-03",
+      "language": "en",
+      "mode": "navigation",
+      "query": "field-service/freight-seal-witness-archive.md",
+      "relevant": [
+        {
+          "path": "field-service/freight-seal-witness-archive.md",
+          "anchor": "Old photos are indexed by month. The current handover rule lives in a separate instruction."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-03",
+      "language": "en",
+      "mode": "keyword",
+      "query": "freight seal witness",
+      "relevant": [
+        {
+          "path": "field-service/loading-signoff.md",
+          "anchor": "The receiving lead must witness the freight seal check before the driver signs."
+        }
+      ]
+    },
+    {
+      "id": "en-navigation-04",
+      "language": "en",
+      "mode": "navigation",
+      "query": "courier-freezer-alarm-drill.md",
+      "relevant": [
+        {
+          "path": "field-service/courier-freezer-alarm-drill.md",
+          "anchor": "This is a catalogue of rehearsals, not an operational instruction."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-04",
+      "language": "en",
+      "mode": "keyword",
+      "query": "courier freezer alarm",
+      "relevant": [
+        {
+          "path": "field-service/cold-chain.md",
+          "anchor": "When the courier freezer alarm sounds, move the shipment to bay F2 and call the duty lead."
+        }
+      ]
+    },
+    {
+      "id": "en-navigation-05",
+      "language": "en",
+      "mode": "navigation",
+      "query": "field-service/projection-lamp-cooldown-videos.md",
+      "relevant": [
+        {
+          "path": "field-service/projection-lamp-cooldown-videos.md",
+          "anchor": "Recordings of the training session are listed here. The operating time is maintained separately."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-05",
+      "language": "en",
+      "mode": "keyword",
+      "query": "projection lamp cooldown",
+      "relevant": [
+        {
+          "path": "field-service/av-close.md",
+          "anchor": "Allow a 12-minute cooldown after switching the projection lamp off."
+        }
+      ]
+    },
+    {
+      "id": "en-navigation-06",
+      "language": "en",
+      "mode": "navigation",
+      "query": "invoice-batch-reversal-review.md",
+      "relevant": [
+        {
+          "path": "field-service/invoice-batch-reversal-review.md",
+          "anchor": "The invoice batch reversal review took place on Tuesday. This entry records attendance and does not give posting authority."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-06",
+      "language": "en",
+      "mode": "keyword",
+      "query": "invoice batch reversal",
+      "relevant": [
+        {
+          "path": "field-service/ledger-recovery.md",
+          "anchor": "An invoice batch reversal requires the ledger controller to approve the reason before posting."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-07",
+      "language": "en",
+      "mode": "keyword",
+      "query": "microscope oil cleaning",
+      "relevant": [
+        {
+          "path": "field-service/optics-benches.md",
+          "anchor": "Remove microscope immersion oil using a fresh lens tissue during cleaning."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-08",
+      "language": "en",
+      "mode": "keyword",
+      "query": "visitor badge evacuation",
+      "relevant": [
+        {
+          "path": "field-service/site-roll-call.md",
+          "anchor": "During evacuation, the visitor badge register travels with the front-desk warden."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-09",
+      "language": "en",
+      "mode": "keyword",
+      "query": "braille proof contractor",
+      "relevant": [
+        {
+          "path": "field-service/accessibility-signoff.md",
+          "anchor": "The print coordinator sends one braille proof to the contractor before releasing production."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-10",
+      "language": "en",
+      "mode": "keyword",
+      "query": "orchard rain gauge calibration",
+      "relevant": [
+        {
+          "path": "field-service/orchard-observations.md",
+          "anchor": "Perform orchard rain gauge calibration on the first Monday of each quarter."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-11",
+      "language": "en",
+      "mode": "keyword",
+      "query": "marquee banner tension",
+      "relevant": [
+        {
+          "path": "field-service/street-festival.md",
+          "anchor": "Check marquee banner tension with the supplied spring gauge before opening."
+        }
+      ]
+    },
+    {
+      "id": "en-keyword-12",
+      "language": "en",
+      "mode": "keyword",
+      "query": "oxygen cylinder retention",
+      "relevant": [
+        {
+          "path": "field-service/workshop-storage.md",
+          "anchor": "The spare oxygen cylinder requires a retention chain above its midpoint."
+        }
+      ]
+    },
+    {
+      "id": "zh-navigation-01",
+      "language": "zh",
+      "mode": "navigation",
+      "query": "交接规程/泵站液位校验索引.md",
+      "relevant": [
+        {
+          "path": "交接规程/泵站液位校验索引.md",
+          "anchor": "这里只保留资料链接，操作要求另见值班规程。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-01",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "泵站 液位 校验",
+      "relevant": [
+        {
+          "path": "交接规程/集水池值守.md",
+          "anchor": "泵站进行液位校验时，先把参考尺置于东侧观察孔。"
+        }
+      ]
+    },
+    {
+      "id": "zh-navigation-02",
+      "language": "zh",
+      "mode": "navigation",
+      "query": "档案销毁复核会议.md",
+      "relevant": [
+        {
+          "path": "交接规程/档案销毁复核会议.md",
+          "anchor": "本页仅保存议程，不给出办事要求。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-02",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "档案 销毁 复核",
+      "relevant": [
+        {
+          "path": "交接规程/纸档处理.md",
+          "anchor": "纸质档案销毁前必须由两名人员独立复核清单。"
+        }
+      ]
+    },
+    {
+      "id": "zh-navigation-03",
+      "language": "zh",
+      "mode": "navigation",
+      "query": "交接规程/脚手架风速停工演练.md",
+      "relevant": [
+        {
+          "path": "交接规程/脚手架风速停工演练.md",
+          "anchor": "此处汇总旧演练编号，现场标准另见作业说明。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-03",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "脚手架 风速 停工",
+      "relevant": [
+        {
+          "path": "交接规程/高处作业.md",
+          "anchor": "脚手架顶端实测风速达到每秒十米时立即停工。"
+        }
+      ]
+    },
+    {
+      "id": "zh-navigation-04",
+      "language": "zh",
+      "mode": "navigation",
+      "query": "配电柜绝缘测试目录.md",
+      "relevant": [
+        {
+          "path": "交接规程/配电柜绝缘测试目录.md",
+          "anchor": "目录只记录文件来源，不包含现场步骤。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-04",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "配电柜 绝缘 测试",
+      "relevant": [
+        {
+          "path": "交接规程/低压检修.md",
+          "anchor": "配电柜绝缘测试前必须按顺序拆除临时接地线并登记。"
+        }
+      ]
+    },
+    {
+      "id": "zh-navigation-05",
+      "language": "zh",
+      "mode": "navigation",
+      "query": "交接规程/幼苗遮阳时段旧版.md",
+      "relevant": [
+        {
+          "path": "交接规程/幼苗遮阳时段旧版.md",
+          "anchor": "这里只存档旧培训材料，现行要求由育苗工作卡提供。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-05",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "幼苗 遮阳 时段",
+      "relevant": [
+        {
+          "path": "交接规程/苗床管理.md",
+          "anchor": "晴天的幼苗遮阳时段为上午十一点到下午三点。"
+        }
+      ]
+    },
+    {
+      "id": "zh-navigation-06",
+      "language": "zh",
+      "mode": "navigation",
+      "query": "样本标签更换讨论.md",
+      "relevant": [
+        {
+          "path": "交接规程/样本标签更换讨论.md",
+          "anchor": "样本标签更换已列入讨论议程。此页不记载当前负责人员。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-06",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "样本 标签 更换",
+      "relevant": [
+        {
+          "path": "交接规程/留样登记.md",
+          "anchor": "样本标签更换需要由留样员在双人见证下完成。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-07",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "展柜 湿度 报警",
+      "relevant": [
+        {
+          "path": "交接规程/展陈巡检.md",
+          "anchor": "展柜湿度报警后十五分钟内通知文保员。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-08",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "保温箱 封条 转运",
+      "relevant": [
+        {
+          "path": "交接规程/取送交接.md",
+          "anchor": "保温箱转运前由发件人和接件人核对封条编号。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-09",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "乐器 运输 防震",
+      "relevant": [
+        {
+          "path": "交接规程/乐团行李.md",
+          "anchor": "木质乐器运输前必须先安装四角防震垫。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-10",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "雨水沟 沉砂 清掏",
+      "relevant": [
+        {
+          "path": "交接规程/排水巡检.md",
+          "anchor": "雨水沟沉砂厚度超过八厘米时安排清掏。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-11",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "听证 笔录 更正",
+      "relevant": [
+        {
+          "path": "交接规程/会议记录.md",
+          "anchor": "听证笔录更正时由记录员和发言人逐页签名。"
+        }
+      ]
+    },
+    {
+      "id": "zh-keyword-12",
+      "language": "zh",
+      "mode": "keyword",
+      "query": "配钥匙 领用 交回",
+      "relevant": [
+        {
+          "path": "交接规程/门钥管理.md",
+          "anchor": "外包人员配钥匙后的领用和交回须由保安同一窗口登记。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-navigation-01",
+      "language": "mixed",
+      "mode": "navigation",
+      "query": "现场协同/LoRa-网关-续租索引.md",
+      "relevant": [
+        {
+          "path": "现场协同/LoRa-网关-续租索引.md",
+          "anchor": "本页只提供往期文件目录，当前操作规则另见现场手册。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-01",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "LoRa 网关 续租",
+      "relevant": [
+        {
+          "path": "现场协同/边缘站点.md",
+          "anchor": "LoRa 网关续租由现场负责人在设备证书到期前七天发起。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-navigation-02",
+      "language": "mixed",
+      "mode": "navigation",
+      "query": "UPS-旁路-合闸评审.md",
+      "relevant": [
+        {
+          "path": "现场协同/UPS-旁路-合闸评审.md",
+          "anchor": "评审材料只包含议程，没有下达操作要求。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-02",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "UPS 旁路 合闸",
+      "relevant": [
+        {
+          "path": "现场协同/机柜维护.md",
+          "anchor": "UPS 进入旁路前，合闸动作需要配电负责人在现场确认。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-navigation-03",
+      "language": "mixed",
+      "mode": "navigation",
+      "query": "现场协同/SFTP-到期-轮换历史.md",
+      "relevant": [
+        {
+          "path": "现场协同/SFTP-到期-轮换历史.md",
+          "anchor": "档案只登记旧凭据交接时间，现行步骤另见收件手册。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-03",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "SFTP 到期 轮换",
+      "relevant": [
+        {
+          "path": "现场协同/外部收件.md",
+          "anchor": "SFTP 凭据到期前五个工作日完成轮换，并由接收方做一次试传。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-navigation-04",
+      "language": "mixed",
+      "mode": "navigation",
+      "query": "PDF-印章-复审样式.md",
+      "relevant": [
+        {
+          "path": "现场协同/PDF-印章-复审样式.md",
+          "anchor": "本页保留测试样式，真实外发审批另行维护。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-04",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "PDF 印章 复审",
+      "relevant": [
+        {
+          "path": "现场协同/对外批次.md",
+          "anchor": "外发 PDF 的印章复审由第二审核员逐页确认。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-navigation-05",
+      "language": "mixed",
+      "mode": "navigation",
+      "query": "现场协同/CAD-图层-锁定培训.md",
+      "relevant": [
+        {
+          "path": "现场协同/CAD-图层-锁定培训.md",
+          "anchor": "培训材料不代替当前交付要求。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-05",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "CAD 图层 锁定",
+      "relevant": [
+        {
+          "path": "现场协同/制图交付.md",
+          "anchor": "CAD 交付前锁定标记为批准的图层，并导出一份校验清单。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-navigation-06",
+      "language": "mixed",
+      "mode": "navigation",
+      "query": "RFID-托盘-盘点回顾.md",
+      "relevant": [
+        {
+          "path": "现场协同/RFID-托盘-盘点回顾.md",
+          "anchor": "RFID 托盘盘点已经纳入回顾。此处只留复盘时间，不提供操作岗位。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-06",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "RFID 托盘 盘点",
+      "relevant": [
+        {
+          "path": "现场协同/出入库管理.md",
+          "anchor": "RFID 托盘盘点由当班仓管员在出库前完成。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-07",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "CSV 列名 校对",
+      "relevant": [
+        {
+          "path": "现场协同/名录导出.md",
+          "anchor": "名录 CSV 发布前由编辑校对列名，统一保留首行。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-08",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "VPN 临时 借用",
+      "relevant": [
+        {
+          "path": "现场协同/供应商接入.md",
+          "anchor": "外部人员临时借用 VPN 必须填入任务编号和计划到期时间。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-09",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "NFC 巡检 贴纸",
+      "relevant": [
+        {
+          "path": "现场协同/应急设备.md",
+          "anchor": "巡检 NFC 贴纸时先确认设备编号与标签内容一致。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-10",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "HTTPS 证书 备援",
+      "relevant": [
+        {
+          "path": "现场协同/网关交接.md",
+          "anchor": "HTTPS 备援证书应由值班员在切换前完成独立校验。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-11",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "LED 屏幕 亮度",
+      "relevant": [
+        {
+          "path": "现场协同/舞台设备.md",
+          "anchor": "LED 屏幕亮度在开演前调到现场批复值。"
+        }
+      ]
+    },
+    {
+      "id": "mixed-keyword-12",
+      "language": "mixed",
+      "mode": "keyword",
+      "query": "USB 录音 归档",
+      "relevant": [
+        {
+          "path": "现场协同/访谈工作.md",
+          "anchor": "访谈录音从 USB 导入后，应在当天完成双份归档。"
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "saxophone reed nursery registration"
+    },
+    {
+      "language": "en",
+      "query": "neutrino tunnel painting permit"
+    },
+    {
+      "language": "zh",
+      "query": "珊瑚礁 气球 船牌"
+    },
+    {
+      "language": "zh",
+      "query": "松鼠 铅笔 许可 预算"
+    },
+    {
+      "language": "mixed",
+      "query": "WiFi 蜂箱 喷泉"
+    },
+    {
+      "language": "mixed",
+      "query": "MRI 帆布 鹅群"
+    }
+  ]
+}

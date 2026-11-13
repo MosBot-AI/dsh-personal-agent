@@ -1,0 +1,543 @@
+{
+  "rubric": {
+    "scope": "Independent synthetic final holdout for local retrieval. Documents and questions were authored before final scoring. Archive, workflow, and parallel instructions act as shared topic distractors; some use the exact nouns but describe a different condition, object, or destination.",
+    "positiveQueries": "36 natural questions, twelve each in English, Chinese, and mixed language. Each language contributes four direct, four paraphrase, and four contextual questions. The query ID encodes the sampling group.",
+    "sourcedHit": "A result is relevant when its relative path is annotated as answering the specific question and exact revision readback matches the corpus bytes containing the annotated answer sentence.",
+    "denominator": "Report sourced hit@1 and hit@3 against all positives, by language, and optionally by sampled style. Report empty and irrelevant responses as misses.",
+    "negativeControls": "Report nine intentionally unanswerable controls separately, three per language. Six request absent facts about a topic in the corpus; three have no answering topic in the corpus.",
+    "target": "Report exact readback and misses alongside measured sourced retrieval against the plan's 80 percent target."
+  },
+  "documents": {
+    "archive/plate-boxes.md": "# Numbering plates in transit\n\nPhotographers can request a transit slip at the workroom desk. The empty boxes remain in the cabinet.\n\nWhen an image plate leaves the workroom without its wooden box, record the number written on the paper sleeve.\n",
+    "food-cooperative/oat-cartons.md": "# Oat cooperative crate counts\n\nThe person opening the stockroom records the date above the first tally line.\n\nThe wholesale tally treats a sealed crate of oat cartons as eighteen cartons.\n",
+    "stationery/wax-swatches.md": "# Wax shade sample dispatch\n\nRetain the handwritten shade label with the sample. Return the remaining wax to the maker.\n\nSend approved wax shade swatches in the unlined envelope rather than the padded mailer.\n",
+    "transcription/drama-tapes.md": "# Drama tapes transcription key\n\nThe time code remains in the left column. Script pages are numbered separately.\n\nUse a square bracketed pause marker when a speaker stops midway through a line on the drama tapes.\n",
+    "field-studies/beach-stones.md": "# Pebble survey entry rules\n\nThe survey sheet has one category per specimen. Add the measuring location in the second column.\n\nIf a pebble shows both bands and speckles, enter it under bands and note the speckles in the remarks.\n",
+    "housing/parcel-ledge.md": "# Parcel notice for residents\n\nOrdinary letters still go to the residents' slots. The porter checks the ledge before leaving.\n\nWhen a delivery is too broad for the parcel ledge, the porter will leave it in the shallow recess past the second arch.\n",
+    "collections/biscuit-cards.md": "# Biscuit tin catalogue text\n\nThe wrapper can be photographed separately. Enter a date only if one appears on the object.\n\nCatalogue notes should use the name embossed on the lid, even when the paper wrapper prints a different name.\n",
+    "brewing/class-sample-jars.md": "# Room-temperature tasting setup\n\nPut the samples out shortly before the group arrives. Empty jars are kept under the counter.\n\nThe sour sample belongs in the small glass jar with the wire handle, not in the ceramic tasting bowl.\n",
+    "zine-office/folding-order.md": "# Folded zine inspection sheet\n\nNumber the inspected bundles in pencil. Do not add a correction slip before the print lead signs the stack.\n\nIf a folded zine's center pages are blank, keep it flat in the misprint stack so the print lead can examine the inside.\n",
+    "guesthouse/breakfast-delivery.md": "# Guesthouse breakfast porch\n\nReturn the tray to the downstairs rack once the basket comes back. The notice applies to the west wing.\n\nOn frosty mornings, leave the breakfast basket inside the first porch door instead of on the outdoor bench.\n",
+    "seed-bank/envelope-rescue.md": "# Dry seed packet exceptions\n\nDo not rewrite the printed accession number. Packets needing inspection go in the same open tray.\n\nWhen a packet's flap has torn but the label is intact, put the whole packet into a plain outer envelope so the original label stays with it.\n",
+    "ferry-office/pass-cards.md": "# Passenger pass desk fallback\n\nSingle-ride stubs are filed in the ledger. Countersign replacement cards at the end of the shift.\n\nWhen the ferry pass printer is unavailable, use the blue duplicate card and leave the lower copy in the office tray.\n",
+    "裁缝记事/门襟样片.md": "# 门襟样片编号规程\n\n剪掉疏缝线后再归档；小布样叠放时以编号面朝上。\n\n带扣眼的门襟样片在右下角用铅笔写编号。\n",
+    "标本室/树皮装片.md": "# 树皮装片标签\n\n标签不可遮住观察窗口；登记当天先核对装片数量。\n\n白桦树皮装片使用浅黄色标签，其他装片按各自的索引登记。\n",
+    "居民手册/布告栏轮值.md": "# 北楼布告栏轮值\n\n临时通知请先交给值班员。布告栏的玻璃门由值班员开锁。\n\n北楼布告栏在每月第二个周二更换常规告示。\n",
+    "航行讲解/纸船船名.md": "# 纸船展台名牌\n\n模型按入场顺序摆放；桌脚附近不能放散落纸片。\n\n橙色纸船的船名卡放在模型左舷一侧，立在矮木夹上。\n",
+    "社区厨房/豆浆杯记号.md": "# 试饮杯浓淡记号\n\n不同配方只用杯柄标识区分，杯身没有贴纸。\n\n试饮时，杯柄缠一圈细线代表未加水的原浆。\n",
+    "录音整理/风声片段.md": "# 环境声样带分栏\n\n整理录音时，每段只分入一个主栏，并保留原始时间。\n\n录到远处的雷声但没有雨点时，把片段归入天际声栏。\n",
+    "模型展/桥拱展示.md": "# 缩尺桥梁摆放图\n\n每座模型下方留空，不用放作者卡片。作者名单另贴于入口。\n\n拱顶上有三道凸纹的桥梁模型陈列在靠楼梯的矮台。\n",
+    "临时仓/玻璃垫片.md": "# 玻璃物件打包约定\n\n木箱内侧贴易碎标记。清点完成后再关闭箱盖。\n\n两块展用玻璃叠放时，中间隔一张波纹纸板。\n",
+    "订货窗口/双面票据.md": "# 临柜收据打印异常\n\n补齐的双面收据可正常盖章。正常单面收据仍直接交给顾客。\n\n如果双面收据只印出正面，请把它保留在待补打印夹，不要在空白背面手抄。\n",
+    "工艺准备/香包染线.md": "# 染线剩余批次标识\n\n交接簿不登记晾晒时长。短绳在交接结束前不得取下。\n\n一批染线尚未完全干透但当天必须交接时，在托盘上系一条棕色短绳作标记。\n",
+    "巷口设施/折叠坡板.md": "# 坡板临时收放\n\n收取前先清理边缘泥点。值班员每日关门时查看立架。\n\n斜坡板被雨淋湿后暂放在门厅的立架上，不要折好挂回墙上。\n",
+    "文本校对/旧海报字样.md": "# 海报缺字转录\n\n落款与正文分行。原图链接附在记录末尾。\n\n海报上的落款无法辨认时，用一个空心圆占位，保留其余清晰文字。\n",
+    "community-notes/echo-room.md": "# Echo Room access tags\n\n归还后把访客牌翻面朝下，值班人员再登记。\n\nEcho Room 的临时访客从挂有 Half Moon 标识的抽屉领取访客牌。\n",
+    "archive-rooms/dune-tube.md": "# Dune Tube core sleeve\n\nThe clean tray beside the rack is only for sleeves waiting to be labelled.\n\nKeep the Dune Tube sleeve labelled B3 on the second rail of the rack marked 岩芯。\n",
+    "broadcast-desk/cedar-hour.md": "# Cedar Hour closing cue\n\nThe cue is logged after the closing track is selected.\n\nCedar Hour 用低音木鱼的一声作为 closing cue，不用录制铃声。\n",
+    "shared-gear/tulip-case.md": "# Tulip Case tag inventory\n\nBefore counting tags, close the side flap and check the loan slip.\n\nReplace any missing Tulip Case tag with one from the pouch marked 备用标签.\n",
+    "manuscript-desk/marble-script.md": "# Marble Script correction line\n\nA blank annotation line may be left empty. Copy the main text in the usual order.\n\nMarble Script 中划掉但仍清楚的边注应保留，录在可辨删改栏。\n",
+    "river-study/reed-watch.md": "# Reed Watch morning frame\n\nMark every photo with a station number. The folder for public slides has a separate format.\n\nFor Reed Watch, the photograph taken before the water marker is installed goes in the folder titled 布设前.\n",
+    "repair-desk/cloud-meter.md": "# Cloud Meter loan record\n\nFold the paper instructions separately. Record the case number before closing the cabinet.\n\nBefore Cloud Meter goes back on the shelf, tie the detached lens cover to the red loop on its case.\n",
+    "magazine-office/ink-index.md": "# Ink Index unsigned margins\n\nThe masthead names are left as printed. The front cover should stay free of notes.\n\nAn unsigned Ink Index correction should be initialled on the inside of the back cover.\n",
+    "archive-lab/orbit-card.md": "# Orbit Card provisional drawer\n\nKeep the damaged sleeve with the batch records after checking its label.\n\nIf the Orbit Card sleeve splits along a side seam, transfer the card to the temporary drawer marked 待封套.\n",
+    "reading-project/moss-page.md": "# Moss Page duplicate numbers\n\nPrint the ordinary page count on the cover sheet. Keep loose clips off the display table.\n\nFor Moss Page, if two proof sheets carry the same page number, keep both sheets in a clip marked 重号 and ask the editor to confirm.\n",
+    "display-crew/pearl-panel.md": "# Pearl Panel empty cradle\n\nThe display cards may be moved to another holder. Set tools on the metal tray.\n\nIf the Pearl Panel holder is too narrow for a framed sample, leave the sample on the felt mat marked 暂放 until a wider holder arrives.\n",
+    "radio-club/amber-dial.md": "# Amber Dial log exception\n\nAt a normal changeover, copy the confirmed reading on the next line and close the book.\n\nIf the Amber Dial reading has not settled when the group changes, write 待复测 in the handover book and leave the value blank.\n",
+    "archive/desk-and-travel-slips.md": "# Desk and travel slips: training examples\n\nFor image plates staying in the workroom, the wooden box number is enough to find the plate on the inventory trolley. A paper sleeve is only issued for a plate leaving the room. The training example records the quantity of wooden boxes, not the travelling plate's identifier.\n\nFor Orbit Card, an empty spare sleeve goes into the drawer marked 库存. The inventory sheet lists undamaged envelopes only; damaged originals need a separate inspection.\n",
+    "food-cooperative/retail-packs.md": "# Retail stock and display units\n\nThe oat cartons sold at the counter are grouped in open trays of six. A filled display crate usually has three open trays, but staff do not use these temporary displays as the wholesale tally.\n\nDuring the tasting class, the used ceramic bowls go in the middle sink. The small glass jars in the stock cupboard may be used for drinks or tastings, depending on the class lead's plan.\n",
+    "stationery/dispatch-returns.md": "# Protective wrapping for returns\n\nSend borrowed wax colour charts back in padded mailers because their wooden covers may rub against one another. Wax swatches travel separately from charts. The mailroom has blank address labels beside both envelope boxes.\n",
+    "transcription/reading-rooms.md": "# Reading room excerpt notation\n\nIn the edited dramatic readings for the public website, use three dots to show a short portion removed by the editor. A clear pause after a whole line remains a normal paragraph break. These examples were prepared from printed scripts, not from the drama tapes.\n\n复核环境录音时，若雷声之后已经听见雨点，可把样带移到降水声栏。天际声栏的名称曾出现在旧空白表上，这一页不说明单独雷声如何归类。\n",
+    "field-studies/stone-exhibit.md": "# Loan pebbles and photograph markers\n\nSpeckled beach pebbles in the loan box use dotted labels. Striped stones have separate photo stands, because they show better when the light runs across the bands. The markers are for the public exhibit rather than the survey tally.\n",
+    "housing/visitor-and-porter-desk.md": "# Keys and short visits\n\nThe guesthouse sometimes puts empty baskets on the outdoor bench before the morning rounds. The indoor porch mat belongs to the cleaning crew. This notice covers collection before breakfast, without deciding where to leave a delivered basket in bad weather.\n\nThe second arch in the residence has a narrow slot for weekend visitor forms. A parcel that fits the ledge may be collected beside the entrance at the usual time.\n",
+    "collections/packaging-display.md": "# Case labels for packaging display\n\nFor the exhibition card under a biscuit tin, copy the product name from its paper wrapper. The raised metal letters are used in the display photographs. Exhibition cards and catalogue notes are prepared by different volunteers.\n",
+    "zine-office/bundles-and-proofs.md": "# Proofing desk end-of-day routine\n\nOrdinary folded zines are bundled in groups of ten. The top sheet of a display bundle may be blank so visitors can add a note. The display bundles never enter the print lead's misprint count.\n\nMoss Page 结束后把印多的封面夹到写有 多余封面 的夹子里。这条说明只对封面和完全相同的废印件适用。\n",
+    "seed-bank/label-reprints.md": "# Seed intake label reprints\n\nIf an accession label is missing or unreadable, put the unopened seed packet in the inspection tray. If an outer envelope arrives empty, return it to the stationery box. Torn labels cannot be repaired with a hand-written replacement.\n",
+    "ferry-office/fare-cards.md": "# Pass desk returns and duplicate books\n\nKeep unused white duplicate cards in the top drawer during normal operation. A used card filed with the cancelled-ticket book must be marked VOID. The lower copy in this desk guide refers to ordinary fare corrections, not interrupted pass printing.\n",
+    "裁缝记事/表格归档.md": "# 归档时的铅笔标记\n\n不带扣眼的窄门襟写在左下角，布料反面只留下尺寸。右下角的照片定位角标由摄影员在清点后擦掉。\n\n香包样品已干透时可绑一条白色长绳。棕色短绳也会在配件筐里出现，但这个示例针对干品的最终清点。\n",
+    "标本室/图版分类.md": "# 展陈图版与模型位置\n\n白桦树皮的教学照片下方放白色打印条，图版不使用显微装片标签。黄色标签存于装片柜中，不随教学照片发放。\n\n拱顶有两条浅纹的桥梁模型可以靠窗摆放。楼梯边只摆尺寸符合矮台深度的展品。\n",
+    "居民手册/临时告示.md": "# 南北楼临时通知\n\n南楼在每月最后一个周二检查布告栏，遇到闭馆顺延。北楼关于维修的临时告示张贴后要在值班簿记下日期。这一页没有规定常规告示的统一更换时间。\n",
+    "航行讲解/展桌练习.md": "# 展桌布置练习\n\n蓝色纸船的船名卡靠右舷摆放。模型左侧通常摆空的备用木夹。没有展出橙色模型的场次也使用这张练习图。\n\nDune Tube 里未登记的空套管先放到清洁托盘，标签 B3 复核过后由标本管理员转走。\n",
+    "社区厨房/杯柄清洗.md": "# 清洗待分类的饮用杯\n\n杯柄缠两圈线的样杯含有兑水配方，使用前冲洗。清洗架本身没有记录单圈线的浓度定义。\n",
+    "临时仓/普通展示件.md": "# 展架空位和搬运须知\n\n单块展示玻璃有专用竖槽。空的波纹纸板存放在箱盖内侧，可用于各类包装，但本页未说明两块叠放的办法。\n\nPearl Panel 已经装上合适支架的样品可放在灰布上等待拍照。工具不能留在台面。\n",
+    "订货窗口/收据盖章练习.md": "# 新人盖章样例\n\n单面收据背面通常为空，盖章后即可发给顾客。双面练习件印全之后收入培训夹。这个示例没有描述机器少印一面的处理。\n",
+    "巷口设施/换班收尾.md": "# 正常天气的关门清单\n\n干燥的折叠坡板收起挂回门边。立架旁的抹布用于擦去雨水。清单只写日常收尾步骤。\n\nAmber Dial 数值稳定后要把完整读数抄到交接簿；待复测 字样出现在补录表上，用来标记以前的复查记录。\n",
+    "文本校对/编辑痕迹示例.md": "# 两种排版文本的编辑记号\n\n缺页的旧海报用实心圆标出缺页处，能看清的落款要照抄。原图另行登记。\n\nMarble Script 的边注全部无法辨认时，主文不留旁注占位。旧演示中的删改栏只用于给学生解释这几个栏目。\n",
+    "community-notes/lending-rooms.md": "# Short visits and regular passes\n\nEcho Room 的常用门卡放在标有 Full Moon 的抽屉。临时访客来时用的不是常用门卡。\n\nTulip Case 的借用登记表和备用标签袋分开放。已经贴错的标签先粘到归档纸，不能直接放进用过的工具袋。\n",
+    "broadcast-desk/sound-effects-and-safety.md": "# Short cues and shelf rules\n\nUse a recorded bell to begin the Wednesday room announcements. Cedar Hour 的开场示例也曾用录制铃声。闭幕段另由主持人确认。\n\nCloud Meter 的备用镜头盖可放入蓝色托盘，借出物品的原装附件随它的盒子一起归还。\n",
+    "river-study/public-photos.md": "# Image export and display crop\n\nReed Watch 已装好水位标杆的照片可选作公开幻灯片。布设前 文件夹中的原图不要直接裁切。相册说明只覆盖公开照片整理。\n",
+    "magazine-office/cover-markings.md": "# Printed issue and cover treatment\n\nInk Index 的旧样刊封面上有排版人的首字母，作为版式展示。需要认领的未签名校订另有表格，封面外侧不再添加标记。\n"
+  },
+  "queries": [
+    {
+      "id": "final-en-direct-01",
+      "language": "en",
+      "mode": "natural",
+      "query": "What number should I record when moving an image plate without its wooden box?",
+      "relevant": [
+        {
+          "path": "archive/plate-boxes.md",
+          "anchor": "When an image plate leaves the workroom without its wooden box, record the number written on the paper sleeve."
+        }
+      ]
+    },
+    {
+      "id": "final-en-direct-02",
+      "language": "en",
+      "mode": "natural",
+      "query": "How many cartons does the wholesale tally assign to a sealed oat crate?",
+      "relevant": [
+        {
+          "path": "food-cooperative/oat-cartons.md",
+          "anchor": "The wholesale tally treats a sealed crate of oat cartons as eighteen cartons."
+        }
+      ]
+    },
+    {
+      "id": "final-en-direct-03",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which packaging is used to send the approved wax shade swatches?",
+      "relevant": [
+        {
+          "path": "stationery/wax-swatches.md",
+          "anchor": "Send approved wax shade swatches in the unlined envelope rather than the padded mailer."
+        }
+      ]
+    },
+    {
+      "id": "final-en-direct-04",
+      "language": "en",
+      "mode": "natural",
+      "query": "What should I put in the transcript when a speaker on a drama tape stops mid-line?",
+      "relevant": [
+        {
+          "path": "transcription/drama-tapes.md",
+          "anchor": "Use a square bracketed pause marker when a speaker stops midway through a line on the drama tapes."
+        }
+      ]
+    },
+    {
+      "id": "final-en-paraphrase-01",
+      "language": "en",
+      "mode": "natural",
+      "query": "How do I classify a stone from the beach survey that is striped as well as dotted?",
+      "relevant": [
+        {
+          "path": "field-studies/beach-stones.md",
+          "anchor": "If a pebble shows both bands and speckles, enter it under bands and note the speckles in the remarks."
+        }
+      ]
+    },
+    {
+      "id": "final-en-paraphrase-02",
+      "language": "en",
+      "mode": "natural",
+      "query": "The parcel shelf is too narrow for my delivery. Where would the porter have put the large box?",
+      "relevant": [
+        {
+          "path": "housing/parcel-ledge.md",
+          "anchor": "When a delivery is too broad for the parcel ledge, the porter will leave it in the shallow recess past the second arch."
+        }
+      ]
+    },
+    {
+      "id": "final-en-paraphrase-03",
+      "language": "en",
+      "mode": "natural",
+      "query": "There are two names on a tin, one raised in the metal and one printed on paper. Which goes in the catalogue notes?",
+      "relevant": [
+        {
+          "path": "collections/biscuit-cards.md",
+          "anchor": "Catalogue notes should use the name embossed on the lid, even when the paper wrapper prints a different name."
+        }
+      ]
+    },
+    {
+      "id": "final-en-paraphrase-04",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which container should I reach for to serve the tart one in the tasting class?",
+      "relevant": [
+        {
+          "path": "brewing/class-sample-jars.md",
+          "anchor": "The sour sample belongs in the small glass jar with the wire handle, not in the ceramic tasting bowl."
+        }
+      ]
+    },
+    {
+      "id": "final-en-contextual-01",
+      "language": "en",
+      "mode": "natural",
+      "query": "I've folded a zine and found nothing printed in the middle. Should I bundle it or set it aside somehow?",
+      "relevant": [
+        {
+          "path": "zine-office/folding-order.md",
+          "anchor": "If a folded zine's center pages are blank, keep it flat in the misprint stack so the print lead can examine the inside."
+        }
+      ]
+    },
+    {
+      "id": "final-en-contextual-02",
+      "language": "en",
+      "mode": "natural",
+      "query": "The bench is iced over and I'm taking breakfast to the west wing. Where can I put the basket this morning?",
+      "relevant": [
+        {
+          "path": "guesthouse/breakfast-delivery.md",
+          "anchor": "On frosty mornings, leave the breakfast basket inside the first porch door instead of on the outdoor bench."
+        }
+      ]
+    },
+    {
+      "id": "final-en-contextual-03",
+      "language": "en",
+      "mode": "natural",
+      "query": "The seed envelope tore open at the top but I can still read the printed label. How do I repackage it without losing the original?",
+      "relevant": [
+        {
+          "path": "seed-bank/envelope-rescue.md",
+          "anchor": "When a packet's flap has torn but the label is intact, put the whole packet into a plain outer envelope so the original label stays with it."
+        }
+      ]
+    },
+    {
+      "id": "final-en-contextual-04",
+      "language": "en",
+      "mode": "natural",
+      "query": "The ferry pass printer has stopped and someone needs a pass now. Which card can I issue and what stays in the office?",
+      "relevant": [
+        {
+          "path": "ferry-office/pass-cards.md",
+          "anchor": "When the ferry pass printer is unavailable, use the blue duplicate card and leave the lower copy in the office tray."
+        }
+      ]
+    },
+    {
+      "id": "final-zh-direct-01",
+      "language": "zh",
+      "mode": "natural",
+      "query": "带扣眼的门襟样片要在哪里写编号？",
+      "relevant": [
+        {
+          "path": "裁缝记事/门襟样片.md",
+          "anchor": "带扣眼的门襟样片在右下角用铅笔写编号。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-direct-02",
+      "language": "zh",
+      "mode": "natural",
+      "query": "白桦树皮装片要贴什么颜色的标签？",
+      "relevant": [
+        {
+          "path": "标本室/树皮装片.md",
+          "anchor": "白桦树皮装片使用浅黄色标签，其他装片按各自的索引登记。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-direct-03",
+      "language": "zh",
+      "mode": "natural",
+      "query": "北楼布告栏每月什么时候更换常规告示？",
+      "relevant": [
+        {
+          "path": "居民手册/布告栏轮值.md",
+          "anchor": "北楼布告栏在每月第二个周二更换常规告示。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-direct-04",
+      "language": "zh",
+      "mode": "natural",
+      "query": "橙色纸船的船名卡应该摆在模型哪一侧？",
+      "relevant": [
+        {
+          "path": "航行讲解/纸船船名.md",
+          "anchor": "橙色纸船的船名卡放在模型左舷一侧，立在矮木夹上。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-paraphrase-01",
+      "language": "zh",
+      "mode": "natural",
+      "query": "试喝豆浆时我想拿没兑过水的那杯，要找什么记号？",
+      "relevant": [
+        {
+          "path": "社区厨房/豆浆杯记号.md",
+          "anchor": "试饮时，杯柄缠一圈细线代表未加水的原浆。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-paraphrase-02",
+      "language": "zh",
+      "mode": "natural",
+      "query": "环境录音里光听得到闷雷，没听见下雨，这段算哪一类？",
+      "relevant": [
+        {
+          "path": "录音整理/风声片段.md",
+          "anchor": "录到远处的雷声但没有雨点时，把片段归入天际声栏。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-paraphrase-03",
+      "language": "zh",
+      "mode": "natural",
+      "query": "想找桥顶上摸起来有三条横棱的那座小桥，它在展厅哪儿？",
+      "relevant": [
+        {
+          "path": "模型展/桥拱展示.md",
+          "anchor": "拱顶上有三道凸纹的桥梁模型陈列在靠楼梯的矮台。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-paraphrase-04",
+      "language": "zh",
+      "mode": "natural",
+      "query": "两片用来展示的玻璃要装进同一只箱子，夹什么才不会直接贴在一起？",
+      "relevant": [
+        {
+          "path": "临时仓/玻璃垫片.md",
+          "anchor": "两块展用玻璃叠放时，中间隔一张波纹纸板。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-contextual-01",
+      "language": "zh",
+      "mode": "natural",
+      "query": "窗口打出的双面收据背面是白的，我现在该放哪儿，能自己补写吗？",
+      "relevant": [
+        {
+          "path": "订货窗口/双面票据.md",
+          "anchor": "如果双面收据只印出正面，请把它保留在待补打印夹，不要在空白背面手抄。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-contextual-02",
+      "language": "zh",
+      "mode": "natural",
+      "query": "这批做香包的染线还潮着，今天又必须交给下一班，怎么标给对方看？",
+      "relevant": [
+        {
+          "path": "工艺准备/香包染线.md",
+          "anchor": "一批染线尚未完全干透但当天必须交接时，在托盘上系一条棕色短绳作标记。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-contextual-03",
+      "language": "zh",
+      "mode": "natural",
+      "query": "下过雨，门口借用的折叠坡板还有水，关门前该放在哪里？",
+      "relevant": [
+        {
+          "path": "巷口设施/折叠坡板.md",
+          "anchor": "斜坡板被雨淋湿后暂放在门厅的立架上，不要折好挂回墙上。"
+        }
+      ]
+    },
+    {
+      "id": "final-zh-contextual-04",
+      "language": "zh",
+      "mode": "natural",
+      "query": "我在录入一张旧海报，签名那一块褪色看不出，剩下的字还清楚，该怎么记？",
+      "relevant": [
+        {
+          "path": "文本校对/旧海报字样.md",
+          "anchor": "海报上的落款无法辨认时，用一个空心圆占位，保留其余清晰文字。"
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-direct-01",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Echo Room 的 guest badge 从哪个抽屉拿？",
+      "relevant": [
+        {
+          "path": "community-notes/echo-room.md",
+          "anchor": "Echo Room 的临时访客从挂有 Half Moon 标识的抽屉领取访客牌。"
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-direct-02",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Dune Tube 的 B3 套管放在岩芯架第几层？",
+      "relevant": [
+        {
+          "path": "archive-rooms/dune-tube.md",
+          "anchor": "Keep the Dune Tube sleeve labelled B3 on the second rail of the rack marked 岩芯。"
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-direct-03",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Cedar Hour 的 closing cue 应该用哪个声音？",
+      "relevant": [
+        {
+          "path": "broadcast-desk/cedar-hour.md",
+          "anchor": "Cedar Hour 用低音木鱼的一声作为 closing cue，不用录制铃声。"
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-direct-04",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Tulip Case 少了一张 tag，要去哪袋拿替换的？",
+      "relevant": [
+        {
+          "path": "shared-gear/tulip-case.md",
+          "anchor": "Replace any missing Tulip Case tag with one from the pouch marked 备用标签."
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-paraphrase-01",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Marble Script 旁边那行被画了杠，内容还能看懂，要抄到哪个 field？",
+      "relevant": [
+        {
+          "path": "manuscript-desk/marble-script.md",
+          "anchor": "Marble Script 中划掉但仍清楚的边注应保留，录在可辨删改栏。"
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-paraphrase-02",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "拍 Reed Watch 时标杆还没立上，那张 picture 应该归到哪个文件夹？",
+      "relevant": [
+        {
+          "path": "river-study/reed-watch.md",
+          "anchor": "For Reed Watch, the photograph taken before the water marker is installed goes in the folder titled 布设前."
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-paraphrase-03",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Cloud Meter 还回来时镜头盖散在一旁，怎么把它和 case 放在一起免得再丢？",
+      "relevant": [
+        {
+          "path": "repair-desk/cloud-meter.md",
+          "anchor": "Before Cloud Meter goes back on the shelf, tie the detached lens cover to the red loop on its case."
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-paraphrase-04",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Ink Index 上有人改过一处但没留名字，我补 initials 应该写在哪一面？",
+      "relevant": [
+        {
+          "path": "magazine-office/ink-index.md",
+          "anchor": "An unsigned Ink Index correction should be initialled on the inside of the back cover."
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-contextual-01",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Orbit Card 套子的侧边裂了，我手边没有替换套，card 先收进哪个 drawer？",
+      "relevant": [
+        {
+          "path": "archive-lab/orbit-card.md",
+          "anchor": "If the Orbit Card sleeve splits along a side seam, transfer the card to the temporary drawer marked 待封套."
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-contextual-02",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Moss Page 两张 proof 都写了同一个页码，现阶段怎么收，能丢掉一张吗？",
+      "relevant": [
+        {
+          "path": "reading-project/moss-page.md",
+          "anchor": "For Moss Page, if two proof sheets carry the same page number, keep both sheets in a clip marked 重号 and ask the editor to confirm."
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-contextual-03",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Pearl Panel 的 frame 比支架宽，新的还没到，应该先把样品搁在哪里？",
+      "relevant": [
+        {
+          "path": "display-crew/pearl-panel.md",
+          "anchor": "If the Pearl Panel holder is too narrow for a framed sample, leave the sample on the felt mat marked 暂放 until a wider holder arrives."
+        }
+      ]
+    },
+    {
+      "id": "final-mixed-contextual-04",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Amber Dial 的数值还在跳，可下一组已经来交接。handover book 上该怎么写？",
+      "relevant": [
+        {
+          "path": "radio-club/amber-dial.md",
+          "anchor": "If the Amber Dial reading has not settled when the group changes, write 待复测 in the handover book and leave the value blank."
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "What colour is the seal on the workroom image plate's transit slip?"
+    },
+    {
+      "language": "en",
+      "query": "Who provided the red pencil used to number inspected zine bundles?"
+    },
+    {
+      "language": "en",
+      "query": "How much cargo did the freight airship carry on its first flight to Boreal Point?"
+    },
+    {
+      "language": "zh",
+      "query": "白桦树皮装片是用多少倍的镜头拍摄的？"
+    },
+    {
+      "language": "zh",
+      "query": "北楼布告栏的玻璃门是哪一年换新的？"
+    },
+    {
+      "language": "zh",
+      "query": "北川火车站明年夏季末班卧铺车从哪个站台发车？"
+    },
+    {
+      "language": "mixed",
+      "query": "Echo Room 的 visitor badge 是哪家 printing company 做的？"
+    },
+    {
+      "language": "mixed",
+      "query": "Dune Tube 的 B3 sleeve 到底重多少克？"
+    },
+    {
+      "language": "mixed",
+      "query": "North Amber 的 roller derby season pass 可以在哪个 app 退款？"
+    }
+  ]
+}
