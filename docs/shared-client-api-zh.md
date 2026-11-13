@@ -4,7 +4,7 @@
 
 ## 状态与权威来源
 
-用户要求手机和电脑客户端使用同一套 REST 契约，并可选择 Hermes 或 DSH 作为后端。DSH 适配器实现的是**经过认证的协议发现与实时任务分页**，不是功能全面对齐，也不是新的 Agent 运行时。它扩展 [PA-022](https://github.com/MosBot-AI/dsh-personal-agent/issues/23)；已部署 HTTPS 和实体手机验收仍未完成。
+用户要求手机和电脑客户端使用同一套 REST 契约，并可选择 Hermes 或 DSH 作为后端。DSH 主线已包含**经过认证的协议发现与实时任务分页**。部署 HTTPS 和实体手机验收仍由 [PA-022](https://github.com/MosBot-AI/dsh-personal-agent/issues/23) 跟踪。
 
 0.1.0 契约的唯一权威来源是 `MosBot-AI/hermes-superagent/contracts/personal-api`。本仓库在 `contracts/personal-api` 中保存完全一致的 JSON Schema、OpenAPI 描述、测试夹具和摘要清单。来源锁文件固定到权威提交 `48a930a2c01b2add9e349cbc1f0d65278066cc1c`。固定的文件与 Hermes 已合并的契约逐字节一致。[Hermes PR #100](https://github.com/MosBot-AI/hermes-superagent/pull/100)
 
@@ -22,7 +22,6 @@
 
 配对、旧版任务快照、审批交接/响应和旧版 SSE 保留现有路由及语义。未引入替代登录签发器、令牌转发、通用工具执行、外部写入或新监听端口。移动监听器仍需显式启用，并使用操作者配置的 HTTPS 反向代理。
 
-
 OpenAPI 的 `backendSession` Cookie 绑定仅描述当前已实现的 DSH HTTP 适配器，不是新签发器，也不表示 Hermes 使用同名 Cookie。客户端使用正常的 Cookie 容器，业务行为不得按后端品牌分支。
 
 ## 实时分页语义
@@ -36,22 +35,13 @@ OpenAPI 的 `backendSession` Cookie 绑定仅描述当前已实现的 DSH HTTP �
 1. 在部署 HTTPS 和实体手机上验收共享任务分页。旧 64 条 snapshot 保持独立，不作为共享集合。
 2. 适配审批、操作和可轮询的持久变更流，保留精确一次性授权、版本检查、撤销和结果未知时的对账语义。
 3. 会话续接和记忆必须通过已有原生所有者/运行时边界适配。每项操作在具备已验证的适配器及安全/恢复证据前，都必须保持能力不可用。
-4. 用同一套客户端契约测试验证两端。Hermes 还需要已验证的 HTTP 主体传递；Schema 或 DSH 的成功不能解决该宿主接口缺口。原生手机登录和部署来源验收仍是独立发布门槛。
+4. Hermes 验证原生 HTTP 主体并注册共享路由后，用同一套客户端契约测试验证两端。[Hermes 身份 #29](https://github.com/MosBot-AI/hermes-superagent/issues/29) · [Hermes 领域 API #30](https://github.com/MosBot-AI/hermes-superagent/issues/30)
 
 ## 验证
 
 `tests/api/shared-client.spec.ts` 将纯函数的不可用发现/错误输出与权威夹具精确比较，并验证实际 HTTP 任务可用状态及分页响应，验证复制文件的 SHA-256 摘要，覆盖所有原生任务状态映射，并通过真实回环 HTTP 验证认证、拒绝配对码作为凭据、设备撤销、严格 Host/Origin 和查询参数拒绝。`tests/api/remote.spec.ts` 保留旧版设备/回放覆盖。
 
-分页测试还覆盖超过64条任务、精确公共字段、owner/profile/隐藏任务隔离、跨设备/篡改/重启游标、撤权及实时插入顺序。这些检查使用隔离的本地合成状态，不能证明实体手机行为、已部署 HTTPS 来源、部署后的统一任务访问或与 Hermes 的功能对齐。云工作区无法访问用户本地知识库，因此未从中推断历史决策。
+分页测试还覆盖超过 64 条任务、精确公共字段、所有者和 Profile 隔离、隐藏任务、跨设备和篡改游标、重启后游标失效、撤销以及实时插入顺序。夹具使用隔离的本地状态。实体手机、外部部署的 HTTPS 来源和经认证的 Hermes HTTP 仍分别需要验收证据。
 
-### 本切片本地结果
-
-- 统一与已有移动 API 测试：14/14 通过，包含真实回环 HTTP。
-- 全工作区 `tsc --noEmit`、personal-agent 编译和客户端打包通过。计划验证、12 项协调测试和空白检查通过。
-- 默认并行完整套件：332/336 通过；待修复 #75 的已知调度恢复竞态和三项媒体/恢复五秒超时失败。使用 `--maxWorkers=2` 后为 335/336，仅同一调度恢复断言失败。未放宽超时、断言或生产调度逻辑。本分支不包含待合并 #76。完整套件门槛仍未通过。
-- 原生移动/浏览器套件无法通过 `dbus-run-session` 启动：当前环境拒绝临时目录和消息总线套接字。未修改任何安全设置。这是未运行阶段，不是手机或浏览器检查成功。
-- 可用 pnpm 为 11.25.0，而非仓库固定的 11.28.5，安装因版本不符而拒绝。测试将已有相同锁文件的依赖安装复制到本工作树，直接使用其中固定的 TypeScript/Vitest 可执行文件。未修改包或锁文件版本。生成库尚未就绪时的首次完整套件失败，由上述构建后结果取代，不宣称首次运行通过。
-
-### 分页后续切片
-
-该切片叠加在待合并 #79 之上，不合并任何既有 PR。新候选的本地检查与独立审查记录在 PR；前文第一切片的测试结果仅为历史，不能当作新候选结果。实体手机/HTTPS 验收和 #23 保持开放。
+- [能力发现 #79](https://github.com/MosBot-AI/dsh-personal-agent/pull/79) 已合入，提交为 `3900cf4406caef7f15af69d09c9b6840255ce670`。能力发现分支通过了 14 项专项 API 测试。早期全量套件的失败和未运行的原生浏览器阶段均记录在 PR 中。
+- [任务分页 #81](https://github.com/MosBot-AI/dsh-personal-agent/pull/81) 已合入，提交为 `ffbfa1bae6b147e19458269a662337e0d06c24f7`。最终整合版本通过了 19 项专项 API 测试、8 项原生 Chromium 用例、类型检查、构建、12 项协调测试和计划校验。PR 工作流在 Chrome 启动超时后重跑通过，合并提交的主线工作流首轮通过。[整合证据](https://github.com/MosBot-AI/dsh-personal-agent/issues/23#issuecomment-6846471838) · [PR CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43381473515) · [主线 CI](https://github.com/MosBot-AI/dsh-personal-agent/actions/runs/43382599557)
