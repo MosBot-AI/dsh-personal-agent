@@ -15,6 +15,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 - Restore mobile approval controls after an unconfirmed submission and keep responses from retired sessions from interrupting a new pairing.
 
+- Start leased Chromium tasks from a clean tarball installation by sharing the pinned DSH host's MCP and scope packages.
 - Retry interrupted media output downloads without rerendering, and preserve GPU exclusion for persisted media jobs even when media configuration is disabled.
 
 - Improve local knowledge keyword ranking with stronger document-body matches and priority for exact filenames and relative paths.

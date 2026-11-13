@@ -77,7 +77,7 @@ export function prepareWebHost(probe?: string, patch: readonly string[] = [], lo
 
 export async function openWebHost(probe: string, options: { patch?: readonly string[]; configOnly?: boolean;
   prepared?: ReturnType<typeof prepareWebHost> } = {}) {
-  const { root, dshHome } = options.prepared ?? prepareWebHost(probe, options.patch)
+  const { root, dshHome, profileName: selectedProfile } = options.prepared ?? prepareWebHost(probe, options.patch)
   let child: ChildProcessWithoutNullStreams | undefined
   const close = async () => { if (child) await stop(child) }
   onTestFinished(async () => {
@@ -88,11 +88,12 @@ export async function openWebHost(probe: string, options: { patch?: readonly str
     }
   })
 
-  const processHandle = spawn(process.execPath, [dsh, '--profile', profileName, '--no-open', '--port', '0'], {
+  const processHandle = spawn(process.execPath, [dsh, '--profile', selectedProfile, '--no-open', '--port', '0'], {
     cwd: root,
     env: {
       PATH: process.env.PATH,
       SystemRoot: process.env.SystemRoot,
+      XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? join(root, 'cache'),
       DSH_HOME: dshHome,
       DSH_TELEMETRY_DISABLED: '1',
       DSH_PERMISSION_MODE: 'workspace-write',

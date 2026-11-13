@@ -29,14 +29,14 @@
   "dependencies": {
     "@deepseek-ai/dsh-browser-use": "0.2.2-rc.1",
     "@deepseek-ai/dsh-experimental-browser-use-runtime": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-mcp-client": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-scope": "0.2.2-rc.1",
     "chrome-devtools-mcp": "1.9.0",
     "zod": "4.6.7"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
-    "@deepseek-ai/dsh-agent": "0.2.2-rc.1"
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-mcp-client": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": "0.2.2-rc.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"
