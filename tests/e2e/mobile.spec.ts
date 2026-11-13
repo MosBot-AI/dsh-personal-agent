@@ -233,10 +233,42 @@ it('pairs through the native owner inbox and reconnects and revokes through the 
 }, 25_000)
 
 
-it('moves exact reviews through a local TLS proxy and fences other devices, stale responses and revoked reviews', async () => {
+it('serves shared task pages and exact reviews through local HTTPS with native device authorization', async () => {
   const { host, inbox, mobile, status, pairDevice, origin } = await openMobile(true)
   const phone = await pairDevice('Primary phone')
   const other = await pairDevice('Second phone')
+  const shared = async (path: string, expected: number, cookie?: string) => {
+    const response = await mobile(path, cookie ? { headers: { cookie } } : undefined)
+    expect(response.status).toBe(expected)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const body = await response.json()
+    expect(body.schema_version).toBe('personal.api.v1')
+    return body
+  }
+  expect(await shared('/v1/capabilities', 401)).toMatchObject({ error: { code: 'auth_required' } })
+  const discovery = await shared('/v1/capabilities', 200, phone.cookie)
+  expect(discovery.data).toMatchObject({
+    contract_version: '0.1.0', backend: { id: 'dsh' },
+    capabilities: expect.arrayContaining([{ id: 'tasks.list', supported: true, enabled: true, available: true,
+      reason: null, remediation: null }]),
+  })
+  const capabilities: { id: string; available: boolean }[] = discovery.data.capabilities
+  expect(capabilities.filter(capability => capability.available).map(capability => capability.id)).toEqual(['tasks.list'])
+
+  const firstPage = (await shared('/v1/tasks?limit=1', 200, phone.cookie)).data
+  expect(firstPage).toEqual({
+    consistency: 'live', next_cursor: expect.stringMatching(/.+/u),
+    items: [{ id: 'mobile-task-approve', title: 'Review approve', revision: expect.stringMatching(/^[1-9]\d*$/u),
+      state: 'running', wait_reason: null }],
+  })
+  const nextPage = '/v1/tasks?limit=1&cursor=' + encodeURIComponent(firstPage.next_cursor)
+  expect((await shared(nextPage, 200, phone.cookie)).data).toEqual({
+    consistency: 'live', next_cursor: null,
+    items: [{ id: 'mobile-task-recall', title: 'Review recall', revision: expect.stringMatching(/^[1-9]\d*$/u),
+      state: 'running', wait_reason: null }],
+  })
+  expect(await shared(nextPage, 400, other.cookie)).toMatchObject({ error: { code: 'cursor_invalid' } })
+
   const list = async (cookie: string): Promise<InboxApproval[]> => {
     const response = await mobile('/v1/approvals', { headers: { cookie } })
     expect(response.status).toBe(200)
@@ -290,6 +322,7 @@ it('moves exact reviews through a local TLS proxy and fences other devices, stal
   expect(await inbox({ type: 'mobile_review', ...fence(second), deviceId: phone.deviceId })).toMatchObject({ ok: true })
   const delegated = await localReview(second.id)
   expect(await inbox({ type: 'mobile_revoke', deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  expect(await shared(nextPage, 401, phone.cookie)).toMatchObject({ error: { code: 'auth_required' } })
   const revoked = await respond(delegated, phone.cookie)
   expect(revoked.status).toBe(401)
   await revoked.body?.cancel()
