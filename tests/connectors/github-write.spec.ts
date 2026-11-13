@@ -10,7 +10,7 @@ import { contentDigest, DRAFT_ACTION, draftHead, draftMarker, draftPath, draftPa
 import { createGitHubDraftProvider, type DraftProvider } from '../../packages/personal-agent/src/connectors/github-write.js'
 import { operationIdSchema } from '../../packages/personal-agent/src/domain/model.js'
 import { exactDraftReceipt } from '../../packages/personal-agent/src/policy/reconcile.js'
-import { draftView, makeDraftHarness, type View } from './github-draft-harness.js'
+import { draftView, makeDraftHarness, waitForDraftReceipt, type View } from './github-draft-harness.js'
 
 const config = githubDraftConfigSchema.parse({ dedicatedTestRepository: true, projectId: 'draft-test-project', base: 'main',
   binding: { account: { id: 17, login: 'TestOwner' }, repository: { id: 42, owner: 'TestOrg', name: 'DedicatedTest' } } })
@@ -21,7 +21,7 @@ const input = { title: 'Test draft', body: 'Read back exact evidence.', content:
 
 function providerFixture() {
   const state = { push: 0, posts: 0, lookup: true, accepted: undefined as DraftPayload | undefined,
-    pushWait: undefined as Promise<void> | undefined, postWait: undefined as Promise<void> | undefined, timeout: false }
+    lookups: 0, pushWait: undefined as Promise<void> | undefined, postWait: undefined as Promise<void> | undefined, timeout: false }
   const provider: DraftProvider = {
     async open(_signal, current) {
       assert.ok(current())
@@ -36,7 +36,10 @@ function providerFixture() {
           await state.postWait
           if (state.timeout) throw new Error('Interrupted test connection')
         },
-        async lookup(payload) { return state.lookup && state.accepted?.body === payload.body ? receipt : undefined },
+        async lookup(payload) {
+          state.lookups++
+          return state.lookup && state.accepted?.body === payload.body ? receipt : undefined
+        },
       }
     },
   }
@@ -138,6 +141,27 @@ describe('reviewed GitHub draft action', () => {
     expect(f.h.store.getEffect(f.h.ref, f.operationId)?.status).toBe('uncertain')
     expect(await f.dispatch()).toMatchObject({ ok: false })
     expect(draftView(await f.lookup())).toMatchObject({ effect: 'confirmed', receipt })
+    expect(f.state.push).toBe(1)
+    expect(f.state.posts).toBe(1)
+  })
+
+  it.each([true, false])('waits for a delayed draft receipt without replay (visible=%s)', async visible => {
+    const f = await setup()
+    f.state.lookup = false
+    expect(await f.h.approve(f.view)).toMatchObject({ ok: true })
+    expect(await f.dispatch()).toMatchObject({ ok: true })
+    await vi.waitFor(() => expect(f.h.store.getEffect(f.h.ref, f.operationId)?.status).toBe('uncertain'))
+    expect(f.state.lookups).toBe(1)
+    f.state.lookup = visible
+    const result = waitForDraftReceipt(f.h, f.operationId, { pollWindowMs: 1_000, intervalMs: 25 })
+    if (visible) {
+      await expect(result).resolves.toBe(receipt)
+      expect(f.state.lookups).toBe(2)
+    } else {
+      await expect(result).rejects.toThrow('last state: uncertain')
+      expect(f.state.lookups).toBeGreaterThan(1)
+      expect(f.h.store.getEffect(f.h.ref, f.operationId)?.status).toBe('uncertain')
+    }
     expect(f.state.push).toBe(1)
     expect(f.state.posts).toBe(1)
   })
