@@ -8,6 +8,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Count Unicode code points in shared task cursor queries so clients receive the pagination restart error for undecodable cursors within the contract limit.
+
 - Confirm prerequisite completion in GitHub Project before promoting dependent tasks to Ready.
 - Recover mobile CI from a stalled Chrome handshake with one isolated browser restart.
 - Distinguish Chrome startup, DevTools command, and process failures in mobile CI diagnostics.

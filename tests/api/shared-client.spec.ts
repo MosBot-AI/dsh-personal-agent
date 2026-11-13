@@ -155,6 +155,17 @@ it('advertises only the implemented shared task capability and serves bounded pa
   }
 })
 
+it('counts Unicode code points when validating a shared task cursor', async () => {
+  const f = await httpFixture()
+  const atLimit = 'x'.repeat(2047) + '😀'
+  expect(await f.get('/v1/tasks?cursor=' + encodeURIComponent(atLimit))).toMatchObject({
+    status: 400, body: { error: { code: 'cursor_invalid', message: 'Restart task pagination without a cursor.' } },
+  })
+  expect(await f.get('/v1/tasks?cursor=' + encodeURIComponent(atLimit + 'x'))).toMatchObject({
+    status: 400, body: { error: { code: 'invalid_request' } },
+  })
+})
+
 it('rejects anonymous, pairing-only and revoked device access to shared routes', async () => {
   const f = await httpFixture()
   for (const path of ['/v1/capabilities', '/v1/tasks']) {
