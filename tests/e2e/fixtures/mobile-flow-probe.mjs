@@ -46,7 +46,7 @@ function seedReviews(local, at) {
   }
 }
 
-function seedTaskPages({ store, owner }, at) {
+function seedTaskPages({ store, owner }, at, crowdReviews) {
   const create = (suffix, requestedOutcome, timestamp) => {
     const taskId = 'mobile-task-' + suffix
     const result = store.applyCommand({ type: 'work.create', commandId: 'create-' + taskId,
@@ -59,8 +59,8 @@ function seedTaskPages({ store, owner }, at) {
     })
     assert.equal(result.ok, true, JSON.stringify(result))
   }
-  // Keep the review tasks inside the inbox's bounded work set as the browser creates new tasks.
-  const recent = new Date(Date.parse(at) - 1_000).toISOString()
+  // Same-time filler sorts ahead of existing reviews by row ID when testing the work limit.
+  const recent = crowdReviews ? at : new Date(Date.parse(at) - 1_000).toISOString()
   for (let index = 0; index < 62; index++) {
     const label = String(index).padStart(3, '0')
     create('page-' + label, 'Browse fixture task ' + label, recent)
@@ -75,7 +75,7 @@ export function apply(ctx) {
       assert.equal(chat.sessionId, sessionId)
       const path = join(process.cwd(), 'mobile-review.json')
       if (existsSync(path)) {
-        const { seedPages, ...mobile } = JSON.parse(readFileSync(path, 'utf8'))
+        const { seedPages, crowdReviews, ...mobile } = JSON.parse(readFileSync(path, 'utf8'))
         const at = new Date().toISOString()
         const local = activateLocalInbox(ctx, ctx.dshpa.host, {
           storageDirectory: join(process.env.DSH_HOME, 'mobile-approval-inbox'), workRoot: process.cwd(), mobile,
@@ -86,7 +86,7 @@ export function apply(ctx) {
         })
         ctx.effect(() => () => local.dispose())
         seedReviews(local, at)
-        if (seedPages) seedTaskPages(local, at)
+        if (seedPages) seedTaskPages(local, at, crowdReviews)
       }
       console.log('DSHPA_WEB_FLOW_READY')
     })().catch(error => {

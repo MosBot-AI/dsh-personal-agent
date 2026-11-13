@@ -485,7 +485,7 @@ export function activateLocalInbox(
       resident?.recoverySettled(scheduleError)
     }, () => resident?.recoveryUnavailable())
     startup = startupRecovery
-    const mobileApprovals = mobileDevices && createMobileApprovals(scope, mobileDevices, identity, store, actionGate)
+    const mobileApprovals = mobileDevices && createMobileApprovals(scope, mobileDevices, identity, actionGate)
     if (mobile && mobileDevices && mobileApprovals) {
       mobileHttp = startMobileHttp(mobile, mobileDevices, store.mobileFeed(scope), mobileApprovals)
     }
