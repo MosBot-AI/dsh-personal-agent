@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { expect, it, onTestFinished } from 'vitest'
 import { accepted, comfyFixture, imageSpec, mediaRequest, videoSpec } from './fixture.js'
 
@@ -71,4 +71,78 @@ it('rejects corrupt image bytes and reports a terminal backend error', async () 
   const failed = await submit('oom')
   fixture.fail(failed.handle.handleId)
   expect(await registry.invoke(pin, (provider, signal) => provider.inspect(failed, signal))).toEqual({ ok: true, value: { state: 'failed' } })
+})
+
+it('keeps missing or mismatched history from authorizing collection when the queue is oversized', async () => {
+  const fixture = await comfyFixture()
+  const { registry, pin } = await fixture.register()
+  onTestFinished(() => registry.close())
+  const request = mediaRequest()
+  const prepared = accepted(await registry.invoke(pin, (provider, signal) => provider.durableSubmission!.prepare(request, signal)))
+  const handle = accepted(await registry.invoke(pin, (provider, signal) => provider.durableSubmission!.submit(request, prepared, signal)))
+  const ref = { access: request.access, handle }
+  const history = 'GET /history/' + handle.handleId
+  const unrelated = fixture.crowdQueue()
+
+  fixture.requests.length = 0
+  expect(await registry.invoke(pin, (provider, signal) => provider.inspect(ref, signal)))
+    .toEqual({ ok: false, code: 'invalid_result' })
+  expect(await registry.invoke(pin, (provider, signal) => provider.collect(ref, signal)))
+    .toEqual({ ok: false, code: 'busy' })
+  expect(await registry.invoke(pin, (provider, signal) => provider.cancel(ref, signal)))
+    .toEqual({ ok: false, code: 'invalid_result' })
+  expect(fixture.requests).toEqual(['GET /queue', history, history, 'GET /queue'])
+  expect([...fixture.pending.keys()]).toEqual([handle.handleId, ...unrelated])
+  expect(fixture.cancelled).toEqual([])
+
+  fixture.complete(handle.handleId, imageSpec)
+  const foreign = { ...ref, access: { ...request.access, taskId: 'other-task' } }
+  fixture.requests.length = 0
+  expect(await registry.invoke(pin, (provider, signal) => provider.inspect(foreign, signal)))
+    .toEqual({ ok: false, code: 'permission_denied' })
+  expect(await registry.invoke(pin, (provider, signal) => provider.collect(foreign, signal)))
+    .toEqual({ ok: false, code: 'permission_denied' })
+  expect(fixture.requests).toEqual(['GET /queue', history, history])
+
+  const original = fixture.submissions[0]!
+  fixture.pending.set(handle.handleId, [1, randomUUID(), original.prompt, original.extra_data, original.partial_execution_targets])
+  fixture.complete(handle.handleId, imageSpec)
+  fixture.requests.length = 0
+  expect(await registry.invoke(pin, (provider, signal) => provider.inspect(ref, signal)))
+    .toEqual({ ok: false, code: 'permission_denied' })
+  expect(await registry.invoke(pin, (provider, signal) => provider.collect(ref, signal)))
+    .toEqual({ ok: false, code: 'permission_denied' })
+  expect(fixture.requests).toEqual(['GET /queue', history, history])
+  expect(fixture.submissions).toHaveLength(1)
+})
+
+it('does not consult history after queue ownership rejection or an invalid queue response', async () => {
+  const fixture = await comfyFixture()
+  const { registry, pin } = await fixture.register()
+  onTestFinished(() => registry.close())
+  const request = mediaRequest()
+  const prepared = accepted(await registry.invoke(pin, (provider, signal) => provider.durableSubmission!.prepare(request, signal)))
+  const handle = accepted(await registry.invoke(pin, (provider, signal) => provider.durableSubmission!.submit(request, prepared, signal)))
+  const ref = { access: request.access, handle }
+  fixture.complete(handle.handleId, imageSpec)
+  fixture.pending.set(handle.handleId, [1, handle.handleId, {}, {}, []])
+
+  fixture.requests.length = 0
+  expect(await registry.invoke(pin, (provider, signal) => provider.inspect(ref, signal)))
+    .toEqual({ ok: false, code: 'permission_denied' })
+  expect(fixture.requests).toEqual(['GET /queue'])
+
+  fixture.faults.invalidQueue = true
+  fixture.requests.length = 0
+  expect(await registry.invoke(pin, (provider, signal) => provider.inspect(ref, signal)))
+    .toEqual({ ok: false, code: 'invalid_result' })
+  expect(fixture.requests).toEqual(['GET /queue'])
+
+  fixture.faults.invalidQueue = false
+  fixture.faults.queueStatus = 503
+  fixture.requests.length = 0
+  expect(await registry.invoke(pin, (provider, signal) => provider.inspect(ref, signal)))
+    .toEqual({ ok: false, code: 'provider_unavailable' })
+  expect(fixture.requests).toEqual(['GET /queue'])
+  expect(fixture.cancelled).toEqual([])
 })

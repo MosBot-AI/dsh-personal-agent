@@ -124,6 +124,14 @@ Linux 笔记本运行未修改的 dshpa main `917e84efaf26c00f7a62b3b02c6253be72
 
 文件写入用例同时验证部分写入文件的清理，以及清理报告错误时原容量错误的保留。另一个用例在清理期间取消，确认提供器返回 `cancelled`。已有的损坏输出测试仍返回 `invalid_result`。这些检查使用故障注入和回环提供器夹具。[恢复工单 #123](https://github.com/MosBot-AI/dsh-personal-agent/issues/123)
 
+## 提供器队列响应超限后的恢复
+
+[工单 #127](https://github.com/MosBot-AI/dsh-personal-agent/issues/127) 使用 ComfyUI HTTP 夹具复现了两种故障。九个无关待处理工作流使队列响应超过 4 MiB 上限。实际已完成但仍处于 `rendering` 的渲染转为 `unknown`，已进入 `collecting` 的任务则在读取输出前失败。
+
+状态查询仍先读取实时队列。队列响应体超限时，适配器可在校验 prompt ID 和归属绑定后，从精确的 prompt 历史恢复终态。输出收集直接读取精确历史，并验证已记录的获准节点的输出。缺失或不匹配的历史不能作为成功依据。取消仍要求实时队列提供归属证据。
+
+两项持久队列用例都恢复了原始 prompt 并核对 PNG 的 SHA-256，只提交一次且未发出取消请求。提供器测试验证了精确历史的作用域、队列超限时的取消，以及可读取的队列拒绝归属或普通队列响应失败时不会回查历史。这些证据来自受控的回环提供器夹具。
+
 ## PA-033 剩余验收项
 
 真实运行覆盖 E06 和 E16 中的 CPU 与 CUDA 图片生成、CPU 视频生成、提交回执丢失恢复、运行中任务取消及限额内的 CUDA 分配失败。常驻测试覆盖 E18 中的宿主重启恢复，以及提供器连接中断期间的前台响应。实体设备的锁屏、休眠唤醒、整机离线行为和电源设置仍需在目标宿主上验证。视觉质量和用户指定约束的符合程度属于 PA-034 的验收范围。PA-033 仍为 In review。[CPU 与常驻验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990) · [GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
