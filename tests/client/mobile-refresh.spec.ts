@@ -149,3 +149,40 @@ it('aborts a stalled snapshot and approval refresh, then reconnects and reads fr
   expect(mobile.streams).toHaveLength(2)
   expect(mobile.fetch).toHaveBeenCalledTimes(6)
 })
+
+it('reconnects a silently stalled stream without polling on healthy heartbeats', async () => {
+  const mobile = await mountMobile()
+  const original = mobile.streams[0]!
+  original.emit('open')
+  for (let i = 0; i < 3; i++) {
+    await vi.advanceTimersByTimeAsync(10_000)
+    original.emit('heartbeat')
+  }
+  expect(mobile.fetch).toHaveBeenCalledTimes(2)
+  expect(mobile.task()).toBe('Original task')
+
+  mobile.update('Recovered task')
+  await vi.advanceTimersByTimeAsync(29_999)
+  expect(mobile.task()).toBe('Original task')
+  await vi.advanceTimersByTimeAsync(1)
+  expect(original.closed).toBe(true)
+  expect(mobile.task()).toBeUndefined()
+  expect(mobile.page.querySelector('#review-items')?.children).toHaveLength(0)
+  expect(mobile.status()).toBe('Reconnecting…')
+  await vi.advanceTimersByTimeAsync(1_501)
+  expect(mobile.task()).toBe('Recovered task')
+  expect(mobile.streams).toHaveLength(2)
+  expect(mobile.fetch).toHaveBeenCalledTimes(4)
+
+  const recovered = mobile.streams[1]!
+  await vi.advanceTimersByTimeAsync(20_000)
+  original.emit('heartbeat')
+  await vi.advanceTimersByTimeAsync(10_001)
+  expect(recovered.closed).toBe(true)
+  expect(mobile.task()).toBeUndefined()
+
+  mobile.hide()
+  await vi.advanceTimersByTimeAsync(60_000)
+  expect(mobile.fetch).toHaveBeenCalledTimes(4)
+  expect(mobile.streams).toHaveLength(2)
+})

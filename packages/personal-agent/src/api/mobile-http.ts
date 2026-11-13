@@ -108,7 +108,7 @@ export function startMobileHttp(config: MobileHttpConfig, devices: MobileDeviceL
         position = replay.cursor
         if (replay.events.length) {
           write(replay.events.map(event => 'id: ' + event.cursor + '\nevent: work\ndata: ' + JSON.stringify(event) + '\n\n').join(''))
-        } else if (ticks % 10 === 0) write(': heartbeat\n\n')
+        } else if (ticks % 10 === 0) write(': heartbeat\n\nevent: heartbeat\ndata: {}\n\n')
         if (ticks++ % 4 === 0 && !response.writableEnded) {
           const revision = approvals.revision(credential)
           if (!revision.ok) { response.end('event: session-ended\ndata: {}\n\n'); return }

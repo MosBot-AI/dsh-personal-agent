@@ -102,6 +102,7 @@ function runMobilePage() {
   const reviewItems = document.querySelector<HTMLUListElement>('#review-items')!
   const replying = new Map<string, AbortController>()
   let stream: EventSource | undefined
+  let streamDeadline: ReturnType<typeof setTimeout> | undefined
   let pending: AbortController | undefined
   let refreshAfterPending = false
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
@@ -109,6 +110,8 @@ function runMobilePage() {
   function resetView() {
     stream?.close()
     stream = undefined
+    clearTimeout(streamDeadline)
+    streamDeadline = undefined
     pending?.abort()
     pending = undefined
     refreshAfterPending = false
@@ -147,8 +150,18 @@ function runMobilePage() {
     const path = cursor ? '/v1/events?cursor=' + encodeURIComponent(cursor) : '/v1/events'
     const events = new EventSource(path)
     stream = events
+    const expectStreamTraffic = () => {
+      if (stream !== events) return
+      clearTimeout(streamDeadline)
+      // A proxy can stop forwarding data without closing the connection.
+      streamDeadline = setTimeout(() => { if (stream === events) reconnect() }, 30_000)
+    }
+    expectStreamTraffic()
+    events.addEventListener('open', expectStreamTraffic)
+    events.addEventListener('heartbeat', expectStreamTraffic)
     const scheduleRefresh = () => {
       if (stream !== events) return
+      expectStreamTraffic()
       if (pending) {
         refreshAfterPending = true
         return

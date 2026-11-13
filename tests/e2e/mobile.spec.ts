@@ -61,12 +61,24 @@ async function tlsProxy(root: string, upstreamPort: number) {
     '-config', configPath, '-keyout', keyPath, '-out', certPath], { stdio: 'ignore', timeout: 10_000 })
   const cert = readFileSync(certPath)
   let available = true
+  let silenceEvents = false
+  let mutedFrames = 0
   const server = createHttpsServer({ key: readFileSync(keyPath), cert }, (request, response) => {
     if (!available) { request.socket.destroy(); return }
     const upstream = httpRequest({ hostname: '127.0.0.1', port: upstreamPort, path: request.url,
       method: request.method, headers: request.headers }, incoming => {
       response.writeHead(incoming.statusCode ?? 502, incoming.headers)
-      incoming.pipe(response)
+      if (incoming.headers['content-type']?.startsWith('text/event-stream')) {
+        response.flushHeaders()
+        incoming.on('data', chunk => {
+          if (silenceEvents) mutedFrames++
+          else if (!response.write(chunk)) {
+            incoming.pause()
+            response.once('drain', () => incoming.resume())
+          }
+        })
+        incoming.once('end', () => { if (!silenceEvents) response.end() })
+      } else incoming.pipe(response)
     })
     upstream.once('error', () => {
       if (!response.headersSent) response.writeHead(502)
@@ -88,6 +100,8 @@ async function tlsProxy(root: string, upstreamPort: number) {
   assert.ok(address && typeof address !== 'string')
   return {
     cert, port: address.port, origin: `https://127.0.0.1:${address.port}`,
+    silenceEvents(value: boolean) { silenceEvents = value },
+    mutedFrames: () => mutedFrames,
     setAvailable(value: boolean) {
       available = value
       if (!available) server.closeAllConnections()
@@ -237,6 +251,14 @@ it('serves shared task pages and exact reviews through local HTTPS with native d
   const { host, inbox, mobile, status, pairDevice, origin } = await openMobile(true)
   const phone = await pairDevice('Primary phone')
   const other = await pairDevice('Second phone')
+  const snapshotForStream = await mobile('/v1/snapshot', { headers: { cookie: phone.cookie } })
+  expect(snapshotForStream.status).toBe(200)
+  const { cursor } = await snapshotForStream.json() as { cursor: string | null }
+  const eventsPath = cursor ? '/v1/events?cursor=' + encodeURIComponent(cursor) : '/v1/events'
+  const heartbeatFrame = ': heartbeat\n\nevent: heartbeat\ndata: {}\n\n'
+  const heartbeat = await frame(await mobile(eventsPath, { headers: { cookie: phone.cookie } }), heartbeatFrame)
+  expect(heartbeat).toContain(heartbeatFrame)
+  expect(heartbeat).not.toContain('id:')
   const shared = async (path: string, expected: number, cookie?: string) => {
     const response = await mobile(path, cookie ? { headers: { cookie } } : undefined)
     expect(response.status).toBe(expected)
@@ -415,6 +437,20 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   ])
   await chrome.waitFor("document.querySelector('#tasks')?.textContent.includes('Task created while Chrome was hidden') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
 
+  const silencedAt = performance.now()
+  proxy.silenceEvents(true)
+  expect(await inbox({ type: 'create_task', commandId: 'create-during-silent-stream', projectId: 'mobile-review-project',
+    sessionId: 'mobile-fixture-chat', outcome: 'Task created during silent stream' })).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(proxy.mutedFrames()).toBeGreaterThan(0), { timeout: 12_000 })
+  await vi.waitFor(async () => {
+    expect(await chrome.evaluate(`document.querySelector('#status').textContent === 'Reconnecting…'
+      && document.querySelector('#tasks').children.length === 0
+      && document.querySelector('#review-items').children.length === 0`)).toBe(true)
+  }, { interval: 100, timeout: 35_000 })
+  expect(performance.now() - silencedAt).toBeGreaterThan(15_000)
+  proxy.silenceEvents(false)
+  await chrome.waitFor("document.querySelector('#tasks')?.textContent.includes('Task created during silent stream') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
+
   proxy.setAvailable(false)
   await chrome.waitFor("document.querySelector('#work')?.hidden === true && document.querySelector('#tasks')?.children.length === 0 && document.querySelector('#review-items')?.children.length === 0")
   expect(await inbox({ type: 'create_task', commandId: 'create-during-browser-disconnect', projectId: 'mobile-review-project',
@@ -423,7 +459,7 @@ it.skipIf(!chromePath)('pairs, approves, reconnects and revokes in a real Chrome
   await chrome.waitFor("document.querySelector('#work')?.hidden === false && document.querySelector('#tasks')?.textContent.includes('Review after Chrome reconnect') && document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload recall')")
   expect(await inbox({ type: 'mobile_revoke', deviceId: phone.deviceId })).toMatchObject({ ok: true })
   await chrome.waitFor("document.querySelector('#pair')?.hidden === false && document.querySelector('#work')?.hidden === true && document.querySelector('#review-items')?.children.length === 0")
-}, 45_000 + chromeStartupRetryAllowanceMs)
+}, 80_000 + chromeStartupRetryAllowanceMs)
 
 it.skipIf(!chromePath)('rejects an expired pairing code and clears an expired device in a real browser', async () => {
   const { host, inbox, origin, proxy } = await openMobile(true)
