@@ -1,16 +1,20 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from project_ready import ready_tasks
-from project_sync import changes_for
+from project_sync import changes_for, reconcile
 
 
 class ProjectWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.manifest = {'tasks': [{'id': 'PA-001', 'title': 'Foundation', 'depends_on': []},
                                    {'id': 'PA-035', 'title': 'Release', 'depends_on': ['PA-001']}]}
-        self.mapping = {'tasks': {'PA-001': {'number': 1}, 'PA-035': {'number': 2}}}
+        self.mapping = {'tasks': {'PA-001': {'number': 1}, 'PA-035': {'number': 2}},
+                        'project': {'id': 'test-project'}, 'fields': {'Status': {'id': 'test-status', 'options': [
+                            {'name': name, 'id': name} for name in ('Ready', 'Backlog', 'Blocked', 'In review', 'Done')
+                        ]}}}
         self.items = [{'id': str(i), 'isArchived': False,
                        'content': {'number': i, 'state': 'OPEN', 'stateReason': None,
                                    'url': f'https://github.com/example/repo/issues/{i}', 'labels': {'nodes': []}},
@@ -74,7 +78,84 @@ class ProjectWorkflowTests(unittest.TestCase):
 
     def test_verified_closed_issue_is_promoted_to_done(self):
         self.verified(); self.items[0]['status']['name'] = 'In review'
-        self.assertEqual(changes_for(self.manifest, self.mapping, self.snapshot)[0]['new'], 'Done')
+        self.assertEqual(changes_for(self.manifest, self.mapping, self.snapshot),
+                         [{'task': 'PA-001', 'item': '1', 'old': 'In review', 'new': 'Done'}])
+        self.assertEqual(ready_tasks(self.manifest, self.mapping, self.snapshot, 'desktop-alpha'), [])
+
+    def test_active_dependent_is_preserved_while_verified_closure_settles(self):
+        self.verified()
+        self.items[0]['status']['name'] = 'In review'
+        self.items[1]['status']['name'] = 'In progress'
+        self.assertEqual(changes_for(self.manifest, self.mapping, self.snapshot),
+                         [{'task': 'PA-001', 'item': '1', 'old': 'In review', 'new': 'Done'}])
+
+    def reconcile_test_snapshot(self, write):
+        def remote(payload):
+            if payload['query'].startswith('query'):
+                return self.snapshot
+            mutation = payload['variables']['i']
+            write(mutation['itemId'], mutation['value']['singleSelectOptionId'])
+        with patch('project_sync.api', side_effect=remote), patch('builtins.print'):
+            return reconcile(self.manifest, self.mapping, apply=True)
+
+    def test_apply_confirms_done_before_promoting_dependent(self):
+        self.verified()
+        self.items[0]['status']['name'] = 'In review'
+        writes = []
+
+        def write(item_id, status):
+            writes.append((item_id, status))
+            self.items[int(item_id) - 1]['status']['name'] = status
+
+        self.assertEqual(self.reconcile_test_snapshot(write), 2)
+        self.assertEqual(writes, [('1', 'Done'), ('2', 'Ready')])
+
+    def test_apply_does_not_promote_when_completion_is_not_visible(self):
+        self.verified()
+        self.items[0]['status']['name'] = 'In review'
+        writes = []
+
+        def write(item_id, status):
+            writes.append((item_id, status))
+
+        self.assertEqual(self.reconcile_test_snapshot(write), 1)
+        self.assertEqual(writes, [('1', 'Done')])
+        self.assertEqual(ready_tasks(self.manifest, self.mapping, self.snapshot, 'desktop-alpha'), [])
+
+    def test_apply_does_not_promote_when_completion_write_fails(self):
+        self.verified()
+        self.items[0]['status']['name'] = 'In review'
+        writes = []
+
+        def write(item_id, status):
+            writes.append((item_id, status))
+            raise ValueError('Test write failure')
+
+        with self.assertRaisesRegex(ValueError, 'Test write failure'):
+            self.reconcile_test_snapshot(write)
+        self.assertEqual(writes, [('1', 'Done')])
+
+    def test_apply_rechecks_dependency_before_promotion(self):
+        self.verified()
+        self.items[0]['status']['name'] = 'In review'
+        writes = []
+        reads = 0
+
+        def remote(payload):
+            nonlocal reads
+            if payload['query'].startswith('query'):
+                reads += 1
+                if reads == 4:
+                    self.items[0]['content']['state'] = 'OPEN'
+                return self.snapshot
+            mutation = payload['variables']['i']
+            item_id, status = mutation['itemId'], mutation['value']['singleSelectOptionId']
+            writes.append((item_id, status))
+            self.items[int(item_id) - 1]['status']['name'] = status
+
+        with patch('project_sync.api', side_effect=remote), patch('builtins.print'):
+            self.assertEqual(reconcile(self.manifest, self.mapping, apply=True), 1)
+        self.assertEqual(writes, [('1', 'Done')])
 
 
 if __name__ == '__main__':
