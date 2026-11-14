@@ -18,6 +18,7 @@ import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/dat
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import { SCHEMA_VERSION, V15_BACKUP_SUFFIX } from '../../packages/personal-agent/src/storage/schema.js'
 import { prepareResearchSources, readResearchOutcome, verifyResearchBrief } from './fixtures/live-research.js'
+import { verifyLiveReview } from './fixtures/live-review.js'
 import { verifyPackagedReminder } from './fixtures/packaged-reminder.js'
 
 const run = promisify(execFile)
@@ -30,6 +31,7 @@ const liveProvider = process.env.DSHPA_INSTALL_LIVE_DEEPSEEK === '1'
 const liveKey = liveProvider ? process.env.DEEPSEEK_API_KEY?.trim() : undefined
 const liveBrief = process.env.DSHPA_INSTALL_LIVE_BRIEF === '1'
 const liveResearch = process.env.DSHPA_INSTALL_LIVE_RESEARCH === '1'
+const liveReview = process.env.DSHPA_INSTALL_LIVE_REVIEW === '1'
 const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
@@ -40,8 +42,9 @@ if (archiveDirectory !== undefined && (!isAbsolute(archiveDirectory) || previous
 if (liveProvider && (!liveKey || previousCheckout)) {
   throw new Error('Live DeepSeek requires DEEPSEEK_API_KEY and the current package')
 }
-if ((liveBrief || liveResearch) && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
-if (liveBrief && liveResearch) throw new Error('Select one live workflow evaluation per install run')
+const liveWorkflows = [liveBrief, liveResearch, liveReview].filter(Boolean).length
+if (liveWorkflows > 0 && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
+if (liveWorkflows > 1) throw new Error('Select one live workflow evaluation per install run')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
 
 const briefReference = 'pilot-brief-audience'
@@ -85,6 +88,7 @@ function installDiagnostics(profile: string, error: unknown): string {
 }
 
 it(packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
+  : liveReview ? 'reuses a reviewed skill after three installed live inventory reviews'
   : liveResearch ? 'accepts an installed live research brief against exact local sources'
   : liveBrief ? 'resumes an installed live project brief after an owner answer and resident restart'
   : liveProvider ? 'runs a native Worker with live DeepSeek and retains the accepted result'
@@ -209,6 +213,7 @@ allowBuilds:
   }
   const outputLimit = liveProvider ? 256 : 64
   const callLimit = liveBrief ? 2 : 1
+  const dayCallLimit = liveReview ? 3 : callLimit
   const overlay = (stateDir: string) => `- id: llm-deepseek
   config:
     baseURL: ${providerUrl}
@@ -233,7 +238,7 @@ allowBuilds:
         model: deepseek-flash
         concurrency: 1
 ${researchConfig}      computeLimits:
-        maxInputBytes: ${liveBrief || liveResearch ? 32_768 : 8192}
+        maxInputBytes: ${liveWorkflows > 0 ? 32_768 : 8192}
         maxOutputTokens: ${outputLimit}
         maxTurns: ${callLimit}
         maxStepsPerTurn: 1
@@ -253,9 +258,9 @@ ${researchConfig}      computeLimits:
               ceilingMicros: 10000
         limits:
           - currency: USD
-            ownerDayMicros: ${10_000 * callLimit}
+            ownerDayMicros: ${10_000 * dayCallLimit}
             taskMicros: ${10_000 * callLimit}
-            maxCallsPerDay: ${callLimit}
+            maxCallsPerDay: ${dayCallLimit}
             maxCallsPerTask: ${callLimit}
             maxConcurrent: 1
 `
@@ -323,10 +328,31 @@ ${researchConfig}      computeLimits:
       },
     }
   }
+  function settledCalls(taskIds: readonly string[]) {
+    const db = new DatabaseSync(join(storage, DATABASE_FILENAME), { readOnly: true })
+    try {
+      const charges = db.prepare('SELECT task_id, provider, model, status, usage, actual_micros FROM budget_reservations ORDER BY created_at').all()
+      expect(charges.map(row => row.task_id).sort()).toEqual([...taskIds].sort())
+      return charges.map(charge => {
+        expect(charge).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-flash', status: 'settled',
+          usage: expect.any(String), actual_micros: expect.any(Number) })
+        const usage = JSON.parse(String(charge.usage)) as { inputTokens: number; outputTokens: number }
+        expect(usage.outputTokens).toBeGreaterThan(0)
+        expect(usage.outputTokens).toBeLessThanOrEqual(outputLimit)
+        return { model: charge.model, usage, estimatedCostMicrosUsd: charge.actual_micros }
+      })
+    } finally { db.close() }
+  }
+
   const first = await startResident()
   if (packagedReminder) {
     await verifyPackagedReminder(first, startResident, join(storage, DATABASE_FILENAME))
     expect(requests).toEqual([])
+    return
+  }
+  if (liveReview) {
+    const taskIds = await verifyLiveReview(first, startResident, workRoot)
+    console.log(JSON.stringify({ taskIds, calls: settledCalls(taskIds) }))
     return
   }
   const { rpc, inbox } = first
@@ -390,7 +416,11 @@ ${researchConfig}      computeLimits:
     if (liveResearch) {
       verifyResearchBrief(artifact.artifact.text)
     } else if (liveBrief) {
-      for (const expected of [/volunteer coordinators/i, /(?:19 November|November 19)/i, /\b12 kits\b/i, /(?:20 November|November 20)/i]) {
+      const requiredFacts = [
+        /volunteer coordinators/i, /(?:19 November|November 19)/i, /(?:\b12[- ]kits?\b|\bkits:\*{0,2}\s+12\b)/i,
+        /(?:20 November|November 20)/i,
+      ]
+      for (const expected of requiredFacts) {
         expect(artifact.artifact.text).toMatch(expected)
       }
     } else expect(artifact.artifact.text).toBe('Total folders: 12.')
@@ -402,20 +432,7 @@ ${researchConfig}      computeLimits:
     expect(await task(reopened.inbox)).toMatchObject({ id: taskId, status: 'completed', version: completed.version, runtime: 'inactive' })
     expect(await readResult(reopened.inbox)).toEqual(artifact)
     await reopened.stop()
-    const db = new DatabaseSync(join(storage, DATABASE_FILENAME), { readOnly: true })
-    try {
-      const charges = db.prepare('SELECT provider, model, status, usage, actual_micros FROM budget_reservations WHERE task_id = ? ORDER BY created_at').all(taskId)
-      expect(charges).toHaveLength(callLimit)
-      const calls = charges.map(charge => {
-        expect(charge).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-flash', status: 'settled',
-          usage: expect.any(String), actual_micros: expect.any(Number) })
-        const usage = JSON.parse(String(charge.usage)) as { inputTokens: number; outputTokens: number }
-        expect(usage.outputTokens).toBeGreaterThan(0)
-        expect(usage.outputTokens).toBeLessThanOrEqual(outputLimit)
-        return { model: charge.model, usage, estimatedCostMicrosUsd: charge.actual_micros }
-      })
-      console.log(JSON.stringify({ taskId, artifactId, calls }))
-    } finally { db.close() }
+    console.log(JSON.stringify({ taskId, artifactId, calls: settledCalls(Array<string>(callLimit).fill(taskId)) }))
     return
   }
   const parked = await vi.waitFor(async () => {
