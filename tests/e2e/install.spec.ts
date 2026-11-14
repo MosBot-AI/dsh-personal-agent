@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -14,11 +15,17 @@ import { expect, it, onTestFinished, vi } from 'vitest'
 import { INBOX_RPC_ENDPOINT, type InboxRequest, type InboxResponse } from '../../packages/personal-agent/src/inbox/protocol.js'
 import { RESIDENT_OWNER_FILE } from '../../packages/personal-agent/src/runtime/resident-web.js'
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
+import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
+import { SCHEMA_VERSION, V15_BACKUP_SUFFIX } from '../../packages/personal-agent/src/storage/schema.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
 const workspace = fileURLToPath(new URL('../../', import.meta.url))
 const profileName = 'dshpa-package-install'
+const previousCheckout = process.env.DSHPA_INSTALL_UPGRADE_FROM
+if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
+  throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
+}
 
 function installDiagnostics(profile: string, error: unknown): string {
   const output: unknown[] = []
@@ -42,7 +49,9 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it('runs a native Worker from a fresh tarball install and retains its task across plugin removal', async () => {
+it(previousCheckout
+  ? 'upgrades and restores work from an installed schema-15 package'
+  : 'runs a native Worker from a fresh tarball install and retains its task across plugin removal', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'dshpa-package-install-')))
   const dshHome = join(root, 'home')
   const profile = join(dshHome, 'profiles', profileName)
@@ -50,7 +59,6 @@ it('runs a native Worker from a fresh tarball install and retains its task acros
   const storage = join(dshHome, 'state')
   const workRoot = join(root, 'work')
   const patch = join(root, 'resident.yml')
-  const ownerPath = join(storage, RESIDENT_OWNER_FILE)
   const systemEnv = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }
   const installEnv = {
     ...systemEnv, DSH_HOME: dshHome, DSH_TELEMETRY_DISABLED: '1',
@@ -94,15 +102,18 @@ it('runs a native Worker from a fresh tarball install and retains its task acros
   const workFile = join(workRoot, 'owner-notes.md')
   const workContents = '# Owner notes\n\nKeep this file when removing the plugin.\n'
   writeFileSync(workFile, workContents, { mode: 0o600 })
-  async function pack(directory: string) {
-    const cwd = join(workspace, 'packages', directory)
+  async function pack(directory: string, checkout: string, archiveGroup: string) {
+    const cwd = join(checkout, 'packages', directory)
+    const destination = join(archives, archiveGroup)
+    mkdirSync(destination, { recursive: true })
     const { name, version } = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { name: string; version: string }
-    await run('pnpm', ['pack', '--pack-destination', archives], { cwd, env: installEnv, timeout: 15_000 })
-    return { name, spec: 'file:' + join(archives, `${name.slice(1).replace('/', '-')}-${version}.tgz`) }
+    await run('pnpm', ['pack', '--pack-destination', destination], { cwd, env: installEnv, timeout: 15_000 })
+    return { name, spec: 'file:' + join(destination, `${name.slice(1).replace('/', '-')}-${version}.tgz`) }
   }
-  const bundle = await pack('personal-agent')
-  const pluginApi = await pack('plugin-api')
-  const routing = await pack('model-routing')
+  const initialCheckout = previousCheckout ?? workspace
+  const bundle = await pack('personal-agent', initialCheckout, 'initial')
+  const pluginApi = await pack('plugin-api', initialCheckout, 'initial')
+  const routing = await pack('model-routing', initialCheckout, 'initial')
   await run(process.execPath, [dsh, '--profile', profileName, '--from-default-profile', 'web', '--dump-config'], {
     cwd: root, env: installEnv, timeout: 20_000,
   })
@@ -112,13 +123,16 @@ it('runs a native Worker from a fresh tarball install and retains its task acros
   expect(defaults).toMatch(/^autoInstallPeers: false$/m)
   // Resolve the two unpublished workspace dependencies from their tarballs.
   // Preserve DSH's generated settings so it can supply its own native peers.
-  appendFileSync(settings, `
+  function chooseDependencies(api: typeof pluginApi, modelRouting: typeof routing) {
+    writeFileSync(settings, defaults + `
 overrides:
-  ${JSON.stringify(pluginApi.name)}: ${JSON.stringify(pluginApi.spec)}
-  ${JSON.stringify(routing.name)}: ${JSON.stringify(routing.spec)}
+  ${JSON.stringify(api.name)}: ${JSON.stringify(api.spec)}
+  ${JSON.stringify(modelRouting.name)}: ${JSON.stringify(modelRouting.spec)}
 allowBuilds:
   koffi: true
 `)
+  }
+  chooseDependencies(pluginApi, routing)
   async function manageBundle(action: 'add' | 'remove', target: string) {
     try {
       await run(process.execPath, [dsh, 'plugin', '--profile', profileName, action, target], {
@@ -142,7 +156,7 @@ allowBuilds:
   await once(provider, 'listening')
   const address = provider.address()
   assert.ok(address && typeof address !== 'string')
-  writeFileSync(patch, `- id: llm-deepseek
+  const overlay = (stateDir: string) => `- id: llm-deepseek
   config:
     baseURL: http://127.0.0.1:${address.port}
     apiKeyEnv: DSHPA_INSTALL_TEST_KEY
@@ -157,7 +171,7 @@ allowBuilds:
 - id: dshpa
   config:
     inbox:
-      storageDirectory: ${JSON.stringify(storage)}
+      storageDirectory: ${JSON.stringify(stateDir)}
       workRoot: ${JSON.stringify(workRoot)}
       resident: {}
       worker:
@@ -190,9 +204,11 @@ allowBuilds:
             maxCallsPerDay: 1
             maxCallsPerTask: 1
             maxConcurrent: 1
-`, { mode: 0o600 })
+`
   const loopback = { connection: 'close' }
-  async function startResident() {
+  async function startResident(stateDir = storage, ready = true) {
+    writeFileSync(patch, overlay(stateDir), { mode: 0o600 })
+    const ownerPath = join(stateDir, RESIDENT_OWNER_FILE)
     const child = spawn('/bin/sh', [join(workspace, 'deploy/run-resident.sh'), process.execPath, dshHome, profileName, patch, '0'], {
       cwd: root, env: { ...systemEnv, DSHPA_INSTALL_TEST_KEY: 'sk-dummy-only-for-loopback' }, stdio: 'ignore',
     })
@@ -209,8 +225,8 @@ allowBuilds:
     expect(ownerUrl.hostname).toBe('127.0.0.1')
     await vi.waitFor(async () => {
       const response = await fetch(new URL('/dshpa/ready', ownerUrl), { headers: loopback, signal: AbortSignal.timeout(3_000) })
-      expect(await response.json()).toMatchObject({ ready: true })
-      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ ready })
+      expect(response.status).toBe(ready ? 200 : 503)
     }, { timeout: 8_000 })
 
     const auth = await fetch(ownerUrl, { headers: loopback, redirect: 'manual', signal: AbortSignal.timeout(5_000) })
@@ -282,24 +298,82 @@ allowBuilds:
   expect(parked.wait?.referenceId).toBe('dshpa:compute:provider_rejected')
   expect(parked.artifacts).toEqual([])
   expect(requests).toEqual(['POST'])
+  const expected = { id: taskId, status: parked.status, runtime: parked.runtime,
+    version: parked.version, wait: { referenceId: parked.wait?.referenceId }, artifacts: [] }
 
   await stop()
   const database = join(storage, DATABASE_FILENAME)
   const identity = join(storage, 'local-inbox-identity.json')
-  const databaseBeforeRemoval = readFileSync(database)
-  const identityBeforeRemoval = readFileSync(identity)
-  await manageBundle('remove', bundle.name)
-  expect(existsSync(join(modules, bundle.name))).toBe(false)
-  assert.ok(readFileSync(database).equals(databaseBeforeRemoval), 'Plugin removal changed the WorkStore')
-  assert.ok(readFileSync(identity).equals(identityBeforeRemoval), 'Plugin removal changed the owner identity')
-  expect(readFileSync(workFile, 'utf8')).toBe(workContents)
+  if (!previousCheckout) {
+    const databaseBeforeRemoval = readFileSync(database)
+    const identityBeforeRemoval = readFileSync(identity)
+    await manageBundle('remove', bundle.name)
+    expect(existsSync(join(modules, bundle.name))).toBe(false)
+    assert.ok(readFileSync(database).equals(databaseBeforeRemoval), 'Plugin removal changed the WorkStore')
+    assert.ok(readFileSync(identity).equals(identityBeforeRemoval), 'Plugin removal changed the owner identity')
+    expect(readFileSync(workFile, 'utf8')).toBe(workContents)
 
-  await manageBundle('add', bundle.spec)
-  expect(realpathSync(installedRequire.resolve(`${bundle.name}/package.json`))).toBe(join(modules, bundle.name, 'package.json'))
-  const reopened = await startResident()
-  expect(await task(reopened.inbox)).toMatchObject({ id: taskId, status: parked.status, runtime: parked.runtime,
-    version: parked.version, wait: { referenceId: parked.wait?.referenceId }, artifacts: [] })
-  await reopened.stop()
+    await manageBundle('add', bundle.spec)
+    expect(realpathSync(installedRequire.resolve(`${bundle.name}/package.json`))).toBe(join(modules, bundle.name, 'package.json'))
+    const reopened = await startResident()
+    expect(await task(reopened.inbox)).toMatchObject(expected)
+    await reopened.stop()
+    expect(readFileSync(workFile, 'utf8')).toBe(workContents)
+    expect(requests).toEqual(['POST'])
+    return
+  }
+
+  const backup = database + V15_BACKUP_SUFFIX
+  function inspectDatabase(path: string) {
+    const db = new DatabaseSync(path, { readOnly: true })
+    try {
+      expect(db.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok')
+      expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      return {
+        schema: db.prepare('PRAGMA user_version').get()?.user_version,
+        tasks: db.prepare('SELECT * FROM tasks').all(),
+        projects: db.prepare('SELECT * FROM projects').all(),
+      }
+    } finally { db.close() }
+  }
+  const before = inspectDatabase(database)
+  const identityBytes = readFileSync(identity)
+  expect(before.schema).toBe(15)
+  expect(before.tasks).toHaveLength(1)
+  expect(existsSync(backup)).toBe(false)
+  expect(readFileSync(join(modules, bundle.name, 'lib/storage/schema.js'), 'utf8')).toContain('SCHEMA_VERSION = 15')
+  const current = await pack('personal-agent', workspace, 'current')
+  const currentApi = await pack('plugin-api', workspace, 'current')
+  const currentRouting = await pack('model-routing', workspace, 'current')
+  chooseDependencies(currentApi, currentRouting)
+  await manageBundle('add', current.spec)
+  expect(readFileSync(join(modules, current.name, 'lib/storage/schema.js'), 'utf8'))
+    .toContain(`SCHEMA_VERSION = ${SCHEMA_VERSION}`)
+  expect(inspectDatabase(database)).toEqual(before)
+  const upgraded = await startResident()
+  expect(await task(upgraded.inbox)).toMatchObject(expected)
+  await upgraded.stop()
+  const migrated = { ...before, schema: SCHEMA_VERSION }
+  expect(inspectDatabase(database)).toEqual(migrated)
+  expect(inspectDatabase(backup)).toEqual(before)
+  expect(lstatSync(backup).mode & 0o777).toBe(0o600)
+  expect(readFileSync(identity).equals(identityBytes)).toBe(true)
   expect(readFileSync(workFile, 'utf8')).toBe(workContents)
+  const digest = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex')
+  const backupDigest = digest(backup)
+  const upgradedDigest = digest(database)
+  const restoredDir = join(root, 'restored')
+  restoreWorkStoreBackup(backup, restoredDir)
+  copyFileSync(identity, join(restoredDir, 'local-inbox-identity.json'))
+  const restored = await startResident(restoredDir, false)
+  const restoredSnapshot = await restored.inbox({ type: 'snapshot' })
+  expect(restoredSnapshot).toMatchObject({ ok: true, kind: 'snapshot', snapshot: { recoveryMode: 'restore' } })
+  expect(await task(restored.inbox)).toMatchObject(expected)
+  expect(await restored.inbox({ type: 'start', taskId, expectedVersion: parked.version, cursor: 'must-not-replay' }))
+    .toEqual({ ok: false, code: 'recovery_required' })
+  await restored.stop()
+  expect(inspectDatabase(join(restoredDir, DATABASE_FILENAME))).toEqual(migrated)
+  expect(digest(backup)).toBe(backupDigest)
+  expect(digest(database)).toBe(upgradedDigest)
   expect(requests).toEqual(['POST'])
 }, 340_000)

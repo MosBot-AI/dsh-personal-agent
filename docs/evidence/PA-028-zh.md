@@ -22,4 +22,25 @@ pnpm test:install
 
 测试在原 Profile 中重装同一个归档，通过新的常驻进程登录，读回原任务 ID、版本和资源等待状态。Worker 保持未运行，受控供应商在两次进程运行期间总共只收到原始的一次 POST。测试使用隔离的 DSH Home 和返回 HTTP 400 的模拟供应商。[卸载验证 #144](https://github.com/MosBot-AI/dsh-personal-agent/issues/144)
 
-完整发布门槛仍须补齐升级和迁移证据、发布恢复验证、真实供应商验收及七天试用。参见[评估与发布门槛](../07-evaluation-and-release-gates-zh.md)。
+## 打包版本的数据库升级和恢复
+
+历史源码检查点 `07579662e0747acdac1ad34f0f823c41e9ec8b0d`（schema 15）和当前运行时 `02ec24eec147a0277e19bf9bea2b83d34f1559b6`（schema 16）分别构建并打包。两者未发布的核心包版本均为 `0.0.0`。测试在 Debian 13 上使用独立归档、固定版本的 DSH 0.2.2-rc.1 宿主及 Node.js 24.14.1。[升级验证 #146](https://github.com/MosBot-AI/dsh-personal-agent/issues/146)
+
+旧版已安装 Bundle 通过已鉴权的原生收件箱创建项目并启动 Worker。模拟供应商返回一次 HTTP 400 后，任务进入供应商等待。固定版本的 DSH CLI 将当前归档安装到原有 Profile。新版首次启动将数据库升级到 schema 16，保留原项目与任务记录，并生成包含升级前记录、仅所有者可访问的 `state.sqlite.v15.bak`。所有者身份文件和工作文件保持完整。
+
+将该备份恢复到新目录后，原备份和已升级的数据库均保持完整。恢复环境的就绪探针返回 HTTP 503，已鉴权的所有者可以读取原任务，派发则返回 `recovery_required`。旧版、升级后及恢复后的宿主合计只向供应商发送了一次请求。三个数据库和备份均通过 SQLite 完整性与外键检查。
+
+在当前检出目录构建两个修订，并把 `DSHPA_INSTALL_UPGRADE_FROM` 指向已构建的历史检出目录：
+
+```sh
+previous="$(mktemp -d)"
+git worktree add --detach "$previous" 07579662e0747acdac1ad34f0f823c41e9ec8b0d
+pnpm -C "$previous" install --frozen-lockfile
+pnpm -C "$previous" build
+pnpm install --frozen-lockfile
+pnpm build
+DSHPA_INSTALL_UPGRADE_FROM="$previous" pnpm test:install
+git worktree remove "$previous"
+```
+
+升级用例、默认安装用例和 35 项 SQLite 迁移测试均通过。完整发布门槛仍须完成发布产物的适用验证、真实供应商验收及七天试用。参见[评估与发布门槛](../07-evaluation-and-release-gates-zh.md)。
