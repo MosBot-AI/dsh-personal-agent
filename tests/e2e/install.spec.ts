@@ -23,8 +23,19 @@ const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js'
 const workspace = fileURLToPath(new URL('../../', import.meta.url))
 const profileName = 'dshpa-package-install'
 const previousCheckout = process.env.DSHPA_INSTALL_UPGRADE_FROM
+const archiveDirectory = process.env.DSHPA_INSTALL_ARCHIVES
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
+}
+if (archiveDirectory !== undefined && (!isAbsolute(archiveDirectory) || previousCheckout !== undefined)) {
+  throw new Error('DSHPA_INSTALL_ARCHIVES requires an absolute path and cannot be combined with DSHPA_INSTALL_UPGRADE_FROM')
+}
+
+function packageArchive(directory: string, checkout: string, destination: string) {
+  const cwd = join(checkout, 'packages', directory)
+  const { name, version } = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { name: string; version: string }
+  const path = join(destination, `${name.slice(1).replace('/', '-')}-${version}.tgz`)
+  return { cwd, name, path, spec: 'file:' + path }
 }
 
 function installDiagnostics(profile: string, error: unknown): string {
@@ -102,18 +113,24 @@ it(previousCheckout
   const workFile = join(workRoot, 'owner-notes.md')
   const workContents = '# Owner notes\n\nKeep this file when removing the plugin.\n'
   writeFileSync(workFile, workContents, { mode: 0o600 })
-  async function pack(directory: string, checkout: string, archiveGroup: string) {
-    const cwd = join(checkout, 'packages', directory)
-    const destination = join(archives, archiveGroup)
-    mkdirSync(destination, { recursive: true })
-    const { name, version } = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { name: string; version: string }
-    await run('pnpm', ['pack', '--pack-destination', destination], { cwd, env: installEnv, timeout: 15_000 })
-    return { name, spec: 'file:' + join(destination, `${name.slice(1).replace('/', '-')}-${version}.tgz`) }
+  async function archivesFor(checkout: string, destination: string, packed: boolean) {
+    const packages = [
+      packageArchive('personal-agent', checkout, destination),
+      packageArchive('plugin-api', checkout, destination),
+      packageArchive('model-routing', checkout, destination),
+    ] as const
+    if (!packed) mkdirSync(destination, { recursive: true })
+    for (const archive of packages) {
+      if (!packed) {
+        await run('pnpm', ['pack', '--pack-destination', destination], { cwd: archive.cwd, env: installEnv, timeout: 15_000 })
+      }
+      expect(lstatSync(archive.path).isFile(), `${archive.name} archive is missing`).toBe(true)
+    }
+    return packages
   }
   const initialCheckout = previousCheckout ?? workspace
-  const bundle = await pack('personal-agent', initialCheckout, 'initial')
-  const pluginApi = await pack('plugin-api', initialCheckout, 'initial')
-  const routing = await pack('model-routing', initialCheckout, 'initial')
+  const [bundle, pluginApi, routing] = await archivesFor(initialCheckout,
+    archiveDirectory ?? join(archives, 'initial'), archiveDirectory !== undefined)
   await run(process.execPath, [dsh, '--profile', profileName, '--from-default-profile', 'web', '--dump-config'], {
     cwd: root, env: installEnv, timeout: 20_000,
   })
@@ -342,9 +359,7 @@ allowBuilds:
   expect(before.tasks).toHaveLength(1)
   expect(existsSync(backup)).toBe(false)
   expect(readFileSync(join(modules, bundle.name, 'lib/storage/schema.js'), 'utf8')).toContain('SCHEMA_VERSION = 15')
-  const current = await pack('personal-agent', workspace, 'current')
-  const currentApi = await pack('plugin-api', workspace, 'current')
-  const currentRouting = await pack('model-routing', workspace, 'current')
+  const [current, currentApi, currentRouting] = await archivesFor(workspace, join(archives, 'current'), false)
   chooseDependencies(currentApi, currentRouting)
   await manageBundle('add', current.spec)
   expect(readFileSync(join(modules, current.name, 'lib/storage/schema.js'), 'utf8'))
