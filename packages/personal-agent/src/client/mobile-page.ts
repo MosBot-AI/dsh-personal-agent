@@ -82,6 +82,7 @@ function runMobilePage() {
   const chinese = document.documentElement.lang === 'zh-CN'
   const text = chinese ? {
     connected: '已连接', pairing: '请从本机工作台获取配对码。', rejected: '配对失败，请检查配对码是否有效。',
+    pairingUnconfirmed: '无法确认配对，请从本机工作台获取新的配对码。',
     reconnecting: '正在重新连接…', empty: '暂时没有任务。',
     approve: '批准此动作', deny: '拒绝此动作', recorded: '已记录审批答复。', changed: '审批已变化或不可用，请重新检查。',
     unconfirmed: '无法确认审批答复，请查看刷新后的审批。',
@@ -94,6 +95,7 @@ function runMobilePage() {
     account: '账户', resource: '资源', recipient: '接收方', scope: '数据范围', digest: '载荷摘要', expires: '过期时间', preview: '完整载荷预览',
   } : {
     connected: 'Connected', pairing: 'Get a pairing code from the local inbox.', rejected: 'Pairing failed. Check that the code is valid.',
+    pairingUnconfirmed: 'Could not confirm pairing. Get a new code from the local inbox.',
     reconnecting: 'Reconnecting…', empty: 'No tasks yet.',
     approve: 'Approve this action', deny: 'Deny this action', recorded: 'Review response recorded.', changed: 'The review changed or is unavailable. Check it again.',
     unconfirmed: 'Could not confirm the response. Check the refreshed review.',
@@ -116,6 +118,7 @@ function runMobilePage() {
   const status = document.querySelector<HTMLParagraphElement>('#status')!
   const form = document.querySelector<HTMLFormElement>('#pair')!
   const code = document.querySelector<HTMLInputElement>('#code')!
+  const pairButton = form.querySelector('button')!
   const work = document.querySelector<HTMLElement>('#work')!
   const tasks = document.querySelector<HTMLUListElement>('#tasks')!
   const browseTasks = document.querySelector<HTMLButtonElement>('#browse-tasks')!
@@ -128,6 +131,7 @@ function runMobilePage() {
   const reviewStatus = document.querySelector<HTMLParagraphElement>('#review-status')!
   const reviewItems = document.querySelector<HTMLUListElement>('#review-items')!
   const replying = new Map<string, AbortController>()
+  let pairingRequest: AbortController | undefined
   let stream: EventSource | undefined
   let streamDeadline: ReturnType<typeof setTimeout> | undefined
   let pending: AbortController | undefined
@@ -301,6 +305,9 @@ function runMobilePage() {
   }
 
   function stop() {
+    pairingRequest?.abort()
+    pairingRequest = undefined
+    pairButton.disabled = false
     for (const controller of replying.values()) controller.abort()
     replying.clear()
     resetView()
@@ -427,7 +434,7 @@ function runMobilePage() {
     reviewSection.hidden = approvals.length === 0 && !reviewStatus.textContent
   }
 
-  async function refresh(source: 'direct' | 'event' = 'direct') {
+  async function refresh(source: 'direct' | 'event' | 'pairing' = 'direct') {
     if (document.hidden) return
     if (source === 'event' && pending) {
       refreshAfterPending = true
@@ -437,14 +444,21 @@ function runMobilePage() {
     refreshAfterPending = false
     const controller = new AbortController()
     pending = controller
+    const refreshFailed = () => {
+      if (source === 'pairing') showPairing(text.pairingUnconfirmed)
+      else reconnect()
+    }
     const deadline = setTimeout(() => {
-      if (pending === controller) reconnect()
+      if (pending === controller) refreshFailed()
     }, 10_000)
     try {
       const request: RequestInit = { signal: controller.signal, cache: 'no-store' }
       const [response, reviews] = await Promise.all([fetch('/v1/snapshot', request), fetch('/v1/approvals', request)])
       if (controller.signal.aborted) return
-      if (response.status === 401 || reviews.status === 401) { showPairing(); return }
+      if (response.status === 401 || reviews.status === 401) {
+        showPairing(source === 'pairing' ? text.pairingUnconfirmed : undefined)
+        return
+      }
       if (!response.ok || !reviews.ok) throw new Error()
       const snapshot = await response.json() as { cursor: string | null; tasks: { outcome: string; status: string }[] }
       const { approvals } = await reviews.json() as { approvals: InboxApproval[] }
@@ -458,7 +472,7 @@ function runMobilePage() {
       status.textContent = text.connected
       if (!stream) follow(snapshot.cursor)
     } catch {
-      if (!controller.signal.aborted) reconnect()
+      if (!controller.signal.aborted) refreshFailed()
     } finally {
       clearTimeout(deadline)
       if (pending === controller) {
@@ -477,20 +491,36 @@ function runMobilePage() {
 
   form.addEventListener('submit', async event => {
     event.preventDefault()
+    if (pairingRequest || form.hidden || document.hidden) return
     const pairing = code.value.trim()
     code.value = ''
-    const button = form.querySelector('button')!
-    button.disabled = true
-    try {
-      const response = await fetch('/v1/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: pairing }), cache: 'no-store' })
-      if (!response.ok) { showPairing(text.rejected); return }
-      await refresh()
-    } catch {
-      showPairing(text.rejected)
-    } finally {
-      button.disabled = false
+    const controller = new AbortController()
+    pairingRequest = controller
+    pairButton.disabled = true
+    const confirmPairing = async () => {
+      await refresh('pairing')
+      if (pairingRequest === controller) {
+        pairingRequest = undefined
+        pairButton.disabled = false
+      }
     }
+    const deadline = setTimeout(() => {
+      controller.abort()
+      void confirmPairing()
+    }, 10_000)
+    controller.signal.addEventListener('abort', () => clearTimeout(deadline), { once: true })
+    let response: Response | undefined
+    try {
+      response = await fetch('/v1/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: pairing }), cache: 'no-store', signal: controller.signal })
+    } catch {
+      // A dropped response can leave a working enrollment cookie.
+    } finally {
+      clearTimeout(deadline)
+    }
+    if (controller.signal.aborted) return
+    if (!response || response.ok || response.status >= 500) await confirmPairing()
+    else showPairing(text.rejected)
   })
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
