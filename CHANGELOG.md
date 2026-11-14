@@ -8,6 +8,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- Recover mobile pairing after an interrupted response by checking the browser's current session and allowing a new code when needed.
 - Keep assigned mobile approvals visible and refreshable when their tasks fall outside the recent inbox work list.
 - Find local document candidates for natural questions in English, Chinese, and mixed language when keyword search returns no results.
 - Recover completed ComfyUI renders when unrelated jobs make the provider queue response too large.
