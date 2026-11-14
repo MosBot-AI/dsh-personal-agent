@@ -62,4 +62,16 @@ git rev-parse HEAD > "$archives/source-commit.txt"
 DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
 ```
 
-`DSHPA_INSTALL_ARCHIVES` 使用绝对路径下的三个指定文件，运行已鉴权的启动、卸载与重装检查。此轮运行请省略 `DSHPA_INSTALL_UPGRADE_FROM`。固定源码 `b94773c1b0370335e3a3b8031d212673b54702a5` 使用 Node.js 24.14.1、pnpm 11.28.5 和 DSH 0.2.2-rc.1 打包。三个归档均包含 Apache-2.0 许可证，核心包与路由包的清单已将工作区引用解析为具体版本。归档原件通过了使用模拟供应商的本机原生测试。真实供应商验收及 alpha 试用仍待完成。
+`DSHPA_INSTALL_ARCHIVES` 使用绝对路径下的三个指定文件，运行已鉴权的启动、卸载与重装检查。此轮运行请省略 `DSHPA_INSTALL_UPGRADE_FROM`。固定源码 `b94773c1b0370335e3a3b8031d212673b54702a5` 使用 Node.js 24.14.1、pnpm 11.28.5 和 DSH 0.2.2-rc.1 打包。三个归档均包含 Apache-2.0 许可证，核心包与路由包的清单已将工作区引用解析为具体版本。归档原件通过了使用模拟供应商的本机原生测试。
+
+## DeepSeek Worker 真实调用冒烟测试
+
+从本机密钥存储加载获授权的 `DEEPSEEK_API_KEY` 后，指定当前归档目录，并显式启用真实调用测试：
+
+```sh
+DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+```
+
+测试在全新 DSH Profile 中执行一项合成任务，预算为一次调用，输出上限为 256 个 token。已安装的 Worker 通过 DeepSeek 官方端点调用 `deepseek-flash`。所有者鉴权后读取并验收封存的 Markdown 结果，常驻进程重启后读回同一产物。测试验证仅有一条已结算的用量记录，并按配置的高峰费率估算费用。[真实 Worker 验证 #150](https://github.com/MosBot-AI/dsh-personal-agent/issues/150) · [DeepSeek 定价](https://api-docs.deepseek.com/quick_start/pricing/)
+
+此结果覆盖使用本地 alpha 归档完成的一项真实模型任务。发布仍需完成真实外部写入、完整工作流评测和七天试用。

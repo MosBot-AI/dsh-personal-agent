@@ -24,11 +24,16 @@ const workspace = fileURLToPath(new URL('../../', import.meta.url))
 const profileName = 'dshpa-package-install'
 const previousCheckout = process.env.DSHPA_INSTALL_UPGRADE_FROM
 const archiveDirectory = process.env.DSHPA_INSTALL_ARCHIVES
+const liveProvider = process.env.DSHPA_INSTALL_LIVE_DEEPSEEK === '1'
+const liveKey = liveProvider ? process.env.DEEPSEEK_API_KEY?.trim() : undefined
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
 }
 if (archiveDirectory !== undefined && (!isAbsolute(archiveDirectory) || previousCheckout !== undefined)) {
   throw new Error('DSHPA_INSTALL_ARCHIVES requires an absolute path and cannot be combined with DSHPA_INSTALL_UPGRADE_FROM')
+}
+if (liveProvider && (!liveKey || previousCheckout)) {
+  throw new Error('Live DeepSeek requires DEEPSEEK_API_KEY and the current package')
 }
 
 function packageArchive(directory: string, checkout: string, destination: string) {
@@ -60,7 +65,8 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it(previousCheckout
+it(liveProvider ? 'runs a native Worker with live DeepSeek and retains the accepted result'
+  : previousCheckout
   ? 'upgrades and restores work from an installed schema-15 package'
   : 'runs a native Worker from a fresh tarball install and retains its task across plugin removal', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'dshpa-package-install-')))
@@ -169,16 +175,21 @@ allowBuilds:
   }
   expect(existsSync(join(modules, '@deepseek-ai/dsh-llm'))).toBe(false)
 
-  provider.listen(0, '127.0.0.1')
-  await once(provider, 'listening')
-  const address = provider.address()
-  assert.ok(address && typeof address !== 'string')
+  let providerUrl = 'https://api.deepseek.com/anthropic'
+  if (!liveProvider) {
+    provider.listen(0, '127.0.0.1')
+    await once(provider, 'listening')
+    const address = provider.address()
+    assert.ok(address && typeof address !== 'string')
+    providerUrl = `http://127.0.0.1:${address.port}`
+  }
+  const outputLimit = liveProvider ? 256 : 64
   const overlay = (stateDir: string) => `- id: llm-deepseek
   config:
-    baseURL: http://127.0.0.1:${address.port}
+    baseURL: ${providerUrl}
     apiKeyEnv: DSHPA_INSTALL_TEST_KEY
     reasoningEffort: 'off'
-    maxTokens: 64
+    maxTokens: ${outputLimit}
 - id: llm-deepseek-account
   disabled: true
 - id: llm-retry
@@ -197,12 +208,12 @@ allowBuilds:
         concurrency: 1
       computeLimits:
         maxInputBytes: 8192
-        maxOutputTokens: 64
+        maxOutputTokens: ${outputLimit}
         maxTurns: 1
         maxStepsPerTurn: 1
-        maxWallTimeMs: 10000
+        maxWallTimeMs: ${liveProvider ? 30000 : 10000}
       budget:
-        pricingVersion: packaged-install-fixture
+        pricingVersion: ${liveProvider ? 'deepseek-flash-peak-2026-11-14' : 'packaged-install-fixture'}
         routes:
           - provider: deepseek-official
             model: deepseek-flash
@@ -227,7 +238,7 @@ allowBuilds:
     writeFileSync(patch, overlay(stateDir), { mode: 0o600 })
     const ownerPath = join(stateDir, RESIDENT_OWNER_FILE)
     const child = spawn('/bin/sh', [join(workspace, 'deploy/run-resident.sh'), process.execPath, dshHome, profileName, patch, '0'], {
-      cwd: root, env: { ...systemEnv, DSHPA_INSTALL_TEST_KEY: 'sk-dummy-only-for-loopback' }, stdio: 'ignore',
+      cwd: root, env: { ...systemEnv, DSHPA_INSTALL_TEST_KEY: liveKey ?? 'sk-dummy-only-for-loopback' }, stdio: 'ignore',
     })
     resident = child
     const exited = once(child, 'exit')
@@ -293,7 +304,9 @@ allowBuilds:
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
   const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId,
-    outcome: 'Prepare an outline of the synthetic packaging test.' })
+    outcome: liveProvider
+      ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
+      : 'Prepare an outline of the synthetic packaging test.' })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
   const taskId = created.taskId
   async function task(readInbox = inbox) {
@@ -307,6 +320,39 @@ allowBuilds:
   expect(queued.status).toBe('queued')
   expect(await inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor: 'package-start' }))
     .toMatchObject({ ok: true })
+  if (liveProvider) {
+    const candidate = await vi.waitFor(async () => {
+      const item = await task()
+      expect(item).toMatchObject({ status: 'verifying', runtime: 'inactive', canAccept: true })
+      return item
+    }, { timeout: 35_000 })
+    expect(candidate.artifacts).toHaveLength(1)
+    const artifactId = candidate.artifacts[0]!.id
+    const readResult = (readInbox = inbox) => readInbox({ type: 'artifact', taskId, artifactId })
+    const artifact = await readResult()
+    expect(artifact).toMatchObject({ ok: true, kind: 'artifact', artifact: { mediaType: 'text/markdown', text: 'Total folders: 12.' } })
+    expect(await inbox({ type: 'accept_result', taskId, expectedVersion: candidate.version })).toMatchObject({ ok: true })
+    const completed = await task()
+    expect(completed.status).toBe('completed')
+    await stop()
+    const reopened = await startResident()
+    expect(await task(reopened.inbox)).toMatchObject({ id: taskId, status: 'completed', version: completed.version, runtime: 'inactive' })
+    expect(await readResult(reopened.inbox)).toEqual(artifact)
+    await reopened.stop()
+    const db = new DatabaseSync(join(storage, DATABASE_FILENAME), { readOnly: true })
+    try {
+      const charges = db.prepare('SELECT provider, model, status, usage, actual_micros FROM budget_reservations WHERE task_id = ?').all(taskId)
+      expect(charges).toEqual([expect.objectContaining({ provider: 'deepseek-official', model: 'deepseek-flash', status: 'settled',
+        usage: expect.any(String), actual_micros: expect.any(Number) })])
+      const charge = charges[0]!
+      const usage = JSON.parse(String(charge.usage)) as { inputTokens: number; outputTokens: number }
+      expect(usage.outputTokens).toBeGreaterThan(0)
+      expect(usage.outputTokens).toBeLessThanOrEqual(outputLimit)
+      console.log(JSON.stringify({ taskId, artifactId, model: charge.model, usage,
+        estimatedCostMicrosUsd: charge.actual_micros }))
+    } finally { db.close() }
+    return
+  }
   const parked = await vi.waitFor(async () => {
     const item = await task()
     expect(item).toMatchObject({ status: 'waiting_resource', runtime: 'inactive' })
