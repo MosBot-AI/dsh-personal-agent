@@ -17,6 +17,7 @@ import { RESIDENT_OWNER_FILE } from '../../packages/personal-agent/src/runtime/r
 import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import { SCHEMA_VERSION, V15_BACKUP_SUFFIX } from '../../packages/personal-agent/src/storage/schema.js'
+import { prepareResearchSources, readResearchOutcome, verifyResearchBrief } from './fixtures/live-research.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
@@ -27,6 +28,7 @@ const archiveDirectory = process.env.DSHPA_INSTALL_ARCHIVES
 const liveProvider = process.env.DSHPA_INSTALL_LIVE_DEEPSEEK === '1'
 const liveKey = liveProvider ? process.env.DEEPSEEK_API_KEY?.trim() : undefined
 const liveBrief = process.env.DSHPA_INSTALL_LIVE_BRIEF === '1'
+const liveResearch = process.env.DSHPA_INSTALL_LIVE_RESEARCH === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
 }
@@ -36,7 +38,8 @@ if (archiveDirectory !== undefined && (!isAbsolute(archiveDirectory) || previous
 if (liveProvider && (!liveKey || previousCheckout)) {
   throw new Error('Live DeepSeek requires DEEPSEEK_API_KEY and the current package')
 }
-if (liveBrief && !liveProvider) throw new Error('The live brief requires DSHPA_INSTALL_LIVE_DEEPSEEK=1')
+if ((liveBrief || liveResearch) && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
+if (liveBrief && liveResearch) throw new Error('Select one live workflow evaluation per install run')
 
 const briefReference = 'pilot-brief-audience'
 const briefAnswer = 'The audience is the volunteer coordinators. The pilot opens on 19 November.'
@@ -78,7 +81,8 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it(liveBrief ? 'resumes an installed live project brief after an owner answer and resident restart'
+it(liveResearch ? 'accepts an installed live research brief against exact local sources'
+  : liveBrief ? 'resumes an installed live project brief after an owner answer and resident restart'
   : liveProvider ? 'runs a native Worker with live DeepSeek and retains the accepted result'
   : previousCheckout
   ? 'upgrades and restores work from an installed schema-15 package'
@@ -89,6 +93,7 @@ it(liveBrief ? 'resumes an installed live project brief after an owner answer an
   const archives = join(root, 'archives')
   const storage = join(dshHome, 'state')
   const workRoot = join(root, 'work')
+  const researchDirectory = join(root, 'research')
   const patch = join(root, 'resident.yml')
   const systemEnv = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }
   const installEnv = {
@@ -130,6 +135,7 @@ it(liveBrief ? 'resumes an installed live project brief after an owner answer an
 
   mkdirSync(archives)
   mkdirSync(workRoot)
+  const researchConfig = liveResearch ? prepareResearchSources(researchDirectory) : ''
   const workFile = join(workRoot, 'owner-notes.md')
   const workContents = '# Owner notes\n\nKeep this file when removing the plugin.\n'
   writeFileSync(workFile, workContents, { mode: 0o600 })
@@ -221,8 +227,8 @@ allowBuilds:
         provider: deepseek-official
         model: deepseek-flash
         concurrency: 1
-      computeLimits:
-        maxInputBytes: ${liveBrief ? 32_768 : 8192}
+${researchConfig}      computeLimits:
+        maxInputBytes: ${liveBrief || liveResearch ? 32_768 : 8192}
         maxOutputTokens: ${outputLimit}
         maxTurns: ${callLimit}
         maxStepsPerTurn: 1
@@ -320,7 +326,7 @@ allowBuilds:
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
   const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId,
-    outcome: liveBrief ? briefOutcome : liveProvider
+    outcome: liveResearch ? await readResearchOutcome(inbox, researchDirectory) : liveBrief ? briefOutcome : liveProvider
       ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
       : 'Prepare an outline of the synthetic packaging test.' })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
@@ -371,7 +377,9 @@ allowBuilds:
     const artifact = await readResult(host.inbox)
     assert.ok(artifact.ok && artifact.kind === 'artifact')
     expect(artifact.artifact.mediaType).toBe('text/markdown')
-    if (liveBrief) {
+    if (liveResearch) {
+      verifyResearchBrief(artifact.artifact.text)
+    } else if (liveBrief) {
       for (const expected of [/volunteer coordinators/i, /(?:19 November|November 19)/i, /\b12 kits\b/i, /(?:20 November|November 20)/i]) {
         expect(artifact.artifact.text).toMatch(expected)
       }

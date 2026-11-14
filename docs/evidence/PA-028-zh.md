@@ -87,4 +87,17 @@ Worker 询问缺失的受众和启动日期，释放执行资源，并在常驻�
 
 归档 Bundle 于 2026-11-14 通过此项测试。两次 `deepseek-flash` 调用均已结算，输出分别为 76 和 64 个 token。按配置的高峰费率估算，总费用为 538 微美元。每次调用的输出上限为 256 个 token，测试允许每个任务最多调用两次。[澄清流程验证 #152](https://github.com/MosBot-AI/dsh-personal-agent/issues/152)
 
+## 基于精确版本本地来源的真实研究简报
+
+加载同一获授权的凭据，并选用独立的研究用例：
+
+```sh
+DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_RESEARCH=1 \
+  DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+```
+
+在全新安装的 Profile 中，已鉴权的所有者搜索一次性知识库根目录，读回两份虚构的场地记录。Harbor Room 文件更新后，收件箱拒绝旧版本，并用同一来源引用和新的 SHA-256 返回更新后的内容。所有者将两个已核验的摘录及其版本明确放入任务。Worker 比较两个场地，返回带有相对路径和版本前缀的 Markdown 建议。测试逐条核对引用及其对应的容量和费用，并排除旧版数值和无关来源中的细节。已鉴权的所有者验收封存的简报，并在常驻进程重启后读回同一产物。
+
+归档 Bundle 于 2026-11-14 通过此项测试。测试仅结算一次 `deepseek-flash` 调用，输出上限为 256 个 token。通过的运行使用了 161 个输出 token，按配置的高峰费率估算费用为 419 微美元。此轮覆盖由所有者选定并提供来源，以及封存产物中的精确引用。自主选择来源和持久化的知识版本链接不在此轮验收范围内。[研究流程验证 #154](https://github.com/MosBot-AI/dsh-personal-agent/issues/154)
+
 发布仍需完成真实外部写入、其余工作流评测和七天试用。
