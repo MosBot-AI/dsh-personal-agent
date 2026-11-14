@@ -112,4 +112,19 @@ DSHPA_INSTALL_REMINDER=1 DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
 
 测试在两个到期时间之前停止常驻进程，等两个时间均过去后才重启。2026-11-14 的归档测试中，同一已安装的 Profile 只显示了一条版本 4 的提醒，保留了编辑后的文本和修订时指定的到期时间。SQLite 回执记录于该到期时间后 2.469 秒送达，并在第二次冷启动后保留。版本 2 未产生回执。收件箱报告模型调用、占用的 Worker 槽位和主动通知均为零。受控供应商未收到请求。此用例验证了原生本地提醒的投递和冷启动恢复。[提醒流程验证 #156](https://github.com/MosBot-AI/dsh-personal-agent/issues/156)
 
+## 真实评审与经验证的技能复用
+
+加载获授权的凭据，并使用保留的归档：
+
+```sh
+DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_REVIEW=1 \
+  DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+```
+
+已安装的 Worker 按同一规则评审三项独立的虚构库存变更。用例逐项核对了符合条件、超出数量上限、缺少支持记录的三项决定和理由，再通过所有者收件箱分别验收三个评审产物。两个产物作为可复用 Markdown 模板的示例，第三个产物具有独立的精确摘要值，用作留出验证。
+
+不匹配的模板未通过验证，收件箱拒绝启用。修订版本与留出产物逐字节一致，经所有者确认后启用。输入新数据后生成有效的 Markdown，并记录一条已接受的反馈。重启后保留启用版本、反馈和三个模型产物。重放相同输入得到相同结果，复用同一运行 ID 提交不同输入则失败。
+
+2026-11-14 的归档测试恰好结算三次 `deepseek-flash` 调用，输出分别为 41、39 和 38 个 token。按配置的高峰费率估算总费用为 914 微美元。复用未产生额外调用。复用模板时，由所有者提供决定字段。[真实评审验证 #158](https://github.com/MosBot-AI/dsh-personal-agent/issues/158)
+
 发布仍需完成真实外部写入、其余工作流评测和七天试用。
