@@ -127,4 +127,17 @@ DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_REVIEW=1 \
 
 2026-11-14 的归档测试恰好结算三次 `deepseek-flash` 调用，输出分别为 41、39 和 38 个 token。按配置的高峰费率估算总费用为 914 微美元。复用未产生额外调用。复用模板时，由所有者提供决定字段。[真实评审验证 #158](https://github.com/MosBot-AI/dsh-personal-agent/issues/158)
 
+## 真实代码补丁与可执行验证
+
+在安装了 Git 和 Bubblewrap 的 Linux 上加载获授权的凭据，并使用保留的归档：
+
+```sh
+DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_CODE=1 \
+  DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+```
+
+所有者提供一个虚构的读数汇总模块，并指定零是有效读数。原有代码将 `[0, 10]` 的平均值算成 10，预期为 5。应用补丁前三个配套用例通过。已安装的 Worker 提出统一差异补丁，测试仓库仍保持干净。验证器确认差异仅修改 `readings.mjs`，执行 `git apply --check`，再将补丁应用到一次性仓库。四个测试全部通过，测试文件和 README 的内容保持完整。应用补丁后的测试在独立网络命名空间内运行，使用只读测试目录、清理后的环境变量及受限的 Node 权限。
+
+已鉴权的所有者验收封存的补丁建议，并在常驻进程冷启动后读回同一产物。2026-11-14 的归档测试结算一次 `deepseek-flash` 调用，输出 118 个 token，按配置的高峰费率估算费用为 335 微美元。此用例验证在一次性仓库中由所有者应用的补丁建议。[真实代码补丁验证 #160](https://github.com/MosBot-AI/dsh-personal-agent/issues/160)
+
 发布仍需完成真实外部写入、其余工作流评测和七天试用。
