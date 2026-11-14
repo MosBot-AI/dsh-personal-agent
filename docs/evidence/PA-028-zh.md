@@ -16,4 +16,10 @@ pnpm test:install
 
 主分支 `917e84e` 和九个 PR 的组合代码树 `7d08796` 均通过直装的 HTTP 400 对照，结果 SHA-256 一致，为 `baeeb36b4f99fee4cada60151f261699141e8be1ab7d627c542c8684f98ef479`。发布 Issue 记录了安装设置和单独的凭据恢复结果。 [验证记录](https://github.com/MosBot-AI/dsh-personal-agent/issues/32#issuecomment-6831354517)
 
-完整发布门槛仍须完成适用的升级、恢复和卸载检查、真实供应商验收及七天试用。参见[评估与发布门槛](../07-evaluation-and-release-gates-zh.md)。
+## 插件卸载和重装
+
+同一打包测试先停止常驻宿主，再用固定版本的 DSH CLI 从一次性命名 Profile 中卸载 dshpa。已安装的 Bundle 随后消失。独立的 WorkStore 数据库、所有者身份文件以及所有者工作目录中的一个文件均保留原始内容。
+
+测试在原 Profile 中重装同一个归档，通过新的常驻进程登录，读回原任务 ID、版本和资源等待状态。Worker 保持未运行，受控供应商在两次进程运行期间总共只收到原始的一次 POST。测试使用隔离的 DSH Home 和返回 HTTP 400 的模拟供应商。[卸载验证 #144](https://github.com/MosBot-AI/dsh-personal-agent/issues/144)
+
+完整发布门槛仍须补齐升级和迁移证据、发布恢复验证、真实供应商验收及七天试用。参见[评估与发布门槛](../07-evaluation-and-release-gates-zh.md)。

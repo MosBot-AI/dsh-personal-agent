@@ -13,6 +13,7 @@ import { promisify } from 'node:util'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { INBOX_RPC_ENDPOINT, type InboxRequest, type InboxResponse } from '../../packages/personal-agent/src/inbox/protocol.js'
 import { RESIDENT_OWNER_FILE } from '../../packages/personal-agent/src/runtime/resident-web.js'
+import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/database.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
@@ -41,7 +42,7 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it('runs an owner-started native Worker from a fresh DSH tarball install', async () => {
+it('runs a native Worker from a fresh tarball install and retains its task across plugin removal', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'dshpa-package-install-')))
   const dshHome = join(root, 'home')
   const profile = join(dshHome, 'profiles', profileName)
@@ -90,6 +91,9 @@ it('runs an owner-started native Worker from a fresh DSH tarball install', async
 
   mkdirSync(archives)
   mkdirSync(workRoot)
+  const workFile = join(workRoot, 'owner-notes.md')
+  const workContents = '# Owner notes\n\nKeep this file when removing the plugin.\n'
+  writeFileSync(workFile, workContents, { mode: 0o600 })
   async function pack(directory: string) {
     const cwd = join(workspace, 'packages', directory)
     const { name, version } = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { name: string; version: string }
@@ -115,14 +119,17 @@ overrides:
 allowBuilds:
   koffi: true
 `)
-  try {
-    await run(process.execPath, [dsh, 'plugin', '--profile', profileName, 'add', bundle.spec], {
-      cwd: root, env: installEnv, timeout: 80_000,
-    })
-  } catch (error) {
-    const details = installDiagnostics(profile, error)
-    throw new Error(details ? `DSH tarball installation failed\n${details}` : 'DSH tarball installation failed without pnpm diagnostics')
+  async function manageBundle(action: 'add' | 'remove', target: string) {
+    try {
+      await run(process.execPath, [dsh, 'plugin', '--profile', profileName, action, target], {
+        cwd: root, env: installEnv, timeout: 80_000,
+      })
+    } catch (error) {
+      const details = installDiagnostics(profile, error)
+      throw new Error(`DSH plugin ${action} failed${details ? `\n${details}` : ' without pnpm diagnostics'}`)
+    }
   }
+  await manageBundle('add', bundle.spec)
   expect(readFileSync(join(profile, 'pnpm-lock.yaml'), 'utf8')).toMatch(/^  autoInstallPeers: false$/m)
   const modules = join(profile, 'node_modules')
   const installedRequire = createRequire(join(modules, bundle.name, 'package.json'))
@@ -184,54 +191,69 @@ allowBuilds:
             maxCallsPerTask: 1
             maxConcurrent: 1
 `, { mode: 0o600 })
-  const child = spawn('/bin/sh', [join(workspace, 'deploy/run-resident.sh'), process.execPath, dshHome, profileName, patch, '0'], {
-    cwd: root, env: { ...systemEnv, DSHPA_INSTALL_TEST_KEY: 'sk-dummy-only-for-loopback' }, stdio: 'ignore',
-  })
-  resident = child
-  const exited = once(child, 'exit')
-  void exited.catch(() => {})
-  const ownerUrl = await vi.waitFor(() => {
-    expect([child.exitCode, child.signalCode]).toEqual([null, null])
-    const owner = JSON.parse(readFileSync(ownerPath, 'utf8')) as { pid: number; url: string }
-    expect(owner.pid).toBe(child.pid)
-    return new URL(owner.url)
-  }, { timeout: 20_000 })
-  expect(ownerUrl.protocol).toBe('http:')
-  expect(ownerUrl.hostname).toBe('127.0.0.1')
   const loopback = { connection: 'close' }
-  await vi.waitFor(async () => {
-    const response = await fetch(new URL('/dshpa/ready', ownerUrl), { headers: loopback, signal: AbortSignal.timeout(3_000) })
-    expect(await response.json()).toMatchObject({ ready: true })
-    expect(response.status).toBe(200)
-  }, { timeout: 8_000 })
-
-  const auth = await fetch(ownerUrl, { headers: loopback, redirect: 'manual', signal: AbortSignal.timeout(5_000) })
-    .catch(() => { throw new Error('The native Web owner sign-in failed') })
-  const cookie = auth.headers.get('set-cookie')?.split(';', 1)[0]
-  await auth.body?.cancel()
-  expect(auth.status).toBe(303)
-  assert.ok(cookie)
-
-  function rpcRequest(method: string, payload: unknown, rpcId: string, authCookie?: string) {
-    return fetch(new URL(`/api/${method}`, ownerUrl), {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5_000),
-      headers: { ...loopback, 'content-type': 'application/json', ...(authCookie === undefined ? {} : { cookie: authCookie }) },
-      body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
+  async function startResident() {
+    const child = spawn('/bin/sh', [join(workspace, 'deploy/run-resident.sh'), process.execPath, dshHome, profileName, patch, '0'], {
+      cwd: root, env: { ...systemEnv, DSHPA_INSTALL_TEST_KEY: 'sk-dummy-only-for-loopback' }, stdio: 'ignore',
     })
+    resident = child
+    const exited = once(child, 'exit')
+    void exited.catch(() => {})
+    const ownerUrl = await vi.waitFor(() => {
+      expect([child.exitCode, child.signalCode]).toEqual([null, null])
+      const owner = JSON.parse(readFileSync(ownerPath, 'utf8')) as { pid: number; url: string }
+      expect(owner.pid).toBe(child.pid)
+      return new URL(owner.url)
+    }, { timeout: 20_000 })
+    expect(ownerUrl.protocol).toBe('http:')
+    expect(ownerUrl.hostname).toBe('127.0.0.1')
+    await vi.waitFor(async () => {
+      const response = await fetch(new URL('/dshpa/ready', ownerUrl), { headers: loopback, signal: AbortSignal.timeout(3_000) })
+      expect(await response.json()).toMatchObject({ ready: true })
+      expect(response.status).toBe(200)
+    }, { timeout: 8_000 })
+
+    const auth = await fetch(ownerUrl, { headers: loopback, redirect: 'manual', signal: AbortSignal.timeout(5_000) })
+      .catch(() => { throw new Error('The native Web owner sign-in failed') })
+    const cookie = auth.headers.get('set-cookie')?.split(';', 1)[0]
+    await auth.body?.cancel()
+    expect(auth.status).toBe(303)
+    assert.ok(cookie)
+
+    function rpcRequest(method: string, payload: unknown, rpcId: string, authCookie?: string) {
+      return fetch(new URL(`/api/${method}`, ownerUrl), {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5_000),
+        headers: { ...loopback, 'content-type': 'application/json', ...(authCookie === undefined ? {} : { cookie: authCookie }) },
+        body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
+      })
+    }
+    const unauthorized = await rpcRequest(INBOX_RPC_ENDPOINT, { type: 'snapshot' }, randomUUID())
+    expect(unauthorized.status).toBe(401)
+    await unauthorized.body?.cancel()
+    async function rpc<T>(method: string, payload: unknown): Promise<T> {
+      const rpcId = randomUUID()
+      const response = await rpcRequest(method, payload, rpcId, cookie)
+      expect(response.status).toBe(200)
+      const body = await response.json() as { rpcId: string; result: { ok: boolean; value: T } }
+      expect(body.rpcId).toBe(rpcId)
+      assert.ok(body.result.ok)
+      return body.result.value
+    }
+    return {
+      rpc,
+      inbox: (request: InboxRequest) => rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request),
+      async stop() {
+        child.kill('SIGTERM')
+        const cleanExit = await Promise.race([
+          exited,
+          delay(8_000, undefined, { ref: false }).then(() => { throw new Error('The native resident process did not stop') }),
+        ])
+        expect(cleanExit).toEqual([0, null])
+        expect(existsSync(ownerPath)).toBe(false)
+      },
+    }
   }
-  const unauthorized = await rpcRequest(INBOX_RPC_ENDPOINT, { type: 'snapshot' }, randomUUID())
-  expect(unauthorized.status).toBe(401)
-  await unauthorized.body?.cancel()
-  async function rpc<T>(method: string, payload: unknown): Promise<T> {
-    const rpcId = randomUUID()
-    const response = await rpcRequest(method, payload, rpcId, cookie)
-    expect(response.status).toBe(200)
-    const body = await response.json() as { rpcId: string; result: { ok: boolean; value: T } }
-    expect(body.rpcId).toBe(rpcId)
-    assert.ok(body.result.ok)
-    return body.result.value
-  }
-  const inbox = (request: InboxRequest) => rpc<InboxResponse>(INBOX_RPC_ENDPOINT, request)
+  const { rpc, inbox, stop } = await startResident()
   const { sessionId } = await rpc<{ sessionId: string }>('session/create', { args: { request: { cwd: workRoot } } })
   assert.ok(sessionId)
   const project = await inbox({ type: 'create_project', commandId: 'package-project',
@@ -241,8 +263,8 @@ allowBuilds:
     outcome: 'Prepare an outline of the synthetic packaging test.' })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
   const taskId = created.taskId
-  async function task() {
-    const response = await inbox({ type: 'snapshot' })
+  async function task(readInbox = inbox) {
+    const response = await readInbox({ type: 'snapshot' })
     assert.ok(response.ok && response.kind === 'snapshot')
     const item = response.snapshot.tasks.find(row => row.id === taskId)
     assert.ok(item)
@@ -261,11 +283,23 @@ allowBuilds:
   expect(parked.artifacts).toEqual([])
   expect(requests).toEqual(['POST'])
 
-  child.kill('SIGTERM')
-  const cleanExit = await Promise.race([
-    exited,
-    delay(8_000, undefined, { ref: false }).then(() => { throw new Error('The native resident process did not stop') }),
-  ])
-  expect(cleanExit).toEqual([0, null])
-  expect(existsSync(ownerPath)).toBe(false)
-}, 170_000)
+  await stop()
+  const database = join(storage, DATABASE_FILENAME)
+  const identity = join(storage, 'local-inbox-identity.json')
+  const databaseBeforeRemoval = readFileSync(database)
+  const identityBeforeRemoval = readFileSync(identity)
+  await manageBundle('remove', bundle.name)
+  expect(existsSync(join(modules, bundle.name))).toBe(false)
+  assert.ok(readFileSync(database).equals(databaseBeforeRemoval), 'Plugin removal changed the WorkStore')
+  assert.ok(readFileSync(identity).equals(identityBeforeRemoval), 'Plugin removal changed the owner identity')
+  expect(readFileSync(workFile, 'utf8')).toBe(workContents)
+
+  await manageBundle('add', bundle.spec)
+  expect(realpathSync(installedRequire.resolve(`${bundle.name}/package.json`))).toBe(join(modules, bundle.name, 'package.json'))
+  const reopened = await startResident()
+  expect(await task(reopened.inbox)).toMatchObject({ id: taskId, status: parked.status, runtime: parked.runtime,
+    version: parked.version, wait: { referenceId: parked.wait?.referenceId }, artifacts: [] })
+  await reopened.stop()
+  expect(readFileSync(workFile, 'utf8')).toBe(workContents)
+  expect(requests).toEqual(['POST'])
+}, 340_000)
