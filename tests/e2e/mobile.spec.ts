@@ -594,7 +594,10 @@ it.skipIf(!chromePath)('expires and recalls assigned approvals beyond recent wor
     vi.waitFor(() => expect(proxy.approvalHints()).toBeGreaterThan(count), { timeout: 6_000 })
   await waitForApprovalHint(0)
   const streams = proxy.eventStreams()
+  const hintsBeforeFirstAssignment = proxy.approvalHints()
   expect(await inbox({ type: 'mobile_review', requestId: first.id, expectedVersion: first.version, digest: first.digest, deviceId: phone.deviceId })).toMatchObject({ ok: true })
+  // A work event can populate the browser before the stream samples the assigned approval revision.
+  await waitForApprovalHint(hintsBeforeFirstAssignment)
   await chrome.waitFor("document.querySelector('#review-items pre')?.textContent.includes('Exact fixture payload approve')")
   const hintsBeforeExpiry = proxy.approvalHints()
   const path = join(host.root, 'home', 'mobile-approval-inbox', DATABASE_FILENAME)
