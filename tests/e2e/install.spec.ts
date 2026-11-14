@@ -26,6 +26,7 @@ const previousCheckout = process.env.DSHPA_INSTALL_UPGRADE_FROM
 const archiveDirectory = process.env.DSHPA_INSTALL_ARCHIVES
 const liveProvider = process.env.DSHPA_INSTALL_LIVE_DEEPSEEK === '1'
 const liveKey = liveProvider ? process.env.DEEPSEEK_API_KEY?.trim() : undefined
+const liveBrief = process.env.DSHPA_INSTALL_LIVE_BRIEF === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
 }
@@ -35,6 +36,18 @@ if (archiveDirectory !== undefined && (!isAbsolute(archiveDirectory) || previous
 if (liveProvider && (!liveKey || previousCheckout)) {
   throw new Error('Live DeepSeek requires DEEPSEEK_API_KEY and the current package')
 }
+if (liveBrief && !liveProvider) throw new Error('The live brief requires DSHPA_INSTALL_LIVE_DEEPSEEK=1')
+
+const briefReference = 'pilot-brief-audience'
+const briefAnswer = 'The audience is the volunteer coordinators. The pilot opens on 19 November.'
+const briefOutcome = [
+  'Prepare a short launch brief for a fictional library pilot. It has 12 kits and a 20 November registration deadline.',
+  'The audience and pilot opening date must come from the Owner answer. Do not infer them.',
+  `If the owner has not answered, report kind waiting, wait.reason input, wait.referenceId ${briefReference},`,
+  'and wait.resumeCondition "Who is the audience, and when does the pilot open?".',
+  'If the Owner answer is present, report kind ready with empty artifactIds and a short Markdown summary.',
+  'Include the audience, opening date, number of kits, and registration deadline in the summary.',
+].join(' ')
 
 function packageArchive(directory: string, checkout: string, destination: string) {
   const cwd = join(checkout, 'packages', directory)
@@ -65,7 +78,8 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it(liveProvider ? 'runs a native Worker with live DeepSeek and retains the accepted result'
+it(liveBrief ? 'resumes an installed live project brief after an owner answer and resident restart'
+  : liveProvider ? 'runs a native Worker with live DeepSeek and retains the accepted result'
   : previousCheckout
   ? 'upgrades and restores work from an installed schema-15 package'
   : 'runs a native Worker from a fresh tarball install and retains its task across plugin removal', async () => {
@@ -184,6 +198,7 @@ allowBuilds:
     providerUrl = `http://127.0.0.1:${address.port}`
   }
   const outputLimit = liveProvider ? 256 : 64
+  const callLimit = liveBrief ? 2 : 1
   const overlay = (stateDir: string) => `- id: llm-deepseek
   config:
     baseURL: ${providerUrl}
@@ -207,9 +222,9 @@ allowBuilds:
         model: deepseek-flash
         concurrency: 1
       computeLimits:
-        maxInputBytes: 8192
+        maxInputBytes: ${liveBrief ? 32_768 : 8192}
         maxOutputTokens: ${outputLimit}
-        maxTurns: 1
+        maxTurns: ${callLimit}
         maxStepsPerTurn: 1
         maxWallTimeMs: ${liveProvider ? 30000 : 10000}
       budget:
@@ -227,10 +242,10 @@ allowBuilds:
               ceilingMicros: 10000
         limits:
           - currency: USD
-            ownerDayMicros: 10000
-            taskMicros: 10000
-            maxCallsPerDay: 1
-            maxCallsPerTask: 1
+            ownerDayMicros: ${10_000 * callLimit}
+            taskMicros: ${10_000 * callLimit}
+            maxCallsPerDay: ${callLimit}
+            maxCallsPerTask: ${callLimit}
             maxConcurrent: 1
 `
   const loopback = { connection: 'close' }
@@ -297,14 +312,15 @@ allowBuilds:
       },
     }
   }
-  const { rpc, inbox, stop } = await startResident()
+  const first = await startResident()
+  const { rpc, inbox } = first
   const { sessionId } = await rpc<{ sessionId: string }>('session/create', { args: { request: { cwd: workRoot } } })
   assert.ok(sessionId)
   const project = await inbox({ type: 'create_project', commandId: 'package-project',
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
   const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId,
-    outcome: liveProvider
+    outcome: liveBrief ? briefOutcome : liveProvider
       ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
       : 'Prepare an outline of the synthetic packaging test.' })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
@@ -321,35 +337,66 @@ allowBuilds:
   expect(await inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor: 'package-start' }))
     .toMatchObject({ ok: true })
   if (liveProvider) {
+    let host = first
+    if (liveBrief) {
+      const waiting = await vi.waitFor(async () => {
+        const item = await task()
+        expect(item).toMatchObject({ status: 'waiting_input', runtime: 'inactive', artifacts: [],
+          wait: { reason: 'input', referenceId: briefReference } })
+        expect(item.wait?.prompt).toMatch(/audience.*open/i)
+        return item
+      }, { timeout: 35_000 })
+      await first.stop()
+      host = await startResident()
+      expect(await task(host.inbox)).toEqual(waiting)
+      const answer = { type: 'answer', taskId, expectedVersion: waiting.version, cursor: 'brief-answer',
+        referenceId: briefReference, text: briefAnswer } as const
+      expect(await host.inbox({ ...answer, referenceId: 'unrelated-question' })).toEqual({ ok: false, code: 'condition_unmet' })
+      expect(await task(host.inbox)).toEqual(waiting)
+      expect(await host.inbox(answer)).toMatchObject({ ok: true })
+      const answered = await task(host.inbox)
+      expect(answered.status).toBe('queued')
+      expect(await host.inbox({ type: 'start', taskId, expectedVersion: answered.version, cursor: answer.cursor })).toMatchObject({ ok: true })
+    }
     const candidate = await vi.waitFor(async () => {
-      const item = await task()
-      expect(item).toMatchObject({ status: 'verifying', runtime: 'inactive', canAccept: true })
+      const item = await task(host.inbox)
+      expect(item.runtime).toBe('inactive')
+      expect(item.status).not.toBe('queued')
       return item
     }, { timeout: 35_000 })
+    expect(candidate).toMatchObject({ status: 'verifying', runtime: 'inactive', canAccept: true })
     expect(candidate.artifacts).toHaveLength(1)
     const artifactId = candidate.artifacts[0]!.id
     const readResult = (readInbox = inbox) => readInbox({ type: 'artifact', taskId, artifactId })
-    const artifact = await readResult()
-    expect(artifact).toMatchObject({ ok: true, kind: 'artifact', artifact: { mediaType: 'text/markdown', text: 'Total folders: 12.' } })
-    expect(await inbox({ type: 'accept_result', taskId, expectedVersion: candidate.version })).toMatchObject({ ok: true })
-    const completed = await task()
+    const artifact = await readResult(host.inbox)
+    assert.ok(artifact.ok && artifact.kind === 'artifact')
+    expect(artifact.artifact.mediaType).toBe('text/markdown')
+    if (liveBrief) {
+      for (const expected of [/volunteer coordinators/i, /(?:19 November|November 19)/i, /\b12 kits\b/i, /(?:20 November|November 20)/i]) {
+        expect(artifact.artifact.text).toMatch(expected)
+      }
+    } else expect(artifact.artifact.text).toBe('Total folders: 12.')
+    expect(await host.inbox({ type: 'accept_result', taskId, expectedVersion: candidate.version })).toMatchObject({ ok: true })
+    const completed = await task(host.inbox)
     expect(completed.status).toBe('completed')
-    await stop()
+    await host.stop()
     const reopened = await startResident()
     expect(await task(reopened.inbox)).toMatchObject({ id: taskId, status: 'completed', version: completed.version, runtime: 'inactive' })
     expect(await readResult(reopened.inbox)).toEqual(artifact)
     await reopened.stop()
     const db = new DatabaseSync(join(storage, DATABASE_FILENAME), { readOnly: true })
     try {
-      const charges = db.prepare('SELECT provider, model, status, usage, actual_micros FROM budget_reservations WHERE task_id = ?').all(taskId)
-      expect(charges).toEqual([expect.objectContaining({ provider: 'deepseek-official', model: 'deepseek-flash', status: 'settled',
-        usage: expect.any(String), actual_micros: expect.any(Number) })])
-      const charge = charges[0]!
-      const usage = JSON.parse(String(charge.usage)) as { inputTokens: number; outputTokens: number }
-      expect(usage.outputTokens).toBeGreaterThan(0)
-      expect(usage.outputTokens).toBeLessThanOrEqual(outputLimit)
-      console.log(JSON.stringify({ taskId, artifactId, model: charge.model, usage,
-        estimatedCostMicrosUsd: charge.actual_micros }))
+      const charges = db.prepare('SELECT provider, model, status, usage, actual_micros FROM budget_reservations WHERE task_id = ? ORDER BY created_at').all(taskId)
+      expect(charges).toHaveLength(callLimit)
+      const calls = charges.map(charge => {
+        expect(charge).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-flash', status: 'settled',
+          usage: expect.any(String), actual_micros: expect.any(Number) })
+        const usage = JSON.parse(String(charge.usage)) as { inputTokens: number; outputTokens: number }
+        expect(usage.outputTokens).toBeGreaterThan(0)
+        expect(usage.outputTokens).toBeLessThanOrEqual(outputLimit)
+        return { model: charge.model, usage, estimatedCostMicrosUsd: charge.actual_micros }
+      })
+      console.log(JSON.stringify({ taskId, artifactId, calls }))
     } finally { db.close() }
     return
   }
@@ -364,7 +411,7 @@ allowBuilds:
   const expected = { id: taskId, status: parked.status, runtime: parked.runtime,
     version: parked.version, wait: { referenceId: parked.wait?.referenceId }, artifacts: [] }
 
-  await stop()
+  await first.stop()
   const database = join(storage, DATABASE_FILENAME)
   const identity = join(storage, 'local-inbox-identity.json')
   if (!previousCheckout) {
