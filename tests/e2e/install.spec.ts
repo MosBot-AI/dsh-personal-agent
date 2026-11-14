@@ -20,6 +20,7 @@ import { SCHEMA_VERSION, V15_BACKUP_SUFFIX } from '../../packages/personal-agent
 import { prepareResearchSources, readResearchOutcome, verifyResearchBrief } from './fixtures/live-research.js'
 import { verifyLiveReview } from './fixtures/live-review.js'
 import { prepareLiveCode } from './fixtures/live-code.js'
+import { prepareOrganizationSources, readOrganizationOutcome, verifyOrganizationExport } from './fixtures/live-organization.js'
 import { verifyPackagedReminder } from './fixtures/packaged-reminder.js'
 
 const run = promisify(execFile)
@@ -34,6 +35,7 @@ const liveBrief = process.env.DSHPA_INSTALL_LIVE_BRIEF === '1'
 const liveResearch = process.env.DSHPA_INSTALL_LIVE_RESEARCH === '1'
 const liveReview = process.env.DSHPA_INSTALL_LIVE_REVIEW === '1'
 const liveCode = process.env.DSHPA_INSTALL_LIVE_CODE === '1'
+const liveOrganization = process.env.DSHPA_INSTALL_LIVE_ORGANIZATION === '1'
 const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
@@ -44,7 +46,7 @@ if (archiveDirectory !== undefined && (!isAbsolute(archiveDirectory) || previous
 if (liveProvider && (!liveKey || previousCheckout)) {
   throw new Error('Live DeepSeek requires DEEPSEEK_API_KEY and the current package')
 }
-const liveWorkflows = [liveBrief, liveResearch, liveReview, liveCode].filter(Boolean).length
+const liveWorkflows = [liveBrief, liveResearch, liveReview, liveCode, liveOrganization].filter(Boolean).length
 if (liveWorkflows > 0 && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
 if (liveWorkflows > 1) throw new Error('Select one live workflow evaluation per install run')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
@@ -90,6 +92,7 @@ function installDiagnostics(profile: string, error: unknown): string {
 }
 
 it(packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
+  : liveOrganization ? 'organizes three exact local documents into an exportable inventory with a live installed Worker'
   : liveCode ? 'validates a live installed Worker patch in a disposable repository'
   : liveReview ? 'reuses a reviewed skill after three installed live inventory reviews'
   : liveResearch ? 'accepts an installed live research brief against exact local sources'
@@ -104,7 +107,7 @@ it(packagedReminder ? 'recovers the current packaged reminder after a missed nat
   const archives = join(root, 'archives')
   const storage = join(dshHome, 'state')
   const workRoot = join(root, 'work')
-  const researchDirectory = join(root, 'research')
+  const knowledgeDirectory = join(root, 'knowledge')
   const patch = join(root, 'resident.yml')
   const systemEnv = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }
   const installEnv = {
@@ -147,7 +150,8 @@ it(packagedReminder ? 'recovers the current packaged reminder after a missed nat
   mkdirSync(archives)
   mkdirSync(workRoot)
   const code = liveCode ? prepareLiveCode(join(root, 'code-fixture')) : undefined
-  const researchConfig = liveResearch ? prepareResearchSources(researchDirectory) : ''
+  const knowledgeConfig = liveResearch ? prepareResearchSources(knowledgeDirectory)
+    : liveOrganization ? prepareOrganizationSources(knowledgeDirectory) : ''
   const workFile = join(workRoot, 'owner-notes.md')
   const workContents = '# Owner notes\n\nKeep this file when removing the plugin.\n'
   writeFileSync(workFile, workContents, { mode: 0o600 })
@@ -241,7 +245,7 @@ allowBuilds:
         provider: deepseek-official
         model: deepseek-flash
         concurrency: 1
-${researchConfig}      computeLimits:
+${knowledgeConfig}      computeLimits:
         maxInputBytes: ${liveWorkflows > 0 ? 32_768 : 8192}
         maxOutputTokens: ${outputLimit}
         maxTurns: ${callLimit}
@@ -366,7 +370,8 @@ ${researchConfig}      computeLimits:
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
   const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId,
-    outcome: code?.outcome ?? (liveResearch ? await readResearchOutcome(inbox, researchDirectory) : liveBrief ? briefOutcome : liveProvider
+    outcome: code?.outcome ?? (liveOrganization ? await readOrganizationOutcome(inbox)
+      : liveResearch ? await readResearchOutcome(inbox, knowledgeDirectory) : liveBrief ? briefOutcome : liveProvider
       ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
       : 'Prepare an outline of the synthetic packaging test.') })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
@@ -417,7 +422,10 @@ ${researchConfig}      computeLimits:
     const artifact = await readResult(host.inbox)
     assert.ok(artifact.ok && artifact.kind === 'artifact')
     expect(artifact.artifact.mediaType).toBe('text/markdown')
-    if (code) {
+    let exportDigest: string | undefined
+    if (liveOrganization) {
+      exportDigest = verifyOrganizationExport(artifact.artifact.text, knowledgeDirectory, join(root, 'inventory.csv'))
+    } else if (code) {
       code.verifyProposal(artifact.artifact.text)
     } else if (liveResearch) {
       verifyResearchBrief(artifact.artifact.text)
@@ -438,7 +446,7 @@ ${researchConfig}      computeLimits:
     expect(await task(reopened.inbox)).toMatchObject({ id: taskId, status: 'completed', version: completed.version, runtime: 'inactive' })
     expect(await readResult(reopened.inbox)).toEqual(artifact)
     await reopened.stop()
-    console.log(JSON.stringify({ taskId, artifactId, calls: settledCalls(Array<string>(callLimit).fill(taskId)) }))
+    console.log(JSON.stringify({ taskId, artifactId, exportDigest, calls: settledCalls(Array<string>(callLimit).fill(taskId)) }))
     return
   }
   const parked = await vi.waitFor(async () => {
