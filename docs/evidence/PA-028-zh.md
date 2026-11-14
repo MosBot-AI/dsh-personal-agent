@@ -74,4 +74,17 @@ DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:insta
 
 测试在全新 DSH Profile 中执行一项合成任务，预算为一次调用，输出上限为 256 个 token。已安装的 Worker 通过 DeepSeek 官方端点调用 `deepseek-flash`。所有者鉴权后读取并验收封存的 Markdown 结果，常驻进程重启后读回同一产物。测试验证仅有一条已结算的用量记录，并按配置的高峰费率估算费用。[真实 Worker 验证 #150](https://github.com/MosBot-AI/dsh-personal-agent/issues/150) · [DeepSeek 定价](https://api-docs.deepseek.com/quick_start/pricing/)
 
-此结果覆盖使用本地 alpha 归档完成的一项真实模型任务。发布仍需完成真实外部写入、完整工作流评测和七天试用。
+## 真实项目简报与澄清流程
+
+加载同一获授权的凭据，并使用同一批本地归档运行虚构的图书馆试点任务：
+
+```sh
+DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_BRIEF=1 \
+  DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+```
+
+Worker 询问缺失的受众和启动日期，释放执行资源，并在常驻进程重启后保留同一等待输入状态。已鉴权的收件箱拒绝与问题不匹配的回答引用。匹配的回答使 Worker 进入队列，由所有者再次显式启动。封存的 Markdown 记录了回答中的受众与启动日期，以及原任务中的套件数量与报名截止日。验收后的结果与产物在第二次重启后得以保留。
+
+归档 Bundle 于 2026-11-14 通过此项测试。两次 `deepseek-flash` 调用均已结算，输出分别为 76 和 64 个 token。按配置的高峰费率估算，总费用为 538 微美元。每次调用的输出上限为 256 个 token，测试允许每个任务最多调用两次。[澄清流程验证 #152](https://github.com/MosBot-AI/dsh-personal-agent/issues/152)
+
+发布仍需完成真实外部写入、其余工作流评测和七天试用。
