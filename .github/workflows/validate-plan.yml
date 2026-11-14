@@ -49,6 +49,8 @@ jobs:
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm check
       - name: Verify native Worker startup from a clean tarball profile
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:install
+      - name: Verify native reminder recovery from a clean tarball profile
+        run: DSHPA_INSTALL_REMINDER=1 npm exec --yes --package=pnpm@11.28.5 -- pnpm test:install
       - name: Verify keyless native Web flow
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:local-flow
       - name: Verify mobile loopback Web flow

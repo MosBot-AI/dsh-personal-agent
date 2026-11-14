@@ -18,6 +18,7 @@ import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/dat
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import { SCHEMA_VERSION, V15_BACKUP_SUFFIX } from '../../packages/personal-agent/src/storage/schema.js'
 import { prepareResearchSources, readResearchOutcome, verifyResearchBrief } from './fixtures/live-research.js'
+import { verifyPackagedReminder } from './fixtures/packaged-reminder.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
@@ -29,6 +30,7 @@ const liveProvider = process.env.DSHPA_INSTALL_LIVE_DEEPSEEK === '1'
 const liveKey = liveProvider ? process.env.DEEPSEEK_API_KEY?.trim() : undefined
 const liveBrief = process.env.DSHPA_INSTALL_LIVE_BRIEF === '1'
 const liveResearch = process.env.DSHPA_INSTALL_LIVE_RESEARCH === '1'
+const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
 }
@@ -40,6 +42,7 @@ if (liveProvider && (!liveKey || previousCheckout)) {
 }
 if ((liveBrief || liveResearch) && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
 if (liveBrief && liveResearch) throw new Error('Select one live workflow evaluation per install run')
+if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
 
 const briefReference = 'pilot-brief-audience'
 const briefAnswer = 'The audience is the volunteer coordinators. The pilot opens on 19 November.'
@@ -81,7 +84,8 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it(liveResearch ? 'accepts an installed live research brief against exact local sources'
+it(packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
+  : liveResearch ? 'accepts an installed live research brief against exact local sources'
   : liveBrief ? 'resumes an installed live project brief after an owner answer and resident restart'
   : liveProvider ? 'runs a native Worker with live DeepSeek and retains the accepted result'
   : previousCheckout
@@ -222,6 +226,7 @@ allowBuilds:
     inbox:
       storageDirectory: ${JSON.stringify(stateDir)}
       workRoot: ${JSON.stringify(workRoot)}
+      routines: ${packagedReminder}
       resident: {}
       worker:
         provider: deepseek-official
@@ -319,6 +324,11 @@ ${researchConfig}      computeLimits:
     }
   }
   const first = await startResident()
+  if (packagedReminder) {
+    await verifyPackagedReminder(first, startResident, join(storage, DATABASE_FILENAME))
+    expect(requests).toEqual([])
+    return
+  }
   const { rpc, inbox } = first
   const { sessionId } = await rpc<{ sessionId: string }>('session/create', { args: { request: { cwd: workRoot } } })
   assert.ok(sessionId)
