@@ -140,4 +140,17 @@ DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_CODE=1 \
 
 已鉴权的所有者验收封存的补丁建议，并在常驻进程冷启动后读回同一产物。2026-11-14 的归档测试结算一次 `deepseek-flash` 调用，输出 118 个 token，按配置的高峰费率估算费用为 335 微美元。此用例验证在一次性仓库中由所有者应用的补丁建议。[真实代码补丁验证 #160](https://github.com/MosBot-AI/dsh-personal-agent/issues/160)
 
+## 真实文档与数据整理
+
+加载获授权的凭据，并使用保留的归档：
+
+```sh
+DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_ORGANIZATION=1 \
+  DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+```
+
+已鉴权的收件箱读取三份虚构库存文档，核对其原始字节、来源标识和 SHA-256 版本。所有者将记录提供给 Worker，并规定每个物品使用最新记录。封存结果包含 CSV 表格。测试在所有者侧将其导出到一次性文件，核对三个互不重复的条目、更正后的数量、每行采用的确切来源文件名，以及缺失位置的 `UNKNOWN`。原始文件的字节保持完整。已验收产物在冷启动后原样读回。
+
+2026-11-14 的归档测试结算一次 `deepseek-flash` 调用，输出 61 个 token，按配置的高峰费率估算费用为 314 微美元。导出的 CSV 的 SHA-256 为 `5c5d9f82cabf8202bc7b48522462e2b3554814a43c2015a883508bccf2371d89`。测试用例从封存的 Markdown 产物导出 CSV。[数据整理验证 #162](https://github.com/MosBot-AI/dsh-personal-agent/issues/162)
+
 发布仍需完成真实外部写入、其余工作流评测和七天试用。
