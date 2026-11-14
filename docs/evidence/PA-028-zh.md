@@ -44,3 +44,22 @@ git worktree remove "$previous"
 ```
 
 升级用例、默认安装用例和 35 项 SQLite 迁移测试均通过。完整发布门槛仍须完成发布产物的适用验证、真实供应商验收及七天试用。参见[评估与发布门槛](../07-evaluation-and-release-gates-zh.md)。
+
+## 本地 alpha 归档
+
+使用固定版本的工作区工具链构建干净的检出目录，然后将三个归档保存在一次性安装 Profile 之外。这些归档供本地验证。[归档验证 #148](https://github.com/MosBot-AI/dsh-personal-agent/issues/148)
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+archives="$(mktemp -d)"
+for package in personal-agent plugin-api model-routing; do
+  pnpm -C "packages/$package" pack --pack-destination "$archives"
+done
+cp LICENSE "$archives/LICENSE"
+git rev-parse HEAD > "$archives/source-commit.txt"
+(cd "$archives" && sha256sum ./*.tgz LICENSE > SHA256SUMS && sha256sum -c SHA256SUMS)
+DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+```
+
+`DSHPA_INSTALL_ARCHIVES` 使用绝对路径下的三个指定文件，运行已鉴权的启动、卸载与重装检查。此轮运行请省略 `DSHPA_INSTALL_UPGRADE_FROM`。固定源码 `b94773c1b0370335e3a3b8031d212673b54702a5` 使用 Node.js 24.14.1、pnpm 11.28.5 和 DSH 0.2.2-rc.1 打包。三个归档均包含 Apache-2.0 许可证，核心包与路由包的清单已将工作区引用解析为具体版本。归档原件通过了使用模拟供应商的本机原生测试。真实供应商验收及 alpha 试用仍待完成。
