@@ -140,6 +140,14 @@ Linux 笔记本运行未修改的 dshpa main `917e84efaf26c00f7a62b3b02c6253be72
 
 提供方文件、中继字节和 WorkStore 的 88,439 字节 PNG 的 SHA-256 均为 `61a2c5afcc900baff57b22fa43bee016f8f9ba0de4a7a3e5b93f5bd6cadb1b2c`。FFmpeg 解码了 256×256 PNG。新的 Chromium 标签页在同一常驻服务中打开「待办」，显示了同一任务。浏览器通过鉴权读取的收件箱快照也返回了该任务。测试进程退出后，私有网络中没有残留的 TCP 监听端口。[E18 工作台关闭验收证据](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6856211291)
 
+## 目标设备锁屏与解锁（2026-11-14）
+
+在实体 Linux X11 控制台上，设备所有者进行了锁屏和解锁。DSH 0.2.2-rc.1、ComfyUI 0.44.0 和 Chromium 154.0.8037.92 在一次性测试环境中运行，运行时代码与主分支 `caeca57c899d22adb7947b555e77c702a64b0b06` 一致。ComfyUI 使用本地 SD1.5 检查点和 PyTorch 2.11.0+cu128，以 CPU 模式进行 64 步渲染。
+
+原桌面恢复前，LightDM 登录界面至少持续显示了 33.73 秒。锁屏期间观察到 prompt `2d7a8ea1-ed69-4580-8979-15b5c3f5f7a9` 正在执行并持有渲染租约。锁屏期间和解锁后，同一 DSH 进程均向已鉴权的 Chromium 返回了原任务，HTTP 状态为 200。
+
+ComfyUI 仅收到一次提交并完成了原 prompt，DSH 随后释放租约。FFprobe 确认产物为 98,580 字节、256×256 的 PNG。提供器文件、中继字节和 WorkStore 的 SHA-256 均为 `f8d6dd387d5ef01ac4912a6075de2b4e19479ddb4ba7e92de800233a79edfb6a`。运行前后处于同一次系统启动，采样到的电源设置一致。测试程序正常退出，其私有命名空间内无残留 TCP 监听端口。[E18 实体锁屏验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6877072614)
+
 ## PA-033 剩余验收项
 
-真实运行覆盖 E06 和 E16 中的 CPU 与 CUDA 图片生成、CPU 视频生成、提交回执丢失恢复、运行中任务取消及限额内的 CUDA 分配失败。常驻测试覆盖 E18 中的宿主重启恢复、提供器连接中断期间的前台响应，以及工作台关闭时完成渲染。实体设备的锁屏、休眠唤醒、整机离线行为和电源设置仍需在目标宿主上验证。视觉质量和用户指定约束的符合程度属于 PA-034 的验收范围。PA-033 仍为 In review。[CPU 与常驻验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990) · [GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
+真实运行覆盖 E06 和 E16 中的 CPU 与 CUDA 图片生成、CPU 视频生成、提交回执丢失恢复、运行中任务取消及限额内的 CUDA 分配失败。常驻测试覆盖 E18 中的宿主重启恢复、提供器连接中断期间的前台响应、工作台关闭时完成渲染，以及实体设备锁屏和解锁。挂起唤醒、整机离线运行与恢复，以及相应的电源设置对照，仍需在目标宿主上验证。视觉质量和用户指定约束的符合程度属于 PA-034 的验收范围。PA-033 仍为 In review。[CPU 与常驻验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6824813990) · [GPU 验证](https://github.com/MosBot-AI/dsh-personal-agent/issues/33#issuecomment-6825106305)
