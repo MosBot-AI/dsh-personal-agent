@@ -22,6 +22,8 @@ import { verifyLiveReview } from './fixtures/live-review.js'
 import { prepareLiveCode } from './fixtures/live-code.js'
 import { prepareOrganizationSources, readOrganizationOutcome, verifyOrganizationExport } from './fixtures/live-organization.js'
 import { verifyPackagedReminder } from './fixtures/packaged-reminder.js'
+import { model as pairedModelId, openPairedModel, outputLimit as pairedOutputLimit, rates as pairedRates } from './fixtures/paired-model.js'
+import { foregroundPreset, prepareForeground } from './fixtures/foreground-organization.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
@@ -36,6 +38,8 @@ const liveResearch = process.env.DSHPA_INSTALL_LIVE_RESEARCH === '1'
 const liveReview = process.env.DSHPA_INSTALL_LIVE_REVIEW === '1'
 const liveCode = process.env.DSHPA_INSTALL_LIVE_CODE === '1'
 const liveOrganization = process.env.DSHPA_INSTALL_LIVE_ORGANIZATION === '1'
+const pairedOrganization = process.env.DSHPA_INSTALL_PAIRED_ORGANIZATION === '1'
+const pairOrder = process.env.DSHPA_INSTALL_PAIR_ORDER ?? 'foreground-first'
 const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
@@ -49,6 +53,8 @@ if (liveProvider && (!liveKey || previousCheckout)) {
 const liveWorkflows = [liveBrief, liveResearch, liveReview, liveCode, liveOrganization].filter(Boolean).length
 if (liveWorkflows > 0 && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
 if (liveWorkflows > 1) throw new Error('Select one live workflow evaluation per install run')
+if (pairedOrganization && !liveOrganization) throw new Error('The paired comparison requires DSHPA_INSTALL_LIVE_ORGANIZATION=1')
+if (pairOrder !== 'foreground-first' && pairOrder !== 'worker-first') throw new Error('Invalid paired comparison order')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
 
 const briefReference = 'pilot-brief-audience'
@@ -92,6 +98,7 @@ function installDiagnostics(profile: string, error: unknown): string {
 }
 
 it(packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
+  : pairedOrganization ? 'compares one native foreground session with the installed organization Worker'
   : liveOrganization ? 'organizes three exact local documents into an exportable inventory with a live installed Worker'
   : liveCode ? 'validates a live installed Worker patch in a disposable repository'
   : liveReview ? 'reuses a reviewed skill after three installed live inventory reviews'
@@ -211,7 +218,8 @@ allowBuilds:
   }
   expect(existsSync(join(modules, '@deepseek-ai/dsh-llm'))).toBe(false)
 
-  let providerUrl = 'https://api.deepseek.com/anthropic'
+  const pairedModel = pairedOrganization && liveKey ? await openPairedModel(liveKey) : undefined
+  let providerUrl = pairedModel?.baseURL ?? 'https://api.deepseek.com/anthropic'
   if (!liveProvider) {
     provider.listen(0, '127.0.0.1')
     await once(provider, 'listening')
@@ -219,7 +227,7 @@ allowBuilds:
     assert.ok(address && typeof address !== 'string')
     providerUrl = `http://127.0.0.1:${address.port}`
   }
-  const outputLimit = liveProvider ? 256 : 64
+  const outputLimit = liveProvider ? pairedOutputLimit : 64
   const callLimit = liveBrief ? 2 : 1
   const dayCallLimit = liveReview ? 3 : callLimit
   const overlay = (stateDir: string) => `- id: llm-deepseek
@@ -259,10 +267,10 @@ ${knowledgeConfig}      computeLimits:
             currency: USD
             pricing:
               kind: known
-              inputMicrosPerMillion: 300000
-              outputMicrosPerMillion: 1200000
-              cacheReadMicrosPerMillion: 6000
-              cacheWriteMicrosPerMillion: 300000
+              inputMicrosPerMillion: ${pairedRates.input}
+              outputMicrosPerMillion: ${pairedRates.output}
+              cacheReadMicrosPerMillion: ${pairedRates.cacheRead}
+              cacheWriteMicrosPerMillion: ${pairedRates.cacheWrite}
               ceilingMicros: 10000
         limits:
           - currency: USD
@@ -271,13 +279,14 @@ ${knowledgeConfig}      computeLimits:
             maxCallsPerDay: ${dayCallLimit}
             maxCallsPerTask: ${callLimit}
             maxConcurrent: 1
-`
+${pairedModel ? foregroundPreset : ''}`
   const loopback = { connection: 'close' }
   async function startResident(stateDir = storage, ready = true) {
     writeFileSync(patch, overlay(stateDir), { mode: 0o600 })
     const ownerPath = join(stateDir, RESIDENT_OWNER_FILE)
     const child = spawn('/bin/sh', [join(workspace, 'deploy/run-resident.sh'), process.execPath, dshHome, profileName, patch, '0'], {
-      cwd: root, env: { ...systemEnv, DSHPA_INSTALL_TEST_KEY: liveKey ?? 'sk-dummy-only-for-loopback' }, stdio: 'ignore',
+      cwd: root, env: { ...systemEnv,
+        DSHPA_INSTALL_TEST_KEY: pairedModel?.token ?? liveKey ?? 'sk-dummy-only-for-loopback' }, stdio: 'ignore',
     })
     resident = child
     const exited = once(child, 'exit')
@@ -303,9 +312,9 @@ ${knowledgeConfig}      computeLimits:
     expect(auth.status).toBe(303)
     assert.ok(cookie)
 
-    function rpcRequest(method: string, payload: unknown, rpcId: string, authCookie?: string) {
+    function rpcRequest(method: string, payload: unknown, rpcId: string, authCookie?: string, timeout = 5_000) {
       return fetch(new URL(`/api/${method}`, ownerUrl), {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5_000),
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeout),
         headers: { ...loopback, 'content-type': 'application/json', ...(authCookie === undefined ? {} : { cookie: authCookie }) },
         body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
       })
@@ -313,13 +322,13 @@ ${knowledgeConfig}      computeLimits:
     const unauthorized = await rpcRequest(INBOX_RPC_ENDPOINT, { type: 'snapshot' }, randomUUID())
     expect(unauthorized.status).toBe(401)
     await unauthorized.body?.cancel()
-    async function rpc<T>(method: string, payload: unknown): Promise<T> {
+    async function rpc<T>(method: string, payload: unknown, timeout?: number): Promise<T> {
       const rpcId = randomUUID()
-      const response = await rpcRequest(method, payload, rpcId, cookie)
+      const response = await rpcRequest(method, payload, rpcId, cookie, timeout)
       expect(response.status).toBe(200)
-      const body = await response.json() as { rpcId: string; result: { ok: boolean; value: T } }
+      const body = await response.json() as { rpcId: string; result: { ok: boolean; value: T; error?: { code?: string } } }
       expect(body.rpcId).toBe(rpcId)
-      assert.ok(body.result.ok)
+      assert.ok(body.result.ok, `Native RPC ${method} failed (${body.result.error?.code ?? 'unknown code'})`)
       return body.result.value
     }
     return {
@@ -369,9 +378,19 @@ ${knowledgeConfig}      computeLimits:
   const project = await inbox({ type: 'create_project', commandId: 'package-project',
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
+  const organizationOutcome = liveOrganization ? await readOrganizationOutcome(inbox) : undefined
+  const cursor = 'package-start'
+  async function compareForeground() {
+    if (!pairedModel || !organizationOutcome) return undefined
+    const runForeground = await prepareForeground(first, workRoot, pairedModel.check)
+    pairedModel.begin('foreground', organizationOutcome)
+    const { text, elapsedMs } = await runForeground(organizationOutcome, cursor)
+    const exportDigest = verifyOrganizationExport(text, knowledgeDirectory, join(root, 'foreground.csv'))
+    return { ...pairedModel.finish('foreground'), elapsedMs, exportDigest, ownerCommands: 1 }
+  }
+  let foreground = pairOrder === 'foreground-first' ? await compareForeground() : undefined
   const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId,
-    outcome: code?.outcome ?? (liveOrganization ? await readOrganizationOutcome(inbox)
-      : liveResearch ? await readResearchOutcome(inbox, knowledgeDirectory) : liveBrief ? briefOutcome : liveProvider
+    outcome: code?.outcome ?? organizationOutcome ?? (liveResearch ? await readResearchOutcome(inbox, knowledgeDirectory) : liveBrief ? briefOutcome : liveProvider
       ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
       : 'Prepare an outline of the synthetic packaging test.') })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
@@ -385,7 +404,9 @@ ${knowledgeConfig}      computeLimits:
   }
   const queued = await task()
   expect(queued.status).toBe('queued')
-  expect(await inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor: 'package-start' }))
+  if (pairedModel && organizationOutcome) pairedModel.begin('worker', organizationOutcome)
+  const startedAt = performance.now()
+  expect(await inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor }))
     .toMatchObject({ ok: true })
   if (liveProvider) {
     let host = first
@@ -415,11 +436,13 @@ ${knowledgeConfig}      computeLimits:
       expect(item.status).not.toBe('queued')
       return item
     }, { timeout: 35_000 })
+    pairedModel?.check()
     expect(candidate).toMatchObject({ status: 'verifying', runtime: 'inactive', canAccept: true })
     expect(candidate.artifacts).toHaveLength(1)
     const artifactId = candidate.artifacts[0]!.id
     const readResult = (readInbox = inbox) => readInbox({ type: 'artifact', taskId, artifactId })
     const artifact = await readResult(host.inbox)
+    const elapsedMs = Math.round(performance.now() - startedAt)
     assert.ok(artifact.ok && artifact.kind === 'artifact')
     expect(artifact.artifact.mediaType).toBe('text/markdown')
     let exportDigest: string | undefined
@@ -441,12 +464,25 @@ ${knowledgeConfig}      computeLimits:
     expect(await host.inbox({ type: 'accept_result', taskId, expectedVersion: candidate.version })).toMatchObject({ ok: true })
     const completed = await task(host.inbox)
     expect(completed.status).toBe('completed')
+    const measuredWorker = pairedModel?.finish('worker')
+    if (pairOrder === 'worker-first') foreground = await compareForeground()
     await host.stop()
     const reopened = await startResident()
     expect(await task(reopened.inbox)).toMatchObject({ id: taskId, status: 'completed', version: completed.version, runtime: 'inactive' })
     expect(await readResult(reopened.inbox)).toEqual(artifact)
     await reopened.stop()
-    console.log(JSON.stringify({ taskId, artifactId, exportDigest, calls: settledCalls(Array<string>(callLimit).fill(taskId)) }))
+    const calls = settledCalls(Array<string>(callLimit).fill(taskId))
+    if (pairedModel) {
+      pairedModel.check()
+      assert.ok(foreground && measuredWorker)
+      expect(calls).toEqual([{ model: pairedModelId, ...measuredWorker }])
+      expect(exportDigest).toBe(foreground.exportDigest)
+      const order = pairOrder === 'foreground-first' ? ['foreground', 'worker'] : ['worker', 'foreground']
+      console.log(JSON.stringify({ order, model: pairedModelId, foreground,
+        worker: { ...measuredWorker, elapsedMs, exportDigest, ownerCommands: 3 } }))
+    } else {
+      console.log(JSON.stringify({ taskId, artifactId, exportDigest, calls }))
+    }
     return
   }
   const parked = await vi.waitFor(async () => {
