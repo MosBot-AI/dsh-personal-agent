@@ -79,4 +79,31 @@ done
 
 澄清耗时从提交提示或启动任务开始，到首次读到问题为止。回答耗时从提交回答开始，到首次读到最终结果为止，包含 Worker 组显式恢复任务执行的时间。两项耗时都覆盖脚本交互，排除两轮之间常驻进程重启和人工口述或键入回答的时间。[简报澄清验证 #168](https://github.com/MosBot-AI/dsh-personal-agent/issues/168)
 
-提醒和评审工作流的配对比较、人工评分抽样和七天试用，以及 [#18](https://github.com/MosBot-AI/dsh-personal-agent/issues/18) 跟踪的真实外部写入仍待完成。
+## 库存评审的配对评测
+
+两组都根据[已安装评审用例](PA-028-zh.md#真实评审与经验证的技能复用)中的同一规则评审三项虚构库存变更。IR-21 应获批准，IR-26 因超出数量上限退回，IR-42 因缺少佐证记录退回。每份评审都必须精确匹配相同的三行 Markdown。前台组在同一个原生 Session 中依次提交三次提示，并保留先前轮次。Worker 组使用三个独立的收件箱任务。两组分别重启常驻进程后，测试从原 Session 或 Worker 已验收的产物中读回三份结果。
+
+回环计量器逐次核对来源文本，并检查两组使用相同的 `deepseek-flash` 模型、关闭思考、零模型工具、每项请求一次调用，每次最多 256 个输出 token 和 10,000 微美元估算费用。两组都使用保留的 alpha 归档和 DSH 0.2.2-rc.1。Worker 结算三次调用，测试逐条核对结算记录与计量器记录。
+
+```sh
+for order in foreground-first worker-first; do
+  DSHPA_INSTALL_LIVE_DEEPSEEK=1 DSHPA_INSTALL_LIVE_REVIEW=1 \
+    DSHPA_INSTALL_PAIRED=1 DSHPA_INSTALL_PAIR_ORDER="$order" \
+    DSHPA_INSTALL_ARCHIVES="$archives" pnpm test:install
+done
+```
+
+两种顺序于 2026-11-16 通过。十二份结果均满足精确校验规则。两组每次的输出用量一致，IR-21 为 41 个 token、IR-26 为 39 个、IR-42 为 38 个。
+
+| 先运行的一组 | 请求 | 读回耗时（毫秒，前台 / Worker） | 估算费用（微美元，前台 / Worker） |
+| --- | --- | ---: | ---: |
+| 前台 | IR-21 | 1,195 / 1,182 | 171 / 194 |
+| 前台 | IR-26 | 631 / 894 | 176 / 189 |
+| 前台 | IR-42 | 834 / 689 | 182 / 189 |
+| Worker | IR-21 | 683 / 1,171 | 170 / 190 |
+| Worker | IR-26 | 828 / 1,201 | 175 / 189 |
+| Worker | IR-42 | 773 / 892 | 181 / 186 |
+
+读回耗时从发出请求到读到结果。前台组通过脚本提交三次提示，Worker 组通过九条脚本命令创建、启动和验收三项任务。命令计数和耗时覆盖脚本交互。Worker 组还基于已验收的结果运行原用例的后续技能检查。保留样本校验失败时禁止激活，修订后的版本从所提供字段生成一份新评审，额外模型调用为零，反馈和重放在重启后仍然可用。[库存评审验证 #170](https://github.com/MosBot-AI/dsh-personal-agent/issues/170)
+
+提醒工作流的配对比较、人工评分抽样和七天试用，以及 [#18](https://github.com/MosBot-AI/dsh-personal-agent/issues/18) 跟踪的真实外部写入仍待完成。
