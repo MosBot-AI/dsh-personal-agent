@@ -57,7 +57,8 @@ export async function verifyForegroundReviews(first: Resident, restart: () => Pr
   return { reopened, measurements: results.map(({ measurement }) => measurement) }
 }
 
-export async function verifyLiveReview(first: Resident, restart: () => Promise<Resident>, workRoot: string, pairedModel?: PairedModel) {
+export async function verifyLiveReview(first: Resident, restart: () => Promise<Resident>, workRoot: string,
+  pairedModel?: PairedModel, recordEvidence?: (input: string, output: string) => void) {
   const { sessionId } = await first.rpc<{ sessionId: string }>('session/create', { args: { request: { cwd: workRoot } } })
   const project = await first.inbox({ type: 'create_project', commandId: 'inventory-review-project',
     title: 'Fictional inventory control', purpose: 'Verify three independent inventory change reviews.' })
@@ -95,6 +96,7 @@ export async function verifyLiveReview(first: Resident, restart: () => Promise<R
     const read = { type: 'artifact', taskId, artifactId } as const
     const artifact = await first.inbox(read)
     const elapsedMs = Math.round(performance.now() - startedAt)
+    if (artifact.ok && artifact.kind === 'artifact') recordEvidence?.(outcome, artifact.artifact.text)
     expect(artifact).toMatchObject({ kind: 'artifact', artifact: { mediaType: 'text/markdown', text: expected } })
     if (pairedModel) measurements.push({ request, elapsedMs, ...pairedModel.finish('worker') })
     expect(await first.inbox({ type: 'accept_result', taskId, expectedVersion: candidate.version })).toMatchObject({ ok: true })
@@ -126,7 +128,9 @@ export async function verifyLiveReview(first: Resident, restart: () => Promise<R
   const run = { type: 'skill_run', ...exact, runId: randomUUID(),
     inputs: { request: 'IR-60', decision: 'Approve', reason: 'Within limit with supporting record' } } as const
   const output = '## Inventory review IR-60\n- Decision: Approve\n- Reason: Within limit with supporting record'
-  expect(await first.inbox(run)).toMatchObject({ kind: 'skill_output', text: output, feedback: null })
+  const rendered = await first.inbox(run)
+  if (rendered.ok && rendered.kind === 'skill_output') recordEvidence?.(JSON.stringify(run.inputs, null, 2), rendered.text)
+  expect(rendered).toMatchObject({ kind: 'skill_output', text: output, feedback: null })
   expect(await first.inbox({ type: 'skill_feedback', ...exact, runId: run.runId, feedback: 'accepted' }))
     .toMatchObject({ detail: { accepted: 1 } })
   await first.stop()

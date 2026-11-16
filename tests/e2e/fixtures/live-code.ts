@@ -71,6 +71,7 @@ export function prepareLiveCode(directory: string) {
       expect(result.stderr).toBe('')
       expect(result.status, result.stdout).toBe(0)
       expect(result.stdout).toMatch(/# pass 4\n# fail 0/u)
+      return result.stdout
     },
   }
 }
