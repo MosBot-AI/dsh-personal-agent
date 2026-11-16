@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { journeys, plan, type Journey } from './cases/foundation.ts'
+import { readAlphaArchives, sha256 } from './alpha-archives.ts'
 
 const repo = fileURLToPath(new URL('../', import.meta.url))
 const minimumAcceptance = 0.8
@@ -19,10 +19,6 @@ type Run = {
 }
 type Rating = { id: string; decision: 'pending' | 'accepted' | 'rejected'; reason: string; note: string }
 type Ratings = { reviewer: string; cases: Rating[] }
-
-function digest(bytes: Uint8Array) {
-  return createHash('sha256').update(bytes).digest('hex')
-}
 
 function save(path: string, value: unknown) {
   const pending = path + '.tmp'
@@ -40,24 +36,21 @@ function hasArtifacts(path: string) {
   const records: unknown = JSON.parse(bytes.toString('utf8'))
   assert.ok(Array.isArray(records) && records.every(record => typeof record?.input === 'string' && typeof record?.output === 'string'),
     'Invalid captured artifact')
-  return { outputs: records.length, artifactSha256: digest(bytes) }
+  return { outputs: records.length, artifactSha256: sha256(bytes) }
 }
 
 function collect(archiveDir: string, directory: string) {
   assert.ok(process.env.DEEPSEEK_API_KEY?.trim(), 'Load the authorized DEEPSEEK_API_KEY before collecting')
   const archives = resolve(archiveDir)
-  execFileSync('sha256sum', ['-c', 'SHA256SUMS'], { cwd: archives, stdio: 'ignore' })
-  const releaseSource = readFileSync(join(archives, 'source-commit.txt'), 'utf8').trim()
-  assert.match(releaseSource, /^[0-9a-f]{40}$/u, 'The release source commit is missing')
-  const archiveManifest = readFileSync(join(archives, 'SHA256SUMS'))
+  const { releaseSource, archiveManifestSha256, manifest } = readAlphaArchives(repo, archives)
   const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim()
   const fixtureDirty = execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim().length > 0
   const out = resolve(directory)
   mkdirSync(out, { mode: 0o700 })
   const runs: Run[] = []
-  const batch = { releaseSource, archiveManifestSha256: digest(archiveManifest), revision, fixtureDirty,
+  const batch = { releaseSource, archiveManifestSha256, revision, fixtureDirty,
     node: process.version, platform: process.platform, arch: process.arch, startedAt: new Date().toISOString(), runs }
-  writeFileSync(join(out, 'SHA256SUMS'), archiveManifest, { mode: 0o600 })
+  writeFileSync(join(out, 'SHA256SUMS'), manifest, { mode: 0o600 })
   save(join(out, 'batch.json'), batch)
   save(join(out, 'scores.json'), { reviewer: '', cases: plan.map(({ id }) => ({ id, decision: 'pending', reason: '', note: '' })) })
 
