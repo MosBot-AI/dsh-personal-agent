@@ -21,7 +21,7 @@ import { prepareResearchSources, readResearchOutcome, verifyResearchBrief } from
 import { reviewCount, verifyForegroundReviews, verifyLiveReview } from './fixtures/live-review.js'
 import { prepareLiveCode } from './fixtures/live-code.js'
 import { prepareOrganizationSources, readOrganizationOutcome, verifyOrganizationExport } from './fixtures/live-organization.js'
-import { verifyPackagedReminder } from './fixtures/packaged-reminder.js'
+import { verifyForegroundReminder, verifyPackagedReminder } from './fixtures/packaged-reminder.js'
 import { model as pairedModelId, openPairedModel, outputLimit as pairedOutputLimit, rates as pairedRates } from './fixtures/paired-model.js'
 import { foregroundPreset, prepareForeground } from './fixtures/paired-foreground.js'
 
@@ -57,7 +57,7 @@ const liveWorkflows = [liveBrief, liveResearch, liveReview, liveCode, liveOrgani
 if (liveWorkflows > 0 && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
 if (liveWorkflows > 1) throw new Error('Select one live workflow evaluation per install run')
 if (pairedOrganization && !liveOrganization) throw new Error('DSHPA_INSTALL_PAIRED_ORGANIZATION requires DSHPA_INSTALL_LIVE_ORGANIZATION=1')
-if (paired && !pairWorkflow) throw new Error('Select a live organization, research, code, brief or review workflow for the paired comparison')
+if (paired && !pairWorkflow && !packagedReminder) throw new Error('Select a live workflow or the keyless reminder for the paired comparison')
 if (pairOrder !== 'foreground-first' && pairOrder !== 'worker-first') throw new Error('Invalid paired comparison order')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
 
@@ -110,7 +110,8 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it(packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
+it(packagedReminder && paired ? 'compares native foreground and Inbox reminder recovery'
+  : packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
   : paired ? `compares native foreground and installed Worker readback for ${pairWorkflow}`
   : liveOrganization ? 'organizes three exact local documents into an exportable inventory with a live installed Worker'
   : liveCode ? 'validates a live installed Worker patch in a disposable repository'
@@ -378,8 +379,27 @@ ${pairedModel ? foregroundPreset : ''}`
 
   const first = await startResident()
   if (packagedReminder) {
-    await verifyPackagedReminder(first, startResident, join(storage, DATABASE_FILENAME))
     expect(requests).toEqual([])
+    async function foregroundReminder(host: typeof first) {
+      const before = requests.length
+      const outcome = await verifyForegroundReminder(host, startResident, workRoot)
+      return { ...outcome, rejectedProviderRequests: requests.length - before }
+    }
+    let foreground = paired && pairOrder === 'foreground-first' ? await foregroundReminder(first) : undefined
+    const beforeInbox = requests.length
+    const inboxHost = foreground ? await startResident() : first
+    const inbox = await verifyPackagedReminder(inboxHost, startResident, join(storage, DATABASE_FILENAME))
+    expect(requests).toHaveLength(beforeInbox)
+    if (paired) {
+      if (pairOrder === 'worker-first') foreground = await foregroundReminder(await startResident())
+      assert.ok(foreground)
+      const order = pairOrder === 'foreground-first' ? ['foreground', 'inbox'] : ['inbox', 'foreground']
+      console.log(JSON.stringify({ workflow: 'reminder', order, foreground,
+        inbox: { restartReadbackMs: inbox.restartReadbackMs, deliveryDelayMs: inbox.deliveryDelayMs,
+          ownerCommands: inbox.ownerCommands, rejectedProviderRequests: 0 } }))
+    } else {
+      console.log(JSON.stringify(inbox))
+    }
     return
   }
   if (liveReview) {
