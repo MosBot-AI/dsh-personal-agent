@@ -145,4 +145,18 @@ done
 
 `brief-4` 的澄清问题已持久化，但恢复执行并提交回答后，35 秒等待结束时 Worker 仍显示正在执行。样本保留澄清问题和诊断日志。`research-5` 把 Orchard Room 的版本号配到了 Harbor Room 的文件名上，引用校验拒绝该输出，产物仍保留在样本中。[采集证据 #174](https://github.com/MosBot-AI/dsh-personal-agent/issues/174)
 
+### 简报恢复调查
+
+2026-11-16，一次性无密钥安装重新打开同一个已回答的任务和原生 Session。两项测试分别让回环供应商不发送恢复请求的 HTTP 响应头，或发送部分流后停止。两项测试的 Worker 计算时限都是 1,500 毫秒。供应商总共收到两次请求，其中包括首次完成的澄清。恢复请求包含所有者的原样回答，供应商也观测到连接关闭。恢复调用的费用记录为不确定。任务进入 `dshpa:compute:compute_limit` 资源等待并释放槽位。探针从提交回答到读回该状态，等待响应头场景耗时 1,585 毫秒，流停滞场景耗时 1,581 毫秒。再次启动常驻进程后保留等待状态，没有发出新请求。
+
+```sh
+for stage in headers stream; do
+  DSHPA_INSTALL_STALLED_BRIEF="$stage" pnpm test:install
+done
+```
+
+另外执行八次真实模型简报，用的是保留的 alpha 归档、原有的 30 秒计算时限和 35 秒结果等待。八次均凭有效的原生就绪报告进入 `verifying`，每次均结算两次调用。六次通过完整用例，另外两次进入产物检查，但套件数量的格式规则未匹配 `Kits available: 12` 的表述。调查保留了原始 30 项样本。原始超时的原因仍待确认。
+
+运行单独的真实简报命令时可设置 `DSHPA_INSTALL_BRIEF_TRACE=1` 记录阶段信息。探针报告固定游标、原生输入和轮次阶段、日志与预算状态，以及不同 Session 和 Attempt 的数量。[简报恢复调查 #176](https://github.com/MosBot-AI/dsh-personal-agent/issues/176)
+
 30 项均待人工决定，评分完成后才能计算验收率。七天所有者试用和 [#18](https://github.com/MosBot-AI/dsh-personal-agent/issues/18) 跟踪的真实外部写入仍待完成。
