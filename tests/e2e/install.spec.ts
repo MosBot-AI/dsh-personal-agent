@@ -24,6 +24,7 @@ import { prepareOrganizationSources, readOrganizationOutcome, verifyOrganization
 import { verifyForegroundReminder, verifyPackagedReminder } from './fixtures/packaged-reminder.js'
 import { model as pairedModelId, openPairedModel, outputLimit as pairedOutputLimit, rates as pairedRates } from './fixtures/paired-model.js'
 import { foregroundPreset, prepareForeground } from './fixtures/paired-foreground.js'
+import { briefStallProvider } from './fixtures/brief-stall-provider.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
@@ -34,6 +35,11 @@ const archiveDirectory = process.env.DSHPA_INSTALL_ARCHIVES
 const liveProvider = process.env.DSHPA_INSTALL_LIVE_DEEPSEEK === '1'
 const liveKey = liveProvider ? process.env.DEEPSEEK_API_KEY?.trim() : undefined
 const liveBrief = process.env.DSHPA_INSTALL_LIVE_BRIEF === '1'
+const stallAt = process.env.DSHPA_INSTALL_STALLED_BRIEF
+if (stallAt !== undefined && stallAt !== 'headers' && stallAt !== 'stream') throw new Error('Select headers or stream for the stalled brief')
+const stalledBrief = stallAt !== undefined
+const brief = liveBrief || stalledBrief
+const briefTrace = stalledBrief || process.env.DSHPA_INSTALL_BRIEF_TRACE === '1'
 const liveResearch = process.env.DSHPA_INSTALL_LIVE_RESEARCH === '1'
 const liveReview = process.env.DSHPA_INSTALL_LIVE_REVIEW === '1'
 const liveCode = process.env.DSHPA_INSTALL_LIVE_CODE === '1'
@@ -61,6 +67,10 @@ if (pairedOrganization && !liveOrganization) throw new Error('DSHPA_INSTALL_PAIR
 if (paired && !pairWorkflow && !packagedReminder) throw new Error('Select a live workflow or the keyless reminder for the paired comparison')
 if (pairOrder !== 'foreground-first' && pairOrder !== 'worker-first') throw new Error('Invalid paired comparison order')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
+if (stalledBrief && (liveProvider || liveWorkflows > 0 || packagedReminder || previousCheckout || paired)) {
+  throw new Error('Stalled brief requires a standalone keyless install')
+}
+if (briefTrace && (!brief || paired)) throw new Error('Brief tracing requires the standalone brief fixture')
 if (evidenceFile !== undefined && (!isAbsolute(evidenceFile) || existsSync(evidenceFile) || paired || (!pairWorkflow && !packagedReminder))) {
   throw new Error('Foundation evidence needs a new absolute file in a standalone workflow run')
 }
@@ -114,7 +124,8 @@ function installDiagnostics(profile: string, error: unknown): string {
     .slice(0, 2_000)
 }
 
-it(packagedReminder && paired ? 'compares native foreground and Inbox reminder recovery'
+it(stalledBrief ? `parks an answered brief when the resumed HTTP response stalls at ${stallAt}`
+  : packagedReminder && paired ? 'compares native foreground and Inbox reminder recovery'
   : packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
   : paired ? `compares native foreground and installed Worker readback for ${pairWorkflow}`
   : liveOrganization ? 'organizes three exact local documents into an exportable inventory with a live installed Worker'
@@ -144,6 +155,21 @@ it(packagedReminder && paired ? 'compares native foreground and Inbox reminder r
     npm_config_userconfig: process.env.npm_config_userconfig,
   }
   const requests: Array<string | undefined> = []
+  const stall = stallAt && briefStallProvider(briefReference, briefAnswer, stallAt)
+  const tracePath = join(profile, 'brief-resume-trace.jsonl')
+  function readBriefPhases(taskId: string) {
+    const database = new DatabaseSync(join(storage, DATABASE_FILENAME), { readOnly: true })
+    try {
+      const inputs = database.prepare('SELECT cursor, status, session_id, attempt_id FROM worker_inputs WHERE task_id = ? ORDER BY rowid')
+        .all(taskId)
+      const phases = existsSync(tracePath) ? readFileSync(tracePath, 'utf8').trimEnd().split('\n').map(line => JSON.parse(line)) : []
+      return { inputs: inputs.map(({ cursor, status }) => ({ cursor, status })),
+        sessions: new Set(inputs.map(input => input.session_id)).size,
+        attempts: new Set(inputs.map(input => input.attempt_id)).size, phases,
+        charges: database.prepare('SELECT status FROM budget_reservations WHERE task_id = ? ORDER BY created_at').all(taskId)
+          .map(row => row.status) }
+    } finally { database.close() }
+  }
   const evidence: { input: string; output: string }[] = []
   function recordEvidence(input: string, output: string) {
     if (!evidenceFile) return
@@ -153,6 +179,10 @@ it(packagedReminder && paired ? 'compares native foreground and Inbox reminder r
     renameSync(pending, evidenceFile)
   }
   const provider = createServer((request, response) => {
+    if (stall) {
+      void stall.respond(request, response)
+      return
+    }
     requests.push(request.method)
     request.resume()
     response.writeHead(400, { 'content-type': 'application/json' })
@@ -238,6 +268,7 @@ allowBuilds:
     }
   }
   await manageBundle('add', bundle.spec)
+  if (briefTrace) copyFileSync(fileURLToPath(new URL('./fixtures/brief-resume-trace.mjs', import.meta.url)), join(profile, 'brief-resume-trace.mjs'))
   expect(readFileSync(join(profile, 'pnpm-lock.yaml'), 'utf8')).toMatch(/^  autoInstallPeers: false$/m)
   const modules = join(profile, 'node_modules')
   const installedRequire = createRequire(join(modules, bundle.name, 'package.json'))
@@ -246,7 +277,7 @@ allowBuilds:
   }
   expect(existsSync(join(modules, '@deepseek-ai/dsh-llm'))).toBe(false)
 
-  const callLimit = liveBrief ? 2 : 1
+  const callLimit = brief ? 2 : 1
   const dayCallLimit = liveReview ? reviewCount : callLimit
   const pairedModel = paired && liveKey ? await openPairedModel(liveKey, dayCallLimit) : undefined
   let providerUrl = pairedModel?.baseURL ?? 'https://api.deepseek.com/anthropic'
@@ -257,7 +288,7 @@ allowBuilds:
     assert.ok(address && typeof address !== 'string')
     providerUrl = `http://127.0.0.1:${address.port}`
   }
-  const outputLimit = liveProvider ? pairedOutputLimit : 64
+  const outputLimit = liveProvider || stalledBrief ? pairedOutputLimit : 64
   const overlay = (stateDir: string) => `- id: llm-deepseek
   config:
     baseURL: ${providerUrl}
@@ -282,11 +313,11 @@ allowBuilds:
         model: deepseek-flash
         concurrency: 1
 ${knowledgeConfig}      computeLimits:
-        maxInputBytes: ${liveWorkflows > 0 ? 32_768 : 8192}
+        maxInputBytes: ${liveWorkflows > 0 || stalledBrief ? 32_768 : 8192}
         maxOutputTokens: ${outputLimit}
         maxTurns: ${callLimit}
         maxStepsPerTurn: 1
-        maxWallTimeMs: ${liveProvider ? 30000 : 10000}
+        maxWallTimeMs: ${liveProvider ? 30000 : stalledBrief ? 1500 : 10000}
       budget:
         pricingVersion: ${liveProvider ? 'deepseek-flash-peak-2026-11-14' : 'packaged-install-fixture'}
         routes:
@@ -307,7 +338,10 @@ ${knowledgeConfig}      computeLimits:
             maxCallsPerDay: ${dayCallLimit}
             maxCallsPerTask: ${callLimit}
             maxConcurrent: 1
-${pairedModel ? foregroundPreset : ''}`
+${pairedModel ? foregroundPreset : ''}${briefTrace ? `- insert:
+    - id: brief-resume-trace
+      name: ${JSON.stringify(join(profile, 'brief-resume-trace.mjs'))}
+` : ''}`
   const loopback = { connection: 'close' }
   async function startResident(stateDir = storage, ready = true) {
     writeFileSync(patch, overlay(stateDir), { mode: 0o600 })
@@ -390,6 +424,7 @@ ${pairedModel ? foregroundPreset : ''}`
   }
 
   const first = await startResident()
+  if (briefTrace) expect(existsSync(tracePath), 'Brief trace did not start').toBe(true)
   if (packagedReminder) {
     expect(requests).toEqual([])
     async function foregroundReminder(host: typeof first) {
@@ -443,7 +478,7 @@ ${pairedModel ? foregroundPreset : ''}`
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
   const outcome = code?.outcome ?? (liveOrganization ? await readOrganizationOutcome(inbox)
-    : liveResearch ? await readResearchOutcome(inbox, knowledgeDirectory) : liveBrief ? briefOutcome : liveProvider
+    : liveResearch ? await readResearchOutcome(inbox, knowledgeDirectory) : brief ? briefOutcome : liveProvider
       ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
       : 'Prepare an outline of the synthetic packaging test.')
   const cursor = 'package-start'
@@ -494,11 +529,11 @@ ${pairedModel ? foregroundPreset : ''}`
   const startedAt = performance.now()
   expect(await host.inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor }))
     .toMatchObject({ ok: true })
-  if (liveProvider) {
+  if (liveProvider || stalledBrief) {
     let clarificationMs: number | undefined
     let answerStartedAt: number | undefined
     let clarificationCall: ReturnType<NonNullable<typeof pairedModel>['finish']> | undefined
-    if (liveBrief) {
+    if (brief) {
       const waiting = await vi.waitFor(async () => {
         const item = await task()
         expect(item).toMatchObject({ status: 'waiting_input', runtime: 'inactive', artifacts: [],
@@ -528,7 +563,29 @@ ${pairedModel ? foregroundPreset : ''}`
       expect(item.runtime).toBe('inactive')
       expect(item.status).not.toBe('queued')
       return item
-    }, { timeout: 35_000 })
+    }, { timeout: 35_000 }).catch(error => {
+      if (briefTrace) console.log(JSON.stringify({ briefTimeout: readBriefPhases(taskId) }))
+      throw error
+    })
+    if (briefTrace) console.log(JSON.stringify({ briefResume: readBriefPhases(taskId), status: candidate.status,
+      answerToReadbackMs: answerStartedAt === undefined ? undefined : Math.round(performance.now() - answerStartedAt) }))
+    if (stall) {
+      expect(candidate).toMatchObject({ status: 'waiting_resource', runtime: 'inactive', artifacts: [],
+        wait: { referenceId: 'dshpa:compute:compute_limit' } })
+      const diagnostic = readBriefPhases(taskId)
+      expect(diagnostic).toMatchObject({ sessions: 1, attempts: 1, charges: ['settled', 'uncertain'] })
+      expect(diagnostic.inputs.map(input => input.cursor)).toEqual(['package-start', briefAnswerCursor])
+      expect(diagnostic.phases).toContainEqual({ cursor: briefAnswerCursor, phase: 'input-admitted' })
+      expect(stall.snapshot()).toEqual({ calls: 2, admittedAnswer: true, stalledStreamClosed: true, requestFault: false })
+      const snapshot = await host.inbox({ type: 'snapshot' })
+      expect(snapshot).toMatchObject({ ok: true, kind: 'snapshot', snapshot: { usage: { workerSlots: { active: 0 } } } })
+      await host.stop()
+      const reopened = await startResident()
+      expect(await task(reopened.inbox)).toEqual(candidate)
+      expect(stall.snapshot().calls).toBe(2)
+      await reopened.stop()
+      return
+    }
     pairedModel?.check()
     expect(candidate).toMatchObject({ status: 'verifying', runtime: 'inactive', canAccept: true })
     expect(candidate.artifacts).toHaveLength(1)

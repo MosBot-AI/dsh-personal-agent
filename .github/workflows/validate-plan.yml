@@ -49,6 +49,11 @@ jobs:
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm check
       - name: Verify native Worker startup from a clean tarball profile
         run: npm exec --yes --package=pnpm@11.28.5 -- pnpm test:install
+      - name: Verify a resumed brief releases its slot after an HTTP stall
+        run: |
+          for stage in headers stream; do
+            DSHPA_INSTALL_STALLED_BRIEF="$stage" npm exec --yes --package=pnpm@11.28.5 -- pnpm test:install
+          done
       - name: Verify native reminder recovery from a clean tarball profile
         run: DSHPA_INSTALL_REMINDER=1 npm exec --yes --package=pnpm@11.28.5 -- pnpm test:install
       - name: Verify keyless native Web flow
