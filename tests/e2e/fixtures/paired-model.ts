@@ -107,7 +107,7 @@ export async function openPairedModel(key: string) {
 
 function readUsage(sse: string) {
   const fields: Record<string, unknown> = {}
-  let complete = false
+  let stopReason: string | undefined
   for (const line of sse.split(/\r?\n/u)) {
     if (!line.startsWith('data: {')) continue
     const value = JSON.parse(line.slice(6)) as { type: string; message?: { usage?: Record<string, unknown> };
@@ -115,10 +115,11 @@ function readUsage(sse: string) {
     if (value.type === 'message_start') Object.assign(fields, value.message?.usage)
     if (value.type === 'message_delta') {
       Object.assign(fields, value.usage)
-      complete = value.delta?.stop_reason === 'end_turn'
+      stopReason = value.delta?.stop_reason
     }
   }
-  requirePair(complete, 'The provider did not finish the turn normally')
+  requirePair(stopReason !== 'max_tokens', 'The provider stopped at the output token limit')
+  requirePair(stopReason === 'end_turn', 'The provider did not finish the turn normally')
   function tokens(value: unknown) {
     assert.ok(typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
     return value

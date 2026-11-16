@@ -60,7 +60,8 @@ export async function readResearchOutcome(inbox: Inbox, directory: string) {
     'Compare capacity and price for each room using only these two owner-reviewed sources.',
     'Write the actual research brief in the JSON summary field, including its evidence. The summary is the deliverable the owner will read.',
     'In summary, include one line per room with its name, seat count as "N seats", dollar fee and exact path@revision citation.',
-    'Add a Recommendation line naming the selected room and explaining the choice. Return kind ready with an empty artifactIds array.',
+    'Add a Recommendation line naming the selected room and why it qualifies. Keep the summary to those three lines and at most 55 words.',
+    'Return kind ready with an empty artifactIds array.',
     `Source ${citation(harbor)} (SHA-256 ${updated.read.revision})\n${updated.text}`,
     `Source ${citation(orchard)} (SHA-256 ${comparison.read.revision})\n${comparison.text}`,
   ].join('\n')
