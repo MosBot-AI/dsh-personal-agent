@@ -40,7 +40,7 @@ const liveCode = process.env.DSHPA_INSTALL_LIVE_CODE === '1'
 const liveOrganization = process.env.DSHPA_INSTALL_LIVE_ORGANIZATION === '1'
 const pairedOrganization = process.env.DSHPA_INSTALL_PAIRED_ORGANIZATION === '1'
 const paired = pairedOrganization || process.env.DSHPA_INSTALL_PAIRED === '1'
-const pairWorkflow = liveOrganization ? 'organization' : liveResearch ? 'research' : liveCode ? 'code' : undefined
+const pairWorkflow = liveOrganization ? 'organization' : liveResearch ? 'research' : liveCode ? 'code' : liveBrief ? 'brief' : undefined
 const pairOrder = process.env.DSHPA_INSTALL_PAIR_ORDER ?? 'foreground-first'
 const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
@@ -56,12 +56,13 @@ const liveWorkflows = [liveBrief, liveResearch, liveReview, liveCode, liveOrgani
 if (liveWorkflows > 0 && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
 if (liveWorkflows > 1) throw new Error('Select one live workflow evaluation per install run')
 if (pairedOrganization && !liveOrganization) throw new Error('DSHPA_INSTALL_PAIRED_ORGANIZATION requires DSHPA_INSTALL_LIVE_ORGANIZATION=1')
-if (paired && !pairWorkflow) throw new Error('Select a live organization, research, or code workflow for the paired comparison')
+if (paired && !pairWorkflow) throw new Error('Select a live organization, research, code or brief workflow for the paired comparison')
 if (pairOrder !== 'foreground-first' && pairOrder !== 'worker-first') throw new Error('Invalid paired comparison order')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
 
 const briefReference = 'pilot-brief-audience'
 const briefAnswer = 'The audience is the volunteer coordinators. The pilot opens on 19 November.'
+const briefAnswerCursor = 'brief-answer'
 const briefOutcome = [
   'Prepare a short launch brief for a fictional library pilot. It has 12 kits and a 20 November registration deadline.',
   'The audience and pilot opening date must come from the Owner answer. Do not infer them.',
@@ -70,6 +71,14 @@ const briefOutcome = [
   'If the Owner answer is present, report kind ready with empty artifactIds and a short Markdown summary.',
   'Include the audience, opening date, number of kits, and registration deadline in the summary.',
 ].join(' ')
+
+function verifyBrief(text: string) {
+  const requiredFacts = [
+    /volunteer coordinators/i, /(?:19 November|November 19)/i, /(?:\b12[- ]kits?\b|\bkits:\*{0,2}\s+12\b)/i,
+    /(?:20 November|November 20)/i,
+  ]
+  for (const expected of requiredFacts) expect(text).toMatch(expected)
+}
 
 function packageArchive(directory: string, checkout: string, destination: string) {
   const cwd = join(checkout, 'packages', directory)
@@ -223,7 +232,8 @@ allowBuilds:
   }
   expect(existsSync(join(modules, '@deepseek-ai/dsh-llm'))).toBe(false)
 
-  const pairedModel = paired && liveKey ? await openPairedModel(liveKey) : undefined
+  const callLimit = liveBrief ? 2 : 1
+  const pairedModel = paired && liveKey ? await openPairedModel(liveKey, callLimit) : undefined
   let providerUrl = pairedModel?.baseURL ?? 'https://api.deepseek.com/anthropic'
   if (!liveProvider) {
     provider.listen(0, '127.0.0.1')
@@ -233,7 +243,6 @@ allowBuilds:
     providerUrl = `http://127.0.0.1:${address.port}`
   }
   const outputLimit = liveProvider ? pairedOutputLimit : 64
-  const callLimit = liveBrief ? 2 : 1
   const dayCallLimit = liveReview ? 3 : callLimit
   const overlay = (stateDir: string) => `- id: llm-deepseek
   config:
@@ -377,9 +386,8 @@ ${pairedModel ? foregroundPreset : ''}`
     console.log(JSON.stringify({ taskIds, calls: settledCalls(taskIds) }))
     return
   }
-  const { rpc, inbox } = first
-  const { sessionId } = await rpc<{ sessionId: string }>('session/create', { args: { request: { cwd: workRoot } } })
-  assert.ok(sessionId)
+  const { inbox } = first
+  let host = first
   const project = await inbox({ type: 'create_project', commandId: 'package-project',
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
@@ -390,19 +398,39 @@ ${pairedModel ? foregroundPreset : ''}`
   const cursor = 'package-start'
   async function compareForeground() {
     if (!pairedModel) return undefined
-    const runForeground = await prepareForeground(first, workRoot, pairedModel.check)
+    const runForeground = await prepareForeground(host, workRoot, pairedModel.check)
     pairedModel.begin('foreground', outcome)
-    const { text, elapsedMs } = await runForeground(outcome, cursor)
+    const initial = await runForeground(host, outcome, cursor)
+    const firstCall = pairedModel.finish('foreground')
+    if (liveBrief) {
+      const { report } = initial
+      assert.ok(report.kind === 'waiting')
+      expect(report.wait).toMatchObject({ reason: 'input', referenceId: briefReference })
+      expect(report.wait.resumeCondition).toMatch(/audience.*open/i)
+      await host.stop()
+      host = await startResident()
+      expect(await initial.readback(host)).toEqual(report)
+      pairedModel.begin('foreground', outcome, briefAnswer)
+      const answered = await runForeground(host, `Owner answer:\n${briefAnswer}`, briefAnswerCursor)
+      assert.ok(answered.report.kind === 'ready' && answered.report.artifactIds.length === 0)
+      verifyBrief(answered.report.summary)
+      return { calls: [firstCall, pairedModel.finish('foreground')], clarificationMs: initial.elapsedMs,
+        answerMs: answered.elapsedMs, ownerCommands: 2 }
+    }
+    assert.ok(initial.report.kind === 'ready' && initial.report.artifactIds.length === 0)
+    const { summary: text } = initial.report
     const exportDigest = liveOrganization ? verifyOrganizationExport(text, knowledgeDirectory, join(root, 'foreground.csv')) : undefined
     foregroundCode?.verifyProposal(text)
     if (liveResearch) verifyResearchBrief(text)
-    return { ...pairedModel.finish('foreground'), elapsedMs, exportDigest, ownerCommands: 1 }
+    return { ...firstCall, elapsedMs: initial.elapsedMs, exportDigest, ownerCommands: 1 }
   }
   let foreground = pairOrder === 'foreground-first' ? await compareForeground() : undefined
-  const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId, outcome })
+  const { sessionId } = await host.rpc<{ sessionId: string }>('session/create', { args: { request: { cwd: workRoot } } })
+  assert.ok(sessionId)
+  const created = await host.inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId, outcome })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
   const taskId = created.taskId
-  async function task(readInbox = inbox) {
+  async function task(readInbox = host.inbox) {
     const response = await readInbox({ type: 'snapshot' })
     assert.ok(response.ok && response.kind === 'snapshot')
     const item = response.snapshot.tasks.find(row => row.id === taskId)
@@ -413,10 +441,12 @@ ${pairedModel ? foregroundPreset : ''}`
   expect(queued.status).toBe('queued')
   pairedModel?.begin('worker', outcome)
   const startedAt = performance.now()
-  expect(await inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor }))
+  expect(await host.inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor }))
     .toMatchObject({ ok: true })
   if (liveProvider) {
-    let host = first
+    let clarificationMs: number | undefined
+    let answerStartedAt: number | undefined
+    let clarificationCall: ReturnType<NonNullable<typeof pairedModel>['finish']> | undefined
     if (liveBrief) {
       const waiting = await vi.waitFor(async () => {
         const item = await task()
@@ -425,13 +455,17 @@ ${pairedModel ? foregroundPreset : ''}`
         expect(item.wait?.prompt).toMatch(/audience.*open/i)
         return item
       }, { timeout: 35_000 })
-      await first.stop()
+      clarificationMs = Math.round(performance.now() - startedAt)
+      clarificationCall = pairedModel?.finish('worker')
+      await host.stop()
       host = await startResident()
       expect(await task(host.inbox)).toEqual(waiting)
-      const answer = { type: 'answer', taskId, expectedVersion: waiting.version, cursor: 'brief-answer',
+      const answer = { type: 'answer', taskId, expectedVersion: waiting.version, cursor: briefAnswerCursor,
         referenceId: briefReference, text: briefAnswer } as const
       expect(await host.inbox({ ...answer, referenceId: 'unrelated-question' })).toEqual({ ok: false, code: 'condition_unmet' })
       expect(await task(host.inbox)).toEqual(waiting)
+      pairedModel?.begin('worker', outcome, briefAnswer)
+      answerStartedAt = performance.now()
       expect(await host.inbox(answer)).toMatchObject({ ok: true })
       const answered = await task(host.inbox)
       expect(answered.status).toBe('queued')
@@ -450,6 +484,7 @@ ${pairedModel ? foregroundPreset : ''}`
     const readResult = (readInbox = inbox) => readInbox({ type: 'artifact', taskId, artifactId })
     const artifact = await readResult(host.inbox)
     const elapsedMs = Math.round(performance.now() - startedAt)
+    const answerMs = answerStartedAt === undefined ? undefined : Math.round(performance.now() - answerStartedAt)
     assert.ok(artifact.ok && artifact.kind === 'artifact')
     expect(artifact.artifact.mediaType).toBe('text/markdown')
     let exportDigest: string | undefined
@@ -460,13 +495,7 @@ ${pairedModel ? foregroundPreset : ''}`
     } else if (liveResearch) {
       verifyResearchBrief(artifact.artifact.text)
     } else if (liveBrief) {
-      const requiredFacts = [
-        /volunteer coordinators/i, /(?:19 November|November 19)/i, /(?:\b12[- ]kits?\b|\bkits:\*{0,2}\s+12\b)/i,
-        /(?:20 November|November 20)/i,
-      ]
-      for (const expected of requiredFacts) {
-        expect(artifact.artifact.text).toMatch(expected)
-      }
+      verifyBrief(artifact.artifact.text)
     } else expect(artifact.artifact.text).toBe('Total folders: 12.')
     expect(await host.inbox({ type: 'accept_result', taskId, expectedVersion: candidate.version })).toMatchObject({ ok: true })
     const completed = await task(host.inbox)
@@ -480,13 +509,18 @@ ${pairedModel ? foregroundPreset : ''}`
     await reopened.stop()
     const calls = settledCalls(Array<string>(callLimit).fill(taskId))
     if (pairedModel) {
-      pairedModel.check()
+      pairedModel.verifyComplete()
       assert.ok(foreground && measuredWorker)
-      expect(calls).toEqual([{ model: pairedModelId, ...measuredWorker }])
-      if (liveOrganization) expect(exportDigest).toBe(foreground.exportDigest)
+      const measuredCalls = clarificationCall ? [clarificationCall, measuredWorker] : [measuredWorker]
+      expect(calls).toEqual(measuredCalls.map(call => ({ model: pairedModelId, ...call })))
+      if (liveOrganization) {
+        assert.ok('exportDigest' in foreground && foreground.exportDigest)
+        expect(exportDigest).toBe(foreground.exportDigest)
+      }
       const order = pairOrder === 'foreground-first' ? ['foreground', 'worker'] : ['worker', 'foreground']
-      console.log(JSON.stringify({ workflow: pairWorkflow, order, model: pairedModelId, foreground,
-        worker: { ...measuredWorker, elapsedMs, exportDigest, ownerCommands: 3 } }))
+      const worker = liveBrief ? { calls: measuredCalls, clarificationMs, answerMs, ownerCommands: 5 }
+        : { ...measuredWorker, elapsedMs, exportDigest, ownerCommands: 3 }
+      console.log(JSON.stringify({ workflow: pairWorkflow, order, model: pairedModelId, foreground, worker }))
     } else {
       console.log(JSON.stringify({ taskId, artifactId, exportDigest, calls }))
     }

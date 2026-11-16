@@ -18,11 +18,11 @@ function requirePair(condition: unknown, message: string): asserts condition {
   if (!condition) throw new PairFailure(message)
 }
 
-export async function openPairedModel(key: string) {
+export async function openPairedModel(key: string, turnsPerArm: number) {
   const token = randomUUID()
-  let armed: { arm: Arm; outcome: string; calls: number; complete?: ReturnType<typeof readUsage> } | undefined
+  let armed: { arm: Arm; requiredTexts: string[]; calls: number; complete?: ReturnType<typeof readUsage> } | undefined
   let fault: string | undefined
-  const measured = new Set<Arm>()
+  const measured = { foreground: 0, worker: 0 }
   const server = createServer(async (request, response) => {
     try {
       requirePair(request.headers['x-api-key'] === token, 'Unexpected fixture credential')
@@ -44,7 +44,8 @@ export async function openPairedModel(key: string) {
       requirePair(wire.max_tokens === outputLimit, 'Unexpected output token limit')
       requirePair(wire.stream === true && wire.thinking?.type === 'disabled', 'Unexpected provider stream or thinking mode')
       requirePair((wire.tools?.length ?? 0) === 0, 'The request declared model tools')
-      requirePair(JSON.stringify(wire.messages).includes(JSON.stringify(sample.outcome).slice(1, -1)), 'Task text did not match')
+      const messages = JSON.stringify(wire.messages)
+      requirePair(sample.requiredTexts.every(value => messages.includes(JSON.stringify(value).slice(1, -1))), 'Task text did not match')
       requirePair(Math.ceil((bytes * rates.input + outputLimit * rates.output) / 1_000_000) <= costCeiling,
         'The wire estimate exceeded the cost ceiling')
       const upstream = await fetch('https://api.deepseek.com/anthropic/v1/messages', {
@@ -90,17 +91,21 @@ export async function openPairedModel(key: string) {
     check() {
       assert.ok(!fault, fault)
     },
-    begin(arm: Arm, outcome: string) {
-      assert.ok(!armed && !measured.has(arm) && !fault, fault)
-      armed = { arm, outcome, calls: 0 }
+    begin(arm: Arm, outcome: string, ...additionalInputs: string[]) {
+      assert.ok(!armed && measured[arm] < turnsPerArm && !fault, fault)
+      armed = { arm, requiredTexts: [outcome, ...additionalInputs], calls: 0 }
     },
     finish(arm: Arm) {
       assert.ok(!fault, fault)
       assert.ok(armed?.arm === arm && armed.calls === 1 && armed.complete, 'The pair requires one completed provider stream per arm')
       const result = armed.complete
       armed = undefined
-      measured.add(arm)
+      measured[arm] += 1
       return result
+    },
+    verifyComplete() {
+      assert.ok(!armed && !fault, fault)
+      assert.deepEqual(measured, { foreground: turnsPerArm, worker: turnsPerArm })
     },
   }
 }

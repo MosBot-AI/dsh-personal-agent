@@ -28,18 +28,11 @@ export async function prepareForeground({ rpc }: NativeRpc, cwd: string, verifyE
     sessionId, provider: 'deepseek-official', model, reasoningEffort: 'off',
   } } })
   expect(selected).toMatchObject({ selected: { provider: 'deepseek-official', model } })
-  const state = await rpc<{ cursor: number }>('session/state', { args: { request: { sessionId } } })
-  return async (outcome: string, cursor: string) => {
-    const startedAt = performance.now()
-    const sent = await rpc('session/prompt', { args: { request: { sessionId, requestId: randomUUID(), mode: 'queue',
-      content: [{ type: 'text', text: `${workerReportInstructions(cursor)}\n\n${outcome}` }],
-    } } })
-    expect(sent).toEqual({ accepted: true })
+  async function readReport({ rpc }: NativeRpc, afterSeq: number, cursor: string) {
     const value = await rpc<{ reason: string; output: { truncated: boolean; records: {
       event: { type: string; data: { interrupted?: boolean; message: { content: { type: string; text?: string }[] } } }
-    }[] } }>('session/wait', { args: { request: { sessionId, afterSeq: state.cursor, timeoutMs: 30_000, maxMessages: 2 } } }, 35_000)
+    }[] } }>('session/wait', { args: { request: { sessionId, afterSeq, timeoutMs: 30_000, maxMessages: 2 } } }, 35_000)
     verifyExchange()
-    const elapsedMs = Math.round(performance.now() - startedAt)
     expect({ reason: value.reason, truncated: value.output.truncated, messages: value.output.records.length })
       .toEqual({ reason: 'idle', truncated: false, messages: 1 })
     const event = value.output.records[0]!.event
@@ -48,7 +41,18 @@ export async function prepareForeground({ rpc }: NativeRpc, cwd: string, verifyE
     const contents = event.data.message.content
     expect(contents.every(block => block.type === 'text')).toBe(true)
     const report = decodeWorkerReport(contents.map(block => block.text).join(''))
-    assert.ok(report?.kind === 'ready' && report.cursor === cursor && report.artifactIds.length === 0, 'Invalid foreground report')
-    return { text: report.summary, elapsedMs }
+    assert.ok(report?.cursor === cursor, 'Invalid foreground report')
+    return report
+  }
+  return async (host: NativeRpc, outcome: string, cursor: string) => {
+    const { cursor: afterSeq } = await host.rpc<{ cursor: number }>('session/state', { args: { request: { sessionId } } })
+    const startedAt = performance.now()
+    const sent = await host.rpc('session/prompt', { args: { request: { sessionId, requestId: randomUUID(), mode: 'queue',
+      content: [{ type: 'text', text: `${workerReportInstructions(cursor)}\n\n${outcome}` }],
+    } } })
+    expect(sent).toEqual({ accepted: true })
+    const report = await readReport(host, afterSeq, cursor)
+    const elapsedMs = Math.round(performance.now() - startedAt)
+    return { report, elapsedMs, readback: (reopened: NativeRpc) => readReport(reopened, afterSeq, cursor) }
   }
 }
