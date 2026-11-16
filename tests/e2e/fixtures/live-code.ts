@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { expect } from 'vitest'
 
 const implementation = 'export function averageReadings(readings) {\n  const valid = readings.filter(Boolean)\n  if (valid.length === 0) return null\n  return valid.reduce((sum, reading) => sum + reading, 0) / valid.length\n}\n'
@@ -45,7 +45,8 @@ export function prepareLiveCode(directory: string) {
       'Fix this fictional reading summary. A zero is a valid reading. Null and undefined are missing.',
       'Keep averaging valid readings, and return null if all readings are missing. For [0, 10] return 5.',
       'Change only readings.mjs. Return kind ready with empty artifactIds. Put the complete unified diff in the JSON summary string.',
-      'Start the patch with --- a/readings.mjs and +++ b/readings.mjs. Use a valid @@ hunk with context. Do not add explanation or a code fence.',
+      'Start with --- a/readings.mjs and +++ b/readings.mjs. Replace only the filter line in one full-file hunk with header @@ -1,5 +1,5 @@.',
+      'Prefix unchanged lines with a space. Use - for the old filter line and + for the new one. Do not add explanation or a code fence.',
       'Here is the complete source:', implementation,
     ].join('\n'),
     verifyProposal(text: string) {
@@ -56,7 +57,7 @@ export function prepareLiveCode(directory: string) {
       expect(lines.slice(0, 2)).toEqual(['--- a/readings.mjs', '+++ b/readings.mjs'])
       expect(lines[2]).toMatch(/^@@ /u)
       expect(lines.slice(2).filter(line => /^(?:diff --git |--- |\+\+\+ )/u.test(line))).toEqual([])
-      const patch = join(dirname(directory), 'proposed-readings.patch')
+      const patch = join(dirname(directory), `${basename(directory)}.patch`)
       writeFileSync(patch, lines.join('\n') + '\n', { mode: 0o600 })
       expect(git('apply', '--numstat', patch)).toMatch(/^\d+\t\d+\treadings\.mjs\n$/u)
       git('apply', '--check', patch)

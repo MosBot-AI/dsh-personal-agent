@@ -23,7 +23,7 @@ import { prepareLiveCode } from './fixtures/live-code.js'
 import { prepareOrganizationSources, readOrganizationOutcome, verifyOrganizationExport } from './fixtures/live-organization.js'
 import { verifyPackagedReminder } from './fixtures/packaged-reminder.js'
 import { model as pairedModelId, openPairedModel, outputLimit as pairedOutputLimit, rates as pairedRates } from './fixtures/paired-model.js'
-import { foregroundPreset, prepareForeground } from './fixtures/foreground-organization.js'
+import { foregroundPreset, prepareForeground } from './fixtures/paired-foreground.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
@@ -39,6 +39,8 @@ const liveReview = process.env.DSHPA_INSTALL_LIVE_REVIEW === '1'
 const liveCode = process.env.DSHPA_INSTALL_LIVE_CODE === '1'
 const liveOrganization = process.env.DSHPA_INSTALL_LIVE_ORGANIZATION === '1'
 const pairedOrganization = process.env.DSHPA_INSTALL_PAIRED_ORGANIZATION === '1'
+const paired = pairedOrganization || process.env.DSHPA_INSTALL_PAIRED === '1'
+const pairWorkflow = liveOrganization ? 'organization' : liveResearch ? 'research' : liveCode ? 'code' : undefined
 const pairOrder = process.env.DSHPA_INSTALL_PAIR_ORDER ?? 'foreground-first'
 const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
@@ -53,7 +55,8 @@ if (liveProvider && (!liveKey || previousCheckout)) {
 const liveWorkflows = [liveBrief, liveResearch, liveReview, liveCode, liveOrganization].filter(Boolean).length
 if (liveWorkflows > 0 && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
 if (liveWorkflows > 1) throw new Error('Select one live workflow evaluation per install run')
-if (pairedOrganization && !liveOrganization) throw new Error('The paired comparison requires DSHPA_INSTALL_LIVE_ORGANIZATION=1')
+if (pairedOrganization && !liveOrganization) throw new Error('DSHPA_INSTALL_PAIRED_ORGANIZATION requires DSHPA_INSTALL_LIVE_ORGANIZATION=1')
+if (paired && !pairWorkflow) throw new Error('Select a live organization, research, or code workflow for the paired comparison')
 if (pairOrder !== 'foreground-first' && pairOrder !== 'worker-first') throw new Error('Invalid paired comparison order')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
 
@@ -98,7 +101,7 @@ function installDiagnostics(profile: string, error: unknown): string {
 }
 
 it(packagedReminder ? 'recovers the current packaged reminder after a missed native wake'
-  : pairedOrganization ? 'compares one native foreground session with the installed organization Worker'
+  : paired ? `compares native foreground and installed Worker readback for ${pairWorkflow}`
   : liveOrganization ? 'organizes three exact local documents into an exportable inventory with a live installed Worker'
   : liveCode ? 'validates a live installed Worker patch in a disposable repository'
   : liveReview ? 'reuses a reviewed skill after three installed live inventory reviews'
@@ -157,6 +160,8 @@ it(packagedReminder ? 'recovers the current packaged reminder after a missed nat
   mkdirSync(archives)
   mkdirSync(workRoot)
   const code = liveCode ? prepareLiveCode(join(root, 'code-fixture')) : undefined
+  const foregroundCode = paired && code ? prepareLiveCode(join(root, 'foreground-code-fixture')) : undefined
+  if (foregroundCode) expect(foregroundCode.outcome).toBe(code?.outcome)
   const knowledgeConfig = liveResearch ? prepareResearchSources(knowledgeDirectory)
     : liveOrganization ? prepareOrganizationSources(knowledgeDirectory) : ''
   const workFile = join(workRoot, 'owner-notes.md')
@@ -218,7 +223,7 @@ allowBuilds:
   }
   expect(existsSync(join(modules, '@deepseek-ai/dsh-llm'))).toBe(false)
 
-  const pairedModel = pairedOrganization && liveKey ? await openPairedModel(liveKey) : undefined
+  const pairedModel = paired && liveKey ? await openPairedModel(liveKey) : undefined
   let providerUrl = pairedModel?.baseURL ?? 'https://api.deepseek.com/anthropic'
   if (!liveProvider) {
     provider.listen(0, '127.0.0.1')
@@ -378,21 +383,23 @@ ${pairedModel ? foregroundPreset : ''}`
   const project = await inbox({ type: 'create_project', commandId: 'package-project',
     title: 'Installed Worker test', purpose: 'Exercise the native provider from the installed bundle.' })
   assert.ok(project.ok && project.kind === 'updated' && project.projectId)
-  const organizationOutcome = liveOrganization ? await readOrganizationOutcome(inbox) : undefined
+  const outcome = code?.outcome ?? (liveOrganization ? await readOrganizationOutcome(inbox)
+    : liveResearch ? await readResearchOutcome(inbox, knowledgeDirectory) : liveBrief ? briefOutcome : liveProvider
+      ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
+      : 'Prepare an outline of the synthetic packaging test.')
   const cursor = 'package-start'
   async function compareForeground() {
-    if (!pairedModel || !organizationOutcome) return undefined
+    if (!pairedModel) return undefined
     const runForeground = await prepareForeground(first, workRoot, pairedModel.check)
-    pairedModel.begin('foreground', organizationOutcome)
-    const { text, elapsedMs } = await runForeground(organizationOutcome, cursor)
-    const exportDigest = verifyOrganizationExport(text, knowledgeDirectory, join(root, 'foreground.csv'))
+    pairedModel.begin('foreground', outcome)
+    const { text, elapsedMs } = await runForeground(outcome, cursor)
+    const exportDigest = liveOrganization ? verifyOrganizationExport(text, knowledgeDirectory, join(root, 'foreground.csv')) : undefined
+    foregroundCode?.verifyProposal(text)
+    if (liveResearch) verifyResearchBrief(text)
     return { ...pairedModel.finish('foreground'), elapsedMs, exportDigest, ownerCommands: 1 }
   }
   let foreground = pairOrder === 'foreground-first' ? await compareForeground() : undefined
-  const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId,
-    outcome: code?.outcome ?? organizationOutcome ?? (liveResearch ? await readResearchOutcome(inbox, knowledgeDirectory) : liveBrief ? briefOutcome : liveProvider
-      ? 'The fictional pilot has 7 blue folders and 5 green folders. Calculate the total and use this format as your short summary: "Total folders: <number>." Return a ready report with an empty artifactIds array.'
-      : 'Prepare an outline of the synthetic packaging test.') })
+  const created = await inbox({ type: 'create_task', commandId: 'package-task', sessionId, projectId: project.projectId, outcome })
   assert.ok(created.ok && created.kind === 'updated' && created.taskId)
   const taskId = created.taskId
   async function task(readInbox = inbox) {
@@ -404,7 +411,7 @@ ${pairedModel ? foregroundPreset : ''}`
   }
   const queued = await task()
   expect(queued.status).toBe('queued')
-  if (pairedModel && organizationOutcome) pairedModel.begin('worker', organizationOutcome)
+  pairedModel?.begin('worker', outcome)
   const startedAt = performance.now()
   expect(await inbox({ type: 'start', taskId: queued.id, expectedVersion: queued.version, cursor }))
     .toMatchObject({ ok: true })
@@ -476,9 +483,9 @@ ${pairedModel ? foregroundPreset : ''}`
       pairedModel.check()
       assert.ok(foreground && measuredWorker)
       expect(calls).toEqual([{ model: pairedModelId, ...measuredWorker }])
-      expect(exportDigest).toBe(foreground.exportDigest)
+      if (liveOrganization) expect(exportDigest).toBe(foreground.exportDigest)
       const order = pairOrder === 'foreground-first' ? ['foreground', 'worker'] : ['worker', 'foreground']
-      console.log(JSON.stringify({ order, model: pairedModelId, foreground,
+      console.log(JSON.stringify({ workflow: pairWorkflow, order, model: pairedModelId, foreground,
         worker: { ...measuredWorker, elapsedMs, exportDigest, ownerCommands: 3 } }))
     } else {
       console.log(JSON.stringify({ taskId, artifactId, exportDigest, calls }))
