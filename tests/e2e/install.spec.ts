@@ -25,6 +25,7 @@ import { verifyForegroundReminder, verifyPackagedReminder } from './fixtures/pac
 import { model as pairedModelId, openPairedModel, outputLimit as pairedOutputLimit, rates as pairedRates } from './fixtures/paired-model.js'
 import { foregroundPreset, prepareForeground } from './fixtures/paired-foreground.js'
 import { briefStallProvider } from './fixtures/brief-stall-provider.js'
+import { alphaWorkspaceSettings, packageArchive } from '../../evals/alpha-archives.js'
 
 const run = promisify(execFile)
 const dsh = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
@@ -93,13 +94,6 @@ function verifyBrief(text: string) {
     /(?:20 November|November 20)/i,
   ]
   for (const expected of requiredFacts) expect(text).toMatch(expected)
-}
-
-function packageArchive(directory: string, checkout: string, destination: string) {
-  const cwd = join(checkout, 'packages', directory)
-  const { name, version } = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { name: string; version: string }
-  const path = join(destination, `${name.slice(1).replace('/', '-')}-${version}.tgz`)
-  return { cwd, name, path, spec: 'file:' + path }
 }
 
 function installDiagnostics(profile: string, error: unknown): string {
@@ -243,18 +237,10 @@ it(stalledBrief ? `parks an answered brief when the resumed HTTP response stalls
   })
   const settings = join(profile, 'pnpm-workspace.yaml')
   const defaults = readFileSync(settings, 'utf8')
-  expect(defaults).toMatch(/^nodeLinker: hoisted$/m)
-  expect(defaults).toMatch(/^autoInstallPeers: false$/m)
   // Resolve the two unpublished workspace dependencies from their tarballs.
   // Preserve DSH's generated settings so it can supply its own native peers.
   function chooseDependencies(api: typeof pluginApi, modelRouting: typeof routing) {
-    writeFileSync(settings, defaults + `
-overrides:
-  ${JSON.stringify(api.name)}: ${JSON.stringify(api.spec)}
-  ${JSON.stringify(modelRouting.name)}: ${JSON.stringify(modelRouting.spec)}
-allowBuilds:
-  koffi: true
-`)
+    writeFileSync(settings, alphaWorkspaceSettings(defaults, api, modelRouting))
   }
   chooseDependencies(pluginApi, routing)
   async function manageBundle(action: 'add' | 'remove', target: string) {

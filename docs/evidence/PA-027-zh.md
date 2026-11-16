@@ -159,4 +159,10 @@ done
 
 运行单独的真实简报命令时可设置 `DSHPA_INSTALL_BRIEF_TRACE=1` 记录阶段信息。探针报告固定游标、原生输入和轮次阶段、日志与预算状态，以及不同 Session 和 Attempt 的数量。[简报恢复调查 #176](https://github.com/MosBot-AI/dsh-personal-agent/issues/176)
 
-30 项均待人工决定，评分完成后才能计算验收率。七天所有者试用和 [#18](https://github.com/MosBot-AI/dsh-personal-agent/issues/18) 跟踪的真实外部写入仍待完成。
+### 所有者试用准备
+
+[所有者试用说明](../../evals/README-zh.md#运行所有者试用)提供独立的打包 Profile、启动时检查常驻进程就绪的命令，以及涵盖七个带日期时段的本地日志。汇总会分别报告已记录的零活动、部分观察和缺失时段。准备时记录归档校验和及安装后的 Profile 标识。开始和结束时间、每日观察均由所有者提供。
+
+2026-11-16，一次性无密钥演练安装了已校验、来源为 `b94773c1b0370335e3a3b8031d212673b54702a5` 的 alpha 归档，并在 Linux 上用 Node.js 24.14.1 启动了 DSH 0.2.2-rc.1。就绪探针核对了预期的本机实例。日志记录了一条明确零活动的部分时段，接受了结束命令，并在常驻进程关闭后读回 `rehearsal` 和 `incomplete`。关闭时移除了所有者链接。针对性测试使用模拟时间验证七个时段的完成规则，并区分完成的演练与所有者试用。[准备证据 #178](https://github.com/MosBot-AI/dsh-personal-agent/issues/178)
+
+30 项均待人工决定，评分完成后才能计算验收率。所有者主动参加的实际试用和 [#18](https://github.com/MosBot-AI/dsh-personal-agent/issues/18) 跟踪的真实外部写入仍待完成。
