@@ -188,6 +188,6 @@ export async function verifyPackagedReminder(first: Resident, restart: () => Pro
   expect(await snapshot(reopened)).toEqual(restored)
   await reopened.stop()
   expect(occurrences(initial.id)).toEqual(receipts)
-  return { routineId: initial.id, originalRevision, currentRevision, originalTime, ...reminder,
+  return { routineId: initial.id, originalRevision, currentRevision, originalTime, originalText, ...reminder,
     restartReadbackMs, deliveryDelayMs, ownerCommands: 4 }
 }

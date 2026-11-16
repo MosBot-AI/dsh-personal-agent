@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -44,6 +44,7 @@ const pairWorkflow = liveOrganization ? 'organization' : liveResearch ? 'researc
   : liveBrief ? 'brief' : liveReview ? 'review' : undefined
 const pairOrder = process.env.DSHPA_INSTALL_PAIR_ORDER ?? 'foreground-first'
 const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
+const evidenceFile = process.env.DSHPA_INSTALL_EVIDENCE_FILE
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
   throw new Error('DSHPA_INSTALL_UPGRADE_FROM requires an absolute path to a built schema-15 checkout')
 }
@@ -60,6 +61,9 @@ if (pairedOrganization && !liveOrganization) throw new Error('DSHPA_INSTALL_PAIR
 if (paired && !pairWorkflow && !packagedReminder) throw new Error('Select a live workflow or the keyless reminder for the paired comparison')
 if (pairOrder !== 'foreground-first' && pairOrder !== 'worker-first') throw new Error('Invalid paired comparison order')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
+if (evidenceFile !== undefined && (!isAbsolute(evidenceFile) || existsSync(evidenceFile) || paired || (!pairWorkflow && !packagedReminder))) {
+  throw new Error('Foundation evidence needs a new absolute file in a standalone workflow run')
+}
 
 const briefReference = 'pilot-brief-audience'
 const briefAnswer = 'The audience is the volunteer coordinators. The pilot opens on 19 November.'
@@ -140,6 +144,14 @@ it(packagedReminder && paired ? 'compares native foreground and Inbox reminder r
     npm_config_userconfig: process.env.npm_config_userconfig,
   }
   const requests: Array<string | undefined> = []
+  const evidence: { input: string; output: string }[] = []
+  function recordEvidence(input: string, output: string) {
+    if (!evidenceFile) return
+    evidence.push({ input, output })
+    const pending = `${evidenceFile}.tmp`
+    writeFileSync(pending, JSON.stringify(evidence, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
+    renameSync(pending, evidenceFile)
+  }
   const provider = createServer((request, response) => {
     requests.push(request.method)
     request.resume()
@@ -390,6 +402,8 @@ ${pairedModel ? foregroundPreset : ''}`
     const inboxHost = foreground ? await startResident() : first
     const inbox = await verifyPackagedReminder(inboxHost, startResident, join(storage, DATABASE_FILENAME))
     expect(requests).toHaveLength(beforeInbox)
+    recordEvidence(JSON.stringify({ title: inbox.title, originalTime: inbox.originalTime, originalText: inbox.originalText,
+      revisedTime: inbox.intendedAt, revisedText: inbox.text }, null, 2), JSON.stringify(inbox, null, 2))
     if (paired) {
       if (pairOrder === 'worker-first') foreground = await foregroundReminder(await startResident())
       assert.ok(foreground)
@@ -405,7 +419,7 @@ ${pairedModel ? foregroundPreset : ''}`
   if (liveReview) {
     let foreground = pairedModel && pairOrder === 'foreground-first'
       ? await verifyForegroundReviews(first, startResident, workRoot, pairedModel) : undefined
-    const worker = await verifyLiveReview(foreground?.reopened ?? first, startResident, workRoot, pairedModel)
+    const worker = await verifyLiveReview(foreground?.reopened ?? first, startResident, workRoot, pairedModel, recordEvidence)
     const calls = settledCalls(worker.taskIds)
     if (pairedModel) {
       if (pairOrder === 'worker-first') foreground = await verifyForegroundReviews(worker.reopened, startResident, workRoot, pairedModel)
@@ -492,6 +506,7 @@ ${pairedModel ? foregroundPreset : ''}`
         expect(item.wait?.prompt).toMatch(/audience.*open/i)
         return item
       }, { timeout: 35_000 })
+      recordEvidence(briefOutcome, waiting.wait?.prompt ?? '')
       clarificationMs = Math.round(performance.now() - startedAt)
       clarificationCall = pairedModel?.finish('worker')
       await host.stop()
@@ -523,12 +538,14 @@ ${pairedModel ? foregroundPreset : ''}`
     const elapsedMs = Math.round(performance.now() - startedAt)
     const answerMs = answerStartedAt === undefined ? undefined : Math.round(performance.now() - answerStartedAt)
     assert.ok(artifact.ok && artifact.kind === 'artifact')
+    recordEvidence(liveBrief ? `${outcome}\n\nOwner answer:\n${briefAnswer}` : outcome, artifact.artifact.text)
     expect(artifact.artifact.mediaType).toBe('text/markdown')
     let exportDigest: string | undefined
     if (liveOrganization) {
       exportDigest = verifyOrganizationExport(artifact.artifact.text, knowledgeDirectory, join(root, 'inventory.csv'))
     } else if (code) {
-      code.verifyProposal(artifact.artifact.text)
+      const result = code.verifyProposal(artifact.artifact.text)
+      recordEvidence('Verify the proposed patch with the four isolated Node.js tests.', result)
     } else if (liveResearch) {
       verifyResearchBrief(artifact.artifact.text)
     } else if (liveBrief) {
