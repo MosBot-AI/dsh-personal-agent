@@ -18,7 +18,7 @@ import { DATABASE_FILENAME } from '../../packages/personal-agent/src/storage/dat
 import { restoreWorkStoreBackup } from '../../packages/personal-agent/src/storage/restore.js'
 import { SCHEMA_VERSION, V15_BACKUP_SUFFIX } from '../../packages/personal-agent/src/storage/schema.js'
 import { prepareResearchSources, readResearchOutcome, verifyResearchBrief } from './fixtures/live-research.js'
-import { verifyLiveReview } from './fixtures/live-review.js'
+import { reviewCount, verifyForegroundReviews, verifyLiveReview } from './fixtures/live-review.js'
 import { prepareLiveCode } from './fixtures/live-code.js'
 import { prepareOrganizationSources, readOrganizationOutcome, verifyOrganizationExport } from './fixtures/live-organization.js'
 import { verifyPackagedReminder } from './fixtures/packaged-reminder.js'
@@ -40,7 +40,8 @@ const liveCode = process.env.DSHPA_INSTALL_LIVE_CODE === '1'
 const liveOrganization = process.env.DSHPA_INSTALL_LIVE_ORGANIZATION === '1'
 const pairedOrganization = process.env.DSHPA_INSTALL_PAIRED_ORGANIZATION === '1'
 const paired = pairedOrganization || process.env.DSHPA_INSTALL_PAIRED === '1'
-const pairWorkflow = liveOrganization ? 'organization' : liveResearch ? 'research' : liveCode ? 'code' : liveBrief ? 'brief' : undefined
+const pairWorkflow = liveOrganization ? 'organization' : liveResearch ? 'research' : liveCode ? 'code'
+  : liveBrief ? 'brief' : liveReview ? 'review' : undefined
 const pairOrder = process.env.DSHPA_INSTALL_PAIR_ORDER ?? 'foreground-first'
 const packagedReminder = process.env.DSHPA_INSTALL_REMINDER === '1'
 if (previousCheckout !== undefined && !isAbsolute(previousCheckout)) {
@@ -56,7 +57,7 @@ const liveWorkflows = [liveBrief, liveResearch, liveReview, liveCode, liveOrgani
 if (liveWorkflows > 0 && !liveProvider) throw new Error('Live workflow evaluations require DSHPA_INSTALL_LIVE_DEEPSEEK=1')
 if (liveWorkflows > 1) throw new Error('Select one live workflow evaluation per install run')
 if (pairedOrganization && !liveOrganization) throw new Error('DSHPA_INSTALL_PAIRED_ORGANIZATION requires DSHPA_INSTALL_LIVE_ORGANIZATION=1')
-if (paired && !pairWorkflow) throw new Error('Select a live organization, research, code or brief workflow for the paired comparison')
+if (paired && !pairWorkflow) throw new Error('Select a live organization, research, code, brief or review workflow for the paired comparison')
 if (pairOrder !== 'foreground-first' && pairOrder !== 'worker-first') throw new Error('Invalid paired comparison order')
 if (packagedReminder && (liveProvider || previousCheckout)) throw new Error('The reminder requires the current package and keyless mode')
 
@@ -233,7 +234,8 @@ allowBuilds:
   expect(existsSync(join(modules, '@deepseek-ai/dsh-llm'))).toBe(false)
 
   const callLimit = liveBrief ? 2 : 1
-  const pairedModel = paired && liveKey ? await openPairedModel(liveKey, callLimit) : undefined
+  const dayCallLimit = liveReview ? reviewCount : callLimit
+  const pairedModel = paired && liveKey ? await openPairedModel(liveKey, dayCallLimit) : undefined
   let providerUrl = pairedModel?.baseURL ?? 'https://api.deepseek.com/anthropic'
   if (!liveProvider) {
     provider.listen(0, '127.0.0.1')
@@ -243,7 +245,6 @@ allowBuilds:
     providerUrl = `http://127.0.0.1:${address.port}`
   }
   const outputLimit = liveProvider ? pairedOutputLimit : 64
-  const dayCallLimit = liveReview ? 3 : callLimit
   const overlay = (stateDir: string) => `- id: llm-deepseek
   config:
     baseURL: ${providerUrl}
@@ -382,8 +383,24 @@ ${pairedModel ? foregroundPreset : ''}`
     return
   }
   if (liveReview) {
-    const taskIds = await verifyLiveReview(first, startResident, workRoot)
-    console.log(JSON.stringify({ taskIds, calls: settledCalls(taskIds) }))
+    let foreground = pairedModel && pairOrder === 'foreground-first'
+      ? await verifyForegroundReviews(first, startResident, workRoot, pairedModel) : undefined
+    const worker = await verifyLiveReview(foreground?.reopened ?? first, startResident, workRoot, pairedModel)
+    const calls = settledCalls(worker.taskIds)
+    if (pairedModel) {
+      if (pairOrder === 'worker-first') foreground = await verifyForegroundReviews(worker.reopened, startResident, workRoot, pairedModel)
+      assert.ok(foreground)
+      pairedModel.verifyComplete()
+      expect(calls).toEqual(worker.measurements.map(({ usage, estimatedCostMicrosUsd }) => ({ model: pairedModelId, usage, estimatedCostMicrosUsd })))
+      const order = pairOrder === 'foreground-first' ? ['foreground', 'worker'] : ['worker', 'foreground']
+      console.log(JSON.stringify({ workflow: pairWorkflow, order, model: pairedModelId,
+        foreground: { reviews: foreground.measurements, ownerCommands: reviewCount },
+        worker: { reviews: worker.measurements, ownerCommands: reviewCount * 3 } }))
+    } else {
+      console.log(JSON.stringify({ taskIds: worker.taskIds, calls }))
+    }
+    const finalHost = pairOrder === 'worker-first' && foreground ? foreground.reopened : worker.reopened
+    await finalHost.stop()
     return
   }
   const { inbox } = first

@@ -18,6 +18,24 @@ interface NativeRpc {
   rpc<T>(method: string, payload: unknown, timeout?: number): Promise<T>
 }
 
+interface AssistantRecord {
+  event: {
+    type: string
+    seq: number
+    data: { interrupted?: boolean; message: { content: { type: string; text?: string }[] } }
+  }
+}
+
+function decodeReport({ event }: AssistantRecord, cursor: string) {
+  expect(event.type).toBe('assistant/message')
+  expect(event.data.interrupted).not.toBe(true)
+  const contents = event.data.message.content
+  expect(contents.every(block => block.type === 'text')).toBe(true)
+  const report = decodeWorkerReport(contents.map(block => block.text).join(''))
+  assert.ok(report?.cursor === cursor, 'Invalid foreground report')
+  return report
+}
+
 export async function prepareForeground({ rpc }: NativeRpc, cwd: string, verifyExchange: () => void) {
   const session = await rpc<{ sessionId: string; agentPreset: string }>('session/create', {
     args: { request: { cwd, agentPreset: 'paired-text' } },
@@ -28,22 +46,6 @@ export async function prepareForeground({ rpc }: NativeRpc, cwd: string, verifyE
     sessionId, provider: 'deepseek-official', model, reasoningEffort: 'off',
   } } })
   expect(selected).toMatchObject({ selected: { provider: 'deepseek-official', model } })
-  async function readReport({ rpc }: NativeRpc, afterSeq: number, cursor: string) {
-    const value = await rpc<{ reason: string; output: { truncated: boolean; records: {
-      event: { type: string; data: { interrupted?: boolean; message: { content: { type: string; text?: string }[] } } }
-    }[] } }>('session/wait', { args: { request: { sessionId, afterSeq, timeoutMs: 30_000, maxMessages: 2 } } }, 35_000)
-    verifyExchange()
-    expect({ reason: value.reason, truncated: value.output.truncated, messages: value.output.records.length })
-      .toEqual({ reason: 'idle', truncated: false, messages: 1 })
-    const event = value.output.records[0]!.event
-    expect(event.type).toBe('assistant/message')
-    expect(event.data.interrupted).not.toBe(true)
-    const contents = event.data.message.content
-    expect(contents.every(block => block.type === 'text')).toBe(true)
-    const report = decodeWorkerReport(contents.map(block => block.text).join(''))
-    assert.ok(report?.cursor === cursor, 'Invalid foreground report')
-    return report
-  }
   return async (host: NativeRpc, outcome: string, cursor: string) => {
     const { cursor: afterSeq } = await host.rpc<{ cursor: number }>('session/state', { args: { request: { sessionId } } })
     const startedAt = performance.now()
@@ -51,8 +53,26 @@ export async function prepareForeground({ rpc }: NativeRpc, cwd: string, verifyE
       content: [{ type: 'text', text: `${workerReportInstructions(cursor)}\n\n${outcome}` }],
     } } })
     expect(sent).toEqual({ accepted: true })
-    const report = await readReport(host, afterSeq, cursor)
+    const result = await host.rpc<{ reason: string; output: { truncated: boolean; records: AssistantRecord[] } }>(
+      'session/wait', { args: { request: { sessionId, afterSeq, timeoutMs: 30_000, maxMessages: 2 } } }, 35_000)
+    verifyExchange()
     const elapsedMs = Math.round(performance.now() - startedAt)
-    return { report, elapsedMs, readback: (reopened: NativeRpc) => readReport(reopened, afterSeq, cursor) }
+    expect({ reason: result.reason, truncated: result.output.truncated, messages: result.output.records.length })
+      .toEqual({ reason: 'idle', truncated: false, messages: 1 })
+    const record = result.output.records[0]!
+    const report = decodeReport(record, cursor)
+    return {
+      report,
+      elapsedMs,
+      async readback(reopened: NativeRpc) {
+        const { seq } = record.event
+        const page = await reopened.rpc<{ records: AssistantRecord[] }>('session/page', {
+          args: { request: { address: { kind: 'session', sessionId }, throughSeq: seq, maxMessages: 1 } },
+        })
+        const durable = page.records.find(entry => entry.event.seq === seq)
+        assert.ok(durable, 'Missing committed foreground report after restart')
+        return decodeReport(durable, cursor)
+      },
+    }
   }
 }
