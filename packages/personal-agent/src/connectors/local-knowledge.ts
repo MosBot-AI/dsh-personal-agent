@@ -3,12 +3,13 @@ import { closeSync } from 'node:fs'
 import { isAbsolute, matchesGlob, posix } from 'node:path'
 import { setImmediate } from 'node:timers/promises'
 import { z } from 'zod'
-import { indexText, keywordScore, keywordSnippet, knowledgeQuery, textPage, type IndexedText } from '../context/search-index.js'
+import { evidenceSnippet, indexText, keywordScore, keywordSnippet, knowledgeQuery, textPage, type IndexedText } from '../context/search-index.js'
 import { knowledgeQuestion, rankQuestion } from '../context/question-search.js'
 import { sha256DigestSchema } from '../domain/model.js'
 import {
   directoryStat, fileStamp, identity, knowledgeFileOperations, openKnowledgeRoot, readKnowledgeFile, type KnowledgeFiles,
 } from './knowledge-files.js'
+import { createSocketKnowledgeRanker, type KnowledgeQuestionRanker } from './knowledge-ranker.js'
 
 const rootId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/u)
 const extensions = z.enum(['.md', '.markdown', '.txt', '.rst', '.csv', '.json'])
@@ -26,6 +27,8 @@ const rootSchema = z.strictObject({
 
 export const localKnowledgeConfigSchema = z.strictObject({
   roots: z.array(rootSchema).min(1).max(8).refine(roots => new Set(roots.map(root => root.id)).size === roots.length),
+  semanticRanker: z.strictObject({ socketPath: z.string().min(2).max(1024)
+    .refine(path => path.startsWith('/') && !/[\p{Cc}]/u.test(path)) }).optional(),
 })
 type RootConfig = z.infer<typeof rootSchema>
 const knowledgeRefSchema = z.strictObject({ rootId, id: sha256DigestSchema })
@@ -38,7 +41,7 @@ export const knowledgeRequestSchemas = [
 ] as const
 const requestSchema = z.discriminatedUnion('type', knowledgeRequestSchemas)
 
-type Reference = z.infer<typeof knowledgeRefSchema>
+type Reference = Readonly<z.infer<typeof knowledgeRefSchema>>
 type Source = { ref: Reference; path: string; revision: string }
 type Row = { source: Source; text: IndexedText; stamp: string }
 type Root = { config: RootConfig; pinned?: string; rows: Map<string, Row>; invalid: Map<string, string>;
@@ -65,8 +68,10 @@ function included(root: RootConfig, path: string): boolean {
 }
 
 /** Read-only connector. Its derived text index stays in process and is rebuilt on demand. */
-export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigSchema>) {
+export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigSchema>, ranker?: KnowledgeQuestionRanker) {
   const config = localKnowledgeConfigSchema.parse(input)
+  const semantic = ranker ?? (config.semanticRanker && createSocketKnowledgeRanker(config.semanticRanker.socketPath))
+  const rankerLifetime = semantic && new AbortController()
   const roots = new Map<string, Root>(config.roots.map(root => [root.id, {
     config: root, rows: new Map(), invalid: new Map(), status: 'unavailable',
   }]))
@@ -249,6 +254,35 @@ export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigS
           const stillCurrent = () => current() && !closed && !signal?.aborted
           const ranked = await rankQuestion(question, sources, source => source.row.text, stillCurrent)
           if (!ranked || !stillCurrent()) return fail('permission_denied')
+          if (semantic && rankerLifetime) {
+            const scoped = new Map(sources.filter(({ origin, row }) => currentRow(origin, row))
+              .map(entry => [entry.row.source.ref.id, entry]))
+            if (scoped.size) {
+              const documents = [...scoped.values()].map(({ row }) => ({
+                ...row.source, ref: { ...row.source.ref }, text: row.text.text,
+              }))
+              const lexicalIds = ranked.map(({ row }) => row.row.source.ref.id).filter(id => scoped.has(id))
+              const activeSignal = signal ? AbortSignal.any([signal, rankerLifetime.signal]) : rankerLifetime.signal
+              const selected = await semantic({ query: request.query, rootId: request.rootId, documents,
+                lexicalIds, limit: request.limit }, activeSignal).catch((error: unknown) => {
+                if (stillCurrent()) throw error
+                return []
+              })
+              if (!stillCurrent()) return fail('permission_denied')
+              for (const { id, revision, offset, length } of selected) {
+                const source = scoped.get(id)
+                if (!source) continue
+                const { origin, row } = source
+                if (revision !== row.source.revision || !currentRow(origin, row)) continue
+                const snippet = evidenceSnippet(row.text, offset, length)
+                if (snippet === undefined) continue
+                scoped.delete(id)
+                hits.push({ ...row.source, snippet })
+                if (hits.length >= request.limit) break
+              }
+            }
+            return { ok: true as const, kind: 'knowledge_search' as const, roots: statuses(), hits }
+          }
           const confirmed = []
           for (const candidate of ranked) {
             const { origin, row } = candidate.row
@@ -282,6 +316,7 @@ export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigS
     },
     close() {
       closed = true
+      rankerLifetime?.abort()
       for (const root of roots.values()) { root.rows.clear(); root.invalid.clear() }
     },
   }

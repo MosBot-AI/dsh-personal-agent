@@ -74,9 +74,22 @@ export function keywordSnippet(document: IndexedText, terms: readonly string[]):
     const normalized = normalize(value)
     return terms.some(term => normalized.includes(term))
   }) ?? lines[0] ?? ''
-  const units = Array.from(line.trim())
+  return boundedSnippet(line)
+}
+
+function boundedSnippet(text: string): string {
+  const units = Array.from(text.trim())
   const selected = units.slice(0, 180).join('')
   return units.length > 180 ? `${selected}…` : selected
+}
+
+/** Build a snippet from a contiguous proof at revision-bound UTF-8 byte offsets. */
+export function evidenceSnippet(document: IndexedText, offset: number, length: number): string | undefined {
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length <= 0
+    || offset + length > document.bytes) return undefined
+  const page = textPage(Buffer.from(document.text, 'utf8'), offset, length)
+  if (!page || (page.nextOffset ?? document.bytes) !== offset + length) return undefined
+  return boundedSnippet(page.text) || undefined
 }
 
 /** Offsets are revision-bound UTF-8 byte positions, not text indexes. */

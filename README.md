@@ -288,6 +288,8 @@ The in-memory index reuses unchanged entries and checks current files before ret
 
 Source text is displayed as evidence. The connector keeps it out of automatic Worker input, personal memory and native compaction summaries. The source root stays read-only, and the index is rebuilt on demand after restart.
 
+On Linux x64, you can configure the [optional local semantic ranker](scripts/knowledge-ranker/README.md) for English, Chinese, and mixed-language questions. It runs on the same host and supplies revision-checked excerpts when keyword search returns no hits.
+
 ### Read one GitHub repository
 
 Add `githubRead` under `config.inbox` on the `dshpa` row. Enter the actual numeric GitHub user and repository IDs and their current names. If you add an exact dshpa `projectId`, the configured project must be active. Without a project binding, the read belongs to the local owner profile.

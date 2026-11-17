@@ -36,6 +36,8 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Preserve refreshed local knowledge revisions when concurrent searches discard stale results.
 
 ### Added
+
+- Allow owners to opt in to a local semantic ranker for natural-language knowledge search with revision-checked source excerpts.
 - Prepare a dedicated packaged alpha profile and record opt-in owner trial observations and incidents locally.
 - Let paired mobile devices browse tasks beyond the recent snapshot with authenticated pagination, one page at a time.
 - Add authenticated live shared-task pagination with scope- and device-bound cursors that expire on restart and title previews for long outcomes. Other shared domains remain unavailable.

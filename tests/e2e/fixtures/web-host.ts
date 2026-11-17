@@ -76,7 +76,7 @@ export function prepareWebHost(probe?: string, patch: readonly string[] = [], lo
 }
 
 export async function openWebHost(probe: string, options: { patch?: readonly string[]; configOnly?: boolean;
-  prepared?: ReturnType<typeof prepareWebHost> } = {}) {
+  prepared?: ReturnType<typeof prepareWebHost>; rpcTimeoutMs?: number } = {}) {
   const { root, dshHome, profileName: selectedProfile } = options.prepared ?? prepareWebHost(probe, options.patch)
   let child: ChildProcessWithoutNullStreams | undefined
   const close = async () => { if (child) await stop(child) }
@@ -171,7 +171,7 @@ export async function openWebHost(probe: string, options: { patch?: readonly str
         },
         body: JSON.stringify({ type: 'client-request', rpcId, method, payload }),
         redirect: 'manual',
-        signal: AbortSignal.timeout(responseTimeoutMs),
+        signal: AbortSignal.timeout(options.rpcTimeoutMs ?? responseTimeoutMs),
       })
     } catch (error) {
       throw new Error(`Native Web RPC ${method} failed\n${recentDiagnostics}`, { cause: error })

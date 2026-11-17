@@ -288,6 +288,8 @@ knowledge:
 
 来源文本作为证据展示，与 Worker 自动输入、个人记忆和原生压缩摘要分开。来源目录保持只读，索引在重启后按需重建。
 
+在 Linux x64 上，可为英语、中文和混合语言问题配置[可选的本地语义排序服务](scripts/knowledge-ranker/README-zh.md)。服务在同一台宿主上运行，关键词检索无结果时可提供经过修订核对的引文。
+
 ### 只读访问一个 GitHub 仓库
 
 在 `dshpa` 条目的 `config.inbox` 下添加 `githubRead`。填写实际的 GitHub 用户和仓库数字 ID，以及当前名称。若指定准确的 dshpa `projectId`，所配置的项目必须处于活跃状态。未绑定项目时，读取归属本地所有者 Profile。
