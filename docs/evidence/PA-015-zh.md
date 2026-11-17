@@ -144,3 +144,24 @@ DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=confirmatory \
   DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/confirmation-reports \
   pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
 ```
+
+## 抽取式答案判定与多语言对照（2026-11-17）
+
+两种抽取式模型在同一批 Qwen3 候选文档上，将一段连续原文的得分与模型的无答案得分比较。实验在隔离网络的 Linux 命名空间内使用六个 CPU 推理线程，校准数据包含 24 道有答案题和 24 道缺失事实对照题。组合方案按校准数据中的十分位差缩放分数，并用同一校准集选定权重。额外的拟答复核将首个候选与问题要求的对象、属性和条件比较，再据此筛选整个查询的结果。[固定 XLM-R 版本](https://huggingface.co/deepset/xlm-roberta-base-squad2-distilled/tree/c1bbfe57bc3335c37960a48c5628ba26d7e9e3b7) · [固定 mDeBERTa 版本](https://huggingface.co/timpal0l/mdeberta-v3-base-squad2/tree/08d6e89c7a6557f967db2e1021f7f640483400ed)
+
+| 离线方法 | 较早留出集首条／前三条命中 | 较早留出集无答案误报 | 确认集首条／前三条命中 | 确认集无答案误报 |
+| --- | ---: | ---: | ---: | ---: |
+| XLM-R 抽取 | 31 / 43，共 54 题 | 4，共 18 题 | 33 / 39，共 54 题 | 3，共 18 题 |
+| mDeBERTa 抽取 | 46 / 48，共 54 题 | 0，共 18 题 | 44 / 44，共 54 题 | 2，共 18 题 |
+| Qwen3 与 mDeBERTa 组合 | 50 / 52，共 54 题 | 0，共 18 题 | 45 / 45，共 54 题 | 1，共 18 题 |
+| 组合并复核拟答 | 49 / 51，共 54 题 | 0，共 18 题 | 47 / 47，共 54 题 | 1，共 18 题 |
+
+剩下的误报给出了一个日期，问题要求的是日期书写格式。用已经知道的结果回看分数及领先差距，在两套语料均零误报的条件下，先前确认集的首条命中最多为 39/54。[比较记录](https://github.com/MosBot-AI/dsh-personal-agent/issues/182#issuecomment-6947400499)
+
+新的[答案判定留出集](../../tests/e2e/fixtures/knowledge-retrieval/answerability-holdout.json)包含 18 个合成主题、54 个不同事实，使用篇幅更长且包含多个事实的文档。18 个缺失事实对照在英语、中文和混合语言之间均分。SHA-256 为 `ad223709bc0630197d2bbd712a850f720278a0c4afad3767d782994b06354eec`。在 `d3b787080baf10a917ad661fd8845f8a4191583e` 的经鉴权原生 Web 中，首条和前三条均命中 30/54，英语、中文和混合语言的首条命中分别为 7/18、10/18 和 13/18。40 次来源回读均与语料的字节和版本一致。6 个缺失事实对照返回了结果，测试先写出报告，随后未通过无答案断言。重放复现了 72 题的结果顺序，并将 24 道有答案题的漏检归因为词项重叠不足（17 题）、段落判断（4 题）或文档证据不足（3 题）。新语料保留给选定候选的原生验收。[原生基线记录](https://github.com/MosBot-AI/dsh-personal-agent/issues/182#issuecomment-6947020481)
+
+```sh
+DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=answerability \
+  DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/answerability-reports \
+  pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
+```
