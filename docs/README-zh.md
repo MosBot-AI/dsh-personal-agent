@@ -27,6 +27,7 @@
 | [常驻宿主运维](operations-zh.md) | 前台 Profile、可选用户服务、健康检查、备份和审计 |
 | [Alpha 安装证据](evidence/PA-028-zh.md) | 打包后的原生 Worker 启动及剩余发布检查 |
 | [基础工作流评测](evidence/PA-027-zh.md) | 前台会话与 Worker 的配对测量及待验收事项 |
+| [基础 Alpha 验收报告](evidence/alpha-report-zh.md) | E00–E12 证据和待完成的发布条件 |
 | [宿主兼容性证据](evidence/host-compatibility-zh.md) | 已安装 DSH 的代理、会话、调度和远程访问边界 |
 | [工作领域证据](evidence/PA-003-zh.md) | 记录校验、限定范围的命令准入和任务状态转换 |
 | [SQLite 存储证据](evidence/PA-004-zh.md) | 原子工作提交、单写入进程和故障恢复 |
