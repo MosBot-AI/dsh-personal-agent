@@ -1,0 +1,769 @@
+{
+  "rubric": {
+    "positiveQueries": "54 questions across 18 new topics, grouped in 18 related sets of three languages.",
+    "negativeControls": "18 same-topic questions whose requested fact is absent from both files.",
+    "meaning": "A sourced hit requires an annotated source with the exact answer anchor."
+  },
+  "documents": {
+    "materials/observatory/instructions.md": "# Rain sensor handover\n\nSpare clips for the rain sensor are kept in the blue drawer.\n",
+    "materials/observatory/related.md": "# Rain sensor handover (related notes)\n\nThe blue cabinet holds rain gauge labels; clips for the archive folders are in the bottom drawer.\n",
+    "materials/maker/instructions.md": "# 激光切割机收尾\n\n灰色工作布只擦机器外壳，镜片清洁必须交给值班技师。\n",
+    "materials/maker/related.md": "# 激光切割机收尾 (相关记录)\n\n旧裁纸机使用灰色工作布保养；库存只记录塑料护盖。\n",
+    "materials/dispatch/instructions.md": "# Riverside volunteer pickup\n\nThe courier collects boxed donations from Door C on Saturdays before noon.\n",
+    "materials/dispatch/related.md": "# Riverside volunteer pickup (related notes)\n\nDoor A is reserved for weekday pallet deliveries; weekend walkers register at Door B.\n",
+    "materials/archive/instructions.md": "# 地图扫描命名\n\n第二次扫描同一张地图时，文件名以原编号开头，末尾加上 -rescan。\n",
+    "materials/archive/related.md": "# 地图扫描命名 (相关记录)\n\n首次扫描用登记编号生成预览图；示例文件属于馆藏照片。\n",
+    "materials/aquarium/instructions.md": "# Quarantine tank lighting\n\nVisitors may use a red torch inside the quarantine aisle but white beams disturb the cubby tanks.\n",
+    "materials/aquarium/related.md": "# Quarantine tank lighting (related notes)\n\nA white work lamp is allowed during filter maintenance in the public display aisle.\n",
+    "materials/courtyard/instructions.md": "# 雨后庭院开放\n\n南面的木栈道需要等木板表面干透后才对参观者重新开放。\n",
+    "materials/courtyard/related.md": "# 雨后庭院开放 (相关记录)\n\n北面石路雨后可以通行，清扫人员只检查落叶。\n",
+    "materials/sewing/instructions.md": "# Tapestry loom complaints\n\nFor a loose guide wheel on the tapestry loom, submit the yellow maintenance slip to the shift supervisor.\n",
+    "materials/sewing/related.md": "# Tapestry loom complaints (related notes)\n\nA green slip records needle counts on the smaller sewing machine and stays with the kit.\n",
+    "materials/bike/instructions.md": "# 骑行补给站回收\n\n骑行活动结束后，空气筒要送回靠停车线的工具柜，而不是归还到签到台。\n",
+    "materials/bike/related.md": "# 骑行补给站回收 (相关记录)\n\n签到台回收借出的腕带和活动标牌；停车线旁安排志愿者。\n",
+    "materials/theatre/instructions.md": "# Backstage cue reset\n\nWith the stage clear, press and hold the black cue button until its LED goes out.\n",
+    "materials/theatre/related.md": "# Backstage cue reset (related notes)\n\nThe green cue button is used to confirm radio reception at the door podium.\n",
+    "materials/cohort/instructions.md": "# 翻译工作坊组别调整\n\n翻译工作坊报名后如需换组，要先让新组组长同意，再回复原确认邮件。\n",
+    "materials/cohort/related.md": "# 翻译工作坊组别调整 (相关记录)\n\n口译比赛改动参赛组别由评委统一分配，参赛者会收到新编号。\n",
+    "materials/greenhouse/instructions.md": "# Seedling incident notes\n\nWhen a flat of seedlings gets knocked over, record the tray code and the time on the green clipboard.\n",
+    "materials/greenhouse/related.md": "# Seedling incident notes (related notes)\n\nThe green clipboard in the shop logs returned keys and the initials of the borrower.\n",
+    "materials/hall/instructions.md": "# 灯笼展馆展品异常\n\n灯笼边缘开线时，在入口的缺陷登记簿记下展位号和开线位置。\n",
+    "materials/hall/related.md": "# 灯笼展馆展品异常 (相关记录)\n\n入口有一本参观登记簿，记录到场时间和团体人数。\n",
+    "materials/trolley/instructions.md": "# Library cart overnight\n\nLock the empty transport cart next to the loading bay fence before leaving for the night.\n",
+    "materials/trolley/related.md": "# Library cart overnight (related notes)\n\nLoaded book carts stay in the inventory room until the morning crew takes them.\n",
+    "materials/drama/instructions.md": "# 儿童戏剧午休交接\n\n午休交接时，儿童戏剧班的点名册要直接交给蓝色胸牌的当班引导员。\n",
+    "materials/drama/related.md": "# 儿童戏剧午休交接 (相关记录)\n\n夜场工作人员用蓝色胸牌领道具并核对钥匙。\n",
+    "materials/festival/instructions.md": "# Mic check in reading tent\n\nThe announcer uses the wired spare microphone if the wireless feed cuts out in the reading tent.\n",
+    "materials/festival/related.md": "# Mic check in reading tent (related notes)\n\nThe doorway tent has a wired paging speaker that only plays the fire drill announcement.\n",
+    "materials/park/instructions.md": "# 公园饮水点临时停用\n\n更换滤芯时，儿童游乐区旁的饮水点用紫色告示牌提示暂不可用。\n",
+    "materials/park/related.md": "# 公园饮水点临时停用 (相关记录)\n\n公园入口的紫色告示牌说明开放时间；东门饮水台另有维修计划。\n",
+    "materials/weather/instructions.md": "# Weather board offline\n\nIf the lobby weather board stops updating, write the latest recorded time on the paper sign beside it.\n",
+    "materials/weather/related.md": "# Weather board offline (related notes)\n\nThe paper notice near the stairwell lists training days and building exit drills.\n",
+    "materials/kayak/instructions.md": "# 皮艇码头防滑用品\n\n码头湿滑时，防滑垫从玻璃门右侧的浅木架取用。\n",
+    "materials/kayak/related.md": "# 皮艇码头防滑用品 (相关记录)\n\n玻璃门左侧放借用的救生衣，户外小柜放杂物清洁布。\n"
+  },
+  "queries": [
+    {
+      "id": "fresh-observatory-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where would I look for the replacement clips for the rain sensor?",
+      "relevant": [
+        {
+          "path": "materials/observatory/instructions.md",
+          "anchor": "Spare clips for the rain sensor are kept in the blue drawer."
+        }
+      ]
+    },
+    {
+      "id": "fresh-observatory-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "天文台雨量传感器的备用夹子放在哪里？",
+      "relevant": [
+        {
+          "path": "materials/observatory/instructions.md",
+          "anchor": "Spare clips for the rain sensor are kept in the blue drawer."
+        }
+      ]
+    },
+    {
+      "id": "fresh-observatory-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Rain sensor 的 spare clips 要到哪个抽屉拿？",
+      "relevant": [
+        {
+          "path": "materials/observatory/instructions.md",
+          "anchor": "Spare clips for the rain sensor are kept in the blue drawer."
+        }
+      ]
+    },
+    {
+      "id": "fresh-maker-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Who must handle cleaning the laser cutter's optical lens?",
+      "relevant": [
+        {
+          "path": "materials/maker/instructions.md",
+          "anchor": "灰色工作布只擦机器外壳，镜片清洁必须交给值班技师。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-maker-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "激光切割机的镜片脏了，该交给谁处理？",
+      "relevant": [
+        {
+          "path": "materials/maker/instructions.md",
+          "anchor": "灰色工作布只擦机器外壳，镜片清洁必须交给值班技师。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-maker-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Laser cutter 的镜片能用灰布吗，谁来清洁？",
+      "relevant": [
+        {
+          "path": "materials/maker/instructions.md",
+          "anchor": "灰色工作布只擦机器外壳，镜片清洁必须交给值班技师。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-dispatch-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which entrance should boxed donations go to for the weekend courier?",
+      "relevant": [
+        {
+          "path": "materials/dispatch/instructions.md",
+          "anchor": "The courier collects boxed donations from Door C on Saturdays before noon."
+        }
+      ]
+    },
+    {
+      "id": "fresh-dispatch-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "周六送箱装捐赠物的快递员从哪个入口取件？",
+      "relevant": [
+        {
+          "path": "materials/dispatch/instructions.md",
+          "anchor": "The courier collects boxed donations from Door C on Saturdays before noon."
+        }
+      ]
+    },
+    {
+      "id": "fresh-dispatch-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Weekend courier 取 boxed donations 的 door 是哪一个？",
+      "relevant": [
+        {
+          "path": "materials/dispatch/instructions.md",
+          "anchor": "The courier collects boxed donations from Door C on Saturdays before noon."
+        }
+      ]
+    },
+    {
+      "id": "fresh-archive-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How should a repeat digital copy of the same map be named?",
+      "relevant": [
+        {
+          "path": "materials/archive/instructions.md",
+          "anchor": "第二次扫描同一张地图时，文件名以原编号开头，末尾加上 -rescan。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-archive-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "同一张地图重扫后，文件名怎样标记？",
+      "relevant": [
+        {
+          "path": "materials/archive/instructions.md",
+          "anchor": "第二次扫描同一张地图时，文件名以原编号开头，末尾加上 -rescan。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-archive-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Map rescan 要保留什么 file name，末尾写什么？",
+      "relevant": [
+        {
+          "path": "materials/archive/instructions.md",
+          "anchor": "第二次扫描同一张地图时，文件名以原编号开头，末尾加上 -rescan。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-aquarium-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What color flashlight is allowed beside the isolated tanks?",
+      "relevant": [
+        {
+          "path": "materials/aquarium/instructions.md",
+          "anchor": "Visitors may use a red torch inside the quarantine aisle but white beams disturb the cubby tanks."
+        }
+      ]
+    },
+    {
+      "id": "fresh-aquarium-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "检疫水箱的通道允许使用什么颜色的手电？",
+      "relevant": [
+        {
+          "path": "materials/aquarium/instructions.md",
+          "anchor": "Visitors may use a red torch inside the quarantine aisle but white beams disturb the cubby tanks."
+        }
+      ]
+    },
+    {
+      "id": "fresh-aquarium-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Quarantine aisle 里可以用哪种 color 的手电？",
+      "relevant": [
+        {
+          "path": "materials/aquarium/instructions.md",
+          "anchor": "Visitors may use a red torch inside the quarantine aisle but white beams disturb the cubby tanks."
+        }
+      ]
+    },
+    {
+      "id": "fresh-courtyard-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What must happen before visitors can use the southern wooden path again?",
+      "relevant": [
+        {
+          "path": "materials/courtyard/instructions.md",
+          "anchor": "南面的木栈道需要等木板表面干透后才对参观者重新开放。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-courtyard-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "雨后南侧的木栈道什么时候能重新开放？",
+      "relevant": [
+        {
+          "path": "materials/courtyard/instructions.md",
+          "anchor": "南面的木栈道需要等木板表面干透后才对参观者重新开放。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-courtyard-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "South boardwalk 开放前，木板要达到什么 condition？",
+      "relevant": [
+        {
+          "path": "materials/courtyard/instructions.md",
+          "anchor": "南面的木栈道需要等木板表面干透后才对参观者重新开放。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-sewing-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should I report a wobbly guide wheel on the loom?",
+      "relevant": [
+        {
+          "path": "materials/sewing/instructions.md",
+          "anchor": "For a loose guide wheel on the tapestry loom, submit the yellow maintenance slip to the shift supervisor."
+        }
+      ]
+    },
+    {
+      "id": "fresh-sewing-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "挂毯织机导轮松动，该把哪张单交给谁？",
+      "relevant": [
+        {
+          "path": "materials/sewing/instructions.md",
+          "anchor": "For a loose guide wheel on the tapestry loom, submit the yellow maintenance slip to the shift supervisor."
+        }
+      ]
+    },
+    {
+      "id": "fresh-sewing-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Tapestry loom 的导轮松了要交什么 slip，交给谁？",
+      "relevant": [
+        {
+          "path": "materials/sewing/instructions.md",
+          "anchor": "For a loose guide wheel on the tapestry loom, submit the yellow maintenance slip to the shift supervisor."
+        }
+      ]
+    },
+    {
+      "id": "fresh-bike-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should a bicycle pump be returned after the ride?",
+      "relevant": [
+        {
+          "path": "materials/bike/instructions.md",
+          "anchor": "骑行活动结束后，空气筒要送回靠停车线的工具柜，而不是归还到签到台。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-bike-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "活动结束后，自行车打气筒要放回哪里？",
+      "relevant": [
+        {
+          "path": "materials/bike/instructions.md",
+          "anchor": "骑行活动结束后，空气筒要送回靠停车线的工具柜，而不是归还到签到台。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-bike-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Bike pump 应该进哪边的工具柜，还是 check-in table？",
+      "relevant": [
+        {
+          "path": "materials/bike/instructions.md",
+          "anchor": "骑行活动结束后，空气筒要送回靠停车线的工具柜，而不是归还到签到台。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-theatre-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How do I reset the theatre cue control after everyone has left the stage?",
+      "relevant": [
+        {
+          "path": "materials/theatre/instructions.md",
+          "anchor": "With the stage clear, press and hold the black cue button until its LED goes out."
+        }
+      ]
+    },
+    {
+      "id": "fresh-theatre-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "舞台清空后，黑色提示按钮要按到什么时候？",
+      "relevant": [
+        {
+          "path": "materials/theatre/instructions.md",
+          "anchor": "With the stage clear, press and hold the black cue button until its LED goes out."
+        }
+      ]
+    },
+    {
+      "id": "fresh-theatre-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Stage clear 后怎么 reset black cue button？",
+      "relevant": [
+        {
+          "path": "materials/theatre/instructions.md",
+          "anchor": "With the stage clear, press and hold the black cue button until its LED goes out."
+        }
+      ]
+    },
+    {
+      "id": "fresh-cohort-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What must a registered translation workshop participant do to switch groups?",
+      "relevant": [
+        {
+          "path": "materials/cohort/instructions.md",
+          "anchor": "翻译工作坊报名后如需换组，要先让新组组长同意，再回复原确认邮件。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-cohort-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "翻译工作坊换组前怎么确认，后续用什么邮件联系？",
+      "relevant": [
+        {
+          "path": "materials/cohort/instructions.md",
+          "anchor": "翻译工作坊报名后如需换组，要先让新组组长同意，再回复原确认邮件。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-cohort-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "想 switch workshop group，需要谁同意并回复哪封 email？",
+      "relevant": [
+        {
+          "path": "materials/cohort/instructions.md",
+          "anchor": "翻译工作坊报名后如需换组，要先让新组组长同意，再回复原确认邮件。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-greenhouse-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What details belong on the incident sheet when seedlings fall?",
+      "relevant": [
+        {
+          "path": "materials/greenhouse/instructions.md",
+          "anchor": "When a flat of seedlings gets knocked over, record the tray code and the time on the green clipboard."
+        }
+      ]
+    },
+    {
+      "id": "fresh-greenhouse-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "育苗盘翻倒后，要在绿色夹板记录哪两项？",
+      "relevant": [
+        {
+          "path": "materials/greenhouse/instructions.md",
+          "anchor": "When a flat of seedlings gets knocked over, record the tray code and the time on the green clipboard."
+        }
+      ]
+    },
+    {
+      "id": "fresh-greenhouse-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Seedlings 被碰倒后 green clipboard 要记哪个 code 和时间？",
+      "relevant": [
+        {
+          "path": "materials/greenhouse/instructions.md",
+          "anchor": "When a flat of seedlings gets knocked over, record the tray code and the time on the green clipboard."
+        }
+      ]
+    },
+    {
+      "id": "fresh-hall-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What must be written down if an exhibited lantern comes unstitched?",
+      "relevant": [
+        {
+          "path": "materials/hall/instructions.md",
+          "anchor": "灯笼边缘开线时，在入口的缺陷登记簿记下展位号和开线位置。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-hall-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "展出的灯笼边缘开线，要在哪本册子里登记什么？",
+      "relevant": [
+        {
+          "path": "materials/hall/instructions.md",
+          "anchor": "灯笼边缘开线时，在入口的缺陷登记簿记下展位号和开线位置。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-hall-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Lantern 边缘开线，要在入口 log 写哪两项？",
+      "relevant": [
+        {
+          "path": "materials/hall/instructions.md",
+          "anchor": "灯笼边缘开线时，在入口的缺陷登记簿记下展位号和开线位置。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-trolley-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should the empty library transport cart be secured overnight?",
+      "relevant": [
+        {
+          "path": "materials/trolley/instructions.md",
+          "anchor": "Lock the empty transport cart next to the loading bay fence before leaving for the night."
+        }
+      ]
+    },
+    {
+      "id": "fresh-trolley-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "图书运输空车晚上要锁在哪里？",
+      "relevant": [
+        {
+          "path": "materials/trolley/instructions.md",
+          "anchor": "Lock the empty transport cart next to the loading bay fence before leaving for the night."
+        }
+      ]
+    },
+    {
+      "id": "fresh-trolley-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Empty library cart 夜间 lock 在装货区的什么位置？",
+      "relevant": [
+        {
+          "path": "materials/trolley/instructions.md",
+          "anchor": "Lock the empty transport cart next to the loading bay fence before leaving for the night."
+        }
+      ]
+    },
+    {
+      "id": "fresh-drama-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Who takes the children's drama workshop attendance list at lunch handover?",
+      "relevant": [
+        {
+          "path": "materials/drama/instructions.md",
+          "anchor": "午休交接时，儿童戏剧班的点名册要直接交给蓝色胸牌的当班引导员。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-drama-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "儿童戏剧班午休交接时，谁接收点名册？",
+      "relevant": [
+        {
+          "path": "materials/drama/instructions.md",
+          "anchor": "午休交接时，儿童戏剧班的点名册要直接交给蓝色胸牌的当班引导员。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-drama-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Drama class 午休时 roster 交给哪个颜色胸牌的人？",
+      "relevant": [
+        {
+          "path": "materials/drama/instructions.md",
+          "anchor": "午休交接时，儿童戏剧班的点名册要直接交给蓝色胸牌的当班引导员。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-festival-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What backup equipment should the reading tent announcer switch to after a radio dropout?",
+      "relevant": [
+        {
+          "path": "materials/festival/instructions.md",
+          "anchor": "The announcer uses the wired spare microphone if the wireless feed cuts out in the reading tent."
+        }
+      ]
+    },
+    {
+      "id": "fresh-festival-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "朗读帐篷的无线信号断了，该换什么备用设备？",
+      "relevant": [
+        {
+          "path": "materials/festival/instructions.md",
+          "anchor": "The announcer uses the wired spare microphone if the wireless feed cuts out in the reading tent."
+        }
+      ]
+    },
+    {
+      "id": "fresh-festival-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Reading tent 的 wireless mic 掉线用哪个 backup？",
+      "relevant": [
+        {
+          "path": "materials/festival/instructions.md",
+          "anchor": "The announcer uses the wired spare microphone if the wireless feed cuts out in the reading tent."
+        }
+      ]
+    },
+    {
+      "id": "fresh-park-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which sign color marks the playground drinking fountain as temporarily out of service?",
+      "relevant": [
+        {
+          "path": "materials/park/instructions.md",
+          "anchor": "更换滤芯时，儿童游乐区旁的饮水点用紫色告示牌提示暂不可用。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-park-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "游乐区旁的饮水点换滤芯时，用什么颜色的告示牌？",
+      "relevant": [
+        {
+          "path": "materials/park/instructions.md",
+          "anchor": "更换滤芯时，儿童游乐区旁的饮水点用紫色告示牌提示暂不可用。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-park-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Playground 饮水点换 filter 时提示牌是什么 color？",
+      "relevant": [
+        {
+          "path": "materials/park/instructions.md",
+          "anchor": "更换滤芯时，儿童游乐区旁的饮水点用紫色告示牌提示暂不可用。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-weather-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What should the lobby team display when the digital weather board freezes?",
+      "relevant": [
+        {
+          "path": "materials/weather/instructions.md",
+          "anchor": "If the lobby weather board stops updating, write the latest recorded time on the paper sign beside it."
+        }
+      ]
+    },
+    {
+      "id": "fresh-weather-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "大厅天气板停止刷新时，纸质提示牌上要写什么？",
+      "relevant": [
+        {
+          "path": "materials/weather/instructions.md",
+          "anchor": "If the lobby weather board stops updating, write the latest recorded time on the paper sign beside it."
+        }
+      ]
+    },
+    {
+      "id": "fresh-weather-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Weather board 卡住后旁边 paper sign 写哪个 time？",
+      "relevant": [
+        {
+          "path": "materials/weather/instructions.md",
+          "anchor": "If the lobby weather board stops updating, write the latest recorded time on the paper sign beside it."
+        }
+      ]
+    },
+    {
+      "id": "fresh-kayak-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where can paddlers collect non-slip mats when the kayak dock is wet?",
+      "relevant": [
+        {
+          "path": "materials/kayak/instructions.md",
+          "anchor": "码头湿滑时，防滑垫从玻璃门右侧的浅木架取用。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-kayak-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "皮艇码头湿滑时到哪里取防滑垫？",
+      "relevant": [
+        {
+          "path": "materials/kayak/instructions.md",
+          "anchor": "码头湿滑时，防滑垫从玻璃门右侧的浅木架取用。"
+        }
+      ]
+    },
+    {
+      "id": "fresh-kayak-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Kayak dock 湿了，non-slip mats 放在玻璃门哪一边？",
+      "relevant": [
+        {
+          "path": "materials/kayak/instructions.md",
+          "anchor": "码头湿滑时，防滑垫从玻璃门右侧的浅木架取用。"
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "How many spare clips are currently in that drawer?"
+    },
+    {
+      "language": "zh",
+      "query": "镜片清洁用哪款溶剂？"
+    },
+    {
+      "language": "en",
+      "query": "What identification does the courier show on arrival?"
+    },
+    {
+      "language": "zh",
+      "query": "重扫的最低扫描分辨率是多少？"
+    },
+    {
+      "language": "en",
+      "query": "What is the maximum brightness of an approved flashlight?"
+    },
+    {
+      "language": "zh",
+      "query": "南侧栈道维护是由哪家单位承包的？"
+    },
+    {
+      "language": "en",
+      "query": "How soon must the supervisor complete the repair?"
+    },
+    {
+      "language": "zh",
+      "query": "工具柜使用什么密码？"
+    },
+    {
+      "language": "en",
+      "query": "What model number is printed on the back of the cue remote?"
+    },
+    {
+      "language": "zh",
+      "query": "每人最多允许换几次组？"
+    },
+    {
+      "language": "en",
+      "query": "Who approved the green clipboard as the reporting location?"
+    },
+    {
+      "language": "zh",
+      "query": "开线后多久必须送修？"
+    },
+    {
+      "language": "en",
+      "query": "What padlock brand is assigned to the empty transport cart?"
+    },
+    {
+      "language": "zh",
+      "query": "点名册使用哪一种字体印刷？"
+    },
+    {
+      "language": "en",
+      "query": "What cable length is packed with the spare microphone?"
+    },
+    {
+      "language": "zh",
+      "query": "该饮水点滤芯多久更换一次？"
+    },
+    {
+      "language": "en",
+      "query": "What supplier makes the lobby weather board?"
+    },
+    {
+      "language": "zh",
+      "query": "防滑垫用的是什么橡胶材料？"
+    }
+  ]
+}
