@@ -27,6 +27,7 @@ Build a **persistent personal work system on the owner's computer**: one primary
 | [Resident host operations](operations.md) | Foreground profile, optional user services, health, backup and audit |
 | [Alpha installation evidence](evidence/PA-028.md) | Packaged native Worker startup and remaining release checks |
 | [Foundation workflow evaluation](evidence/PA-027.md) | Paired foreground and Worker measurements and remaining checks |
+| [Foundation Alpha acceptance report](evidence/alpha-report.md) | E00–E12 evidence and open release criteria |
 | [Host compatibility evidence](evidence/host-compatibility.md) | Installed DSH agent, session, schedule, and remote access boundaries |
 | [Work domain evidence](evidence/PA-003.md) | Record validation, scoped command admission, and task transitions |
 | [SQLite storage evidence](evidence/PA-004.md) | Atomic work commits, one-writer ownership, and failure recovery |
