@@ -165,3 +165,24 @@ DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=answerability \
   DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/answerability-reports \
   pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
 ```
+
+## 独立仓库文档语料（2026-11-17）
+
+[仓库文档留出集](../../tests/e2e/fixtures/knowledge-retrieval/repository-holdout.json)包含 28 段文档原文、54 道有标注答案的问题和 18 道缺失事实对照题。测试夹具记录了来源版本和行号范围。每种语言分组有 18 道有答案题和 6 道对照题。语料 SHA-256 为 `d0cde5e58272d766785cca24ed2bdf0ffaba40a40cf716a7e32034e2766c86f5`。两次原生对比开始前，语料和候选策略均已冻结。[评测协议与固定策略](https://github.com/MosBot-AI/dsh-personal-agent/issues/182#issuecomment-6950943496)
+
+| 经鉴权的原生 Web 运行 | 首条命中 | 前三条命中 | 缺失事实误报 | 一致的来源回读 |
+| --- | ---: | ---: | ---: | ---: |
+| 未改动的 dshpa `d0d1656` | 28/54 | 28/54 | 9/18 | 56/56 |
+| 基于 `d0d1656` 的一次性抽取式原型 | 37/54 | 37/54 | 3/18 | 58/58 |
+
+原型将 Qwen3 候选召回和重排与 mDeBERTa 答案片段抽取结合，再核对问题要求的答案类型和完整来源能否回答问题。英语、中文和混合语言的首条命中分别为 11/18、15/18 和 11/18。相比基线，原型找回了 17 题，丢失了 8 题。68.5% 的检索命中率低于 80% 目标，三道缺失事实题返回了结果，未通过无答案断言。CPU 运行耗时 1,983 秒。原型报告 SHA-256 为 `6d6556871a511dd13c697dee7b55d06c84b188c5eb35d7be9e82c03992d85aca`。产品继续使用现有词法检索。已评分的这套语料用于回归，后续确认使用新的留出问题。[原生对比及范围检查](https://github.com/MosBot-AI/dsh-personal-agent/issues/182#issuecomment-6952496106)
+
+离线诊断复现了全部 20 个错例在原生运行中的结果顺序。17 道有答案的漏检题中，标注来源全部进入复核阶段，随后都在完整文档检查前被拟答判定器排除。部分被排除的片段给出了正确的值，例如 `nextAfterSequence` 和 `null` 延续游标。三个无答案对照中，判定器和后续完整文档检查均放过了不相关的事实。诊断报告 SHA-256 为 `8033ebbced97d1ccc229c12c07336bea346ce1a2fd6f36acf57dfa3a3ded2580`。
+
+下面的命令用当前构建运行仓库文档语料，先写出报告，再检查无答案断言。未改动的基线由于上述九道缺失事实题返回了结果，测试退出为失败。
+
+```sh
+DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=repository \
+  DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/repository-reports \
+  pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
+```

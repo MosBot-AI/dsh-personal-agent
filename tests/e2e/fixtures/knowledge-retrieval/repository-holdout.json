@@ -1,0 +1,906 @@
+{
+  "rubric": {
+    "positiveQueries": "54 new multilingual questions about exact repository documentation excerpts.",
+    "negativeControls": "18 questions requesting details absent from the frozen excerpts, six in each language group.",
+    "meaning": "A hit must return an annotated source whose revision and exact text contain the answer."
+  },
+  "documents": {
+    "project-notes/note-01.md": "## Inspect the host\n\nThe live endpoint reports process reachability. Readiness uses HTTP 503 during startup, reconciliation, restore-only operation or shutdown. Both public responses contain only lifecycle fields and a per-process identifier. Owner inspection uses the authenticated local carrier and shows diagnostic codes and counts. The explicit `owner-url` command returns the process login link for the browser. Its file is owner-private and removed during normal shutdown.\n\nThe watchdog reports stale progress, repeated tool calls, compute limits and provider failures for the current Attempt. It is diagnostic. Provider authentication failures wait for owner revalidation. Temporary failures enter a timed resource wait and keep uncertain billing evidence. The owner can resume a released wait after its condition is met. A long heartbeat gap triggers bounded warm schedule reconciliation while preserving live work and cancelled generations.\n",
+    "project-notes/note-02.md": "## Backup, restore and retention\n\nThe backup operation copies a committed SQLite view, including sealed artifact bytes, to a standalone owner-private file. The default destination is `resident-backups` under the WorkStore. Set `resident.backupDirectory` to an absolute directory dedicated to this WorkStore if you use a separate volume. Its parent must already exist. After a successful backup, retention keeps at most `resident.maxBackups` managed snapshots within `resident.maxBackupAgeDays`. The defaults are seven snapshots and 30 days.\n\nKeep the owner identity file `local-inbox-identity.json` separately with mode `0600` if the same owner will inspect a restored WorkStore. Restore the standalone database into a fresh directory using the [backup restore procedure](../README.md#restore-a-standalone-work-backup). Copy the matching identity file to the restored directory, point the owner overlay at it, and start the profile. The restored host allows scoped inspection and reports live with readiness held for reconciliation. It keeps old dispatch authority fenced.\n\nThe audit command emits fixed metadata and counts for the authenticated owner. Pass `nextAfterSequence` as the optional final argument to read the next page. Full backups contain the work record. Watchdog diagnostic metadata is kept in memory for up to 14 days and 512 records by default. Configure `resident.watchdog.retentionDays` and `resident.watchdog.maxDiagnostics` to change those bounds. Authoritative work and artifacts follow the owner's retention and deletion decisions.\n",
+    "project-notes/note-03.md": "### Linux 用户服务\n\n```sh\nmkdir -p \"$HOME/.config/systemd/user\"\ndshpa_unit=\"$HOME/.config/systemd/user/dshpa-resident.service\"\nnode deploy/render-service.mjs systemd \"$dshpa_node\" \"$DSH_HOME\" dshpa-resident \"$dshpa_overlay\" 3080 > \"$dshpa_unit\"\nsystemd-analyze verify \"$dshpa_unit\"\nsystemctl --user daemon-reload\nsystemctl --user enable --now dshpa-resident.service\n```\n\n服务使用运行中的 systemd 用户管理器。若需要在登录前启动或退出登录后继续运行，请使用宿主的用户管理器策略。运行 `systemctl --user disable --now dshpa-resident.service` 停止并关闭自动启动，移除服务描述后重新加载用户管理器。保留 Profile 和状态目录。\n",
+    "project-notes/note-04.md": "### Search local knowledge\n\nIn **Today**, open **Local knowledge** and select **Check sources** or enter keywords or a question. A missing root appears as unavailable and the search continues with other configured roots. Search matches Chinese and English terms together and shows paths relative to each root. Open a result to see bounded text pages and its source reference. A reference pairs a stable ID with the SHA-256 revision of the document.\n\nThe in-memory index reuses unchanged entries and checks current files before returning results. Files and directories must be reachable from their configured root without symlinks. Hidden entries, hard links, binary content and files over the configured limits are skipped. The built-in type allowlist is `.md`, `.markdown`, `.txt`, `.rst`, `.csv` and `.json`. The default types are Markdown and plain text. Each root has a 4 MiB derived text budget. Limited roots may show partial results.\n\nSource text is displayed as evidence. The connector keeps it out of automatic Worker input, personal memory and native compaction summaries. The source root stays read-only, and the index is rebuilt on demand after restart.\n",
+    "project-notes/note-05.md": "### 管理个人记忆\n\n在**今日**中打开**个人记忆**。选择 Profile、项目或任务范围，再显式保存事实。搜索会核对有效期和准确的所选范围。查看时可检查来源回执、置信度、有效期及修订。更正会创建替代记录并隐藏旧记录。遗忘会立即隐藏记录，再请求提供者删除内容并保留墓碑。提供者变更仍在等待时可点**重试**。经过认证的 `dshpa/inbox` RPC 支持相同操作。对 `memory_remember`、`memory_correct` 和 `memory_forget`，可在重启后重发相同载荷和 `commandId`，继续被中断的变更。\n\n自动提取处于关闭状态。显式操作记录所有者确认的事实，提供者契约另行保留推断记录。记忆内容不携带动作授权。外部知识库 `llmwiki` 保持只读。\n\n记忆提供者在自己的数据库中保存事实内容。核心工作库保存范围、修订、摘要哈希、来源回执和排除规则。备份 Profile 时应同时保留两者。提供者的旧副本无法覆盖核心排除规则。已有的提供者快照或备份文件仍可能含有旧内容，分别遵循各自的留存规则。[SQLite 记忆提供者](packages/memory-sqlite/README-zh.md)\n",
+    "project-notes/note-06.md": "## 移动端任务浏览\n\n在显式启用的移动任务视图中，点击**浏览全部任务**（Browse all tasks）后，页面先用已配对的设备会话读取 `GET /v1/capabilities`。只有所有者开始浏览，且 `tasks.list` 受支持、已启用并可用时，页面才请求 `GET /v1/tasks`。该能力不可用时，页面会提示任务列表不可用。\n\n页面按任务 ID 顺序每次最多显示 32 条任务。有下一页时，**下一页**使用不透明游标替换当前页。**从头开始**不带游标读取首页。如果服务端返回 `cursor_invalid`，例如游标来自服务端重启前，页面会丢弃游标并提示所有者显式从头开始。\n\n点击**最近任务**返回实时快照。该快照与精确审批操作继续通过既有的已鉴权移动路由更新。会话失效（包括设备被撤销）、页面隐藏或事件流重连时，页面清除浏览状态并取消待处理的浏览请求。会话失效后，设备回到配对页面。共享任务页面沿用所有者、Profile 和对话可见性限制，并展示共享状态，包括待取消时的等待状态和对账时的未知状态。\n",
+    "project-notes/note-07.md": "## Live pagination semantics\n\nPages follow SQLite binary task-ID order. Continuation queries seek directly past the anchor ID within that ordering and retain the same owner, profile and conversation visibility filters. Inserts before the cursor require restarting the scan to observe them; later inserts can appear on subsequent pages. Updates are read live. Deleting an anchor does not invalidate ordering. A null continuation means the current query reached the end, not that future tasks cannot appear.\n\nContinuation tokens are opaque to clients, HMAC-bound to the trusted owner/profile, enrolled device and feed instance. Modifications, another device or a restart return `cursor_invalid` (400); restart without a cursor. Revocation/expiry returns `auth_required` (401), even with a previously valid cursor. Tokens carry no authentication authority and are never used as SQL scope. No new credential, durable secret or issuer is added. Page SQL returns at most 65 rows. An invalid record on the requested page fails the response with generic `internal_unavailable` (503).\n",
+    "project-notes/note-08.md": "## 3. 电脑操作：优先可靠接口，保留人接管\n\n顺序为：应用 API/连接器 → 语义化浏览器接口 → OS 自动化/可访问性接口 → 屏幕坐标操作。不是每个应用都具备前几种接口；适配器报告能力和降级方式，不能悄然换成更高权限路径。\n\nDSH 的 computer-use registry 只限制 provider 注册，不协调多个 Session 对同一个桌面的操作。因此 dshpa 新增 **整段工作流级桌面租约**：一个共享桌面同时只有一个控制者。文件/API 任务和媒体生成仍可并行；独立浏览器配置可按 provider 实际保证并行。用户接管有最高优先级，释放自动化控制前停止新点击/键盘输入，保留可续接检查点。[固定源码](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/computer-use/computer-use/README.md)。\n\n必需控件：正在操作哪个应用、暂停、立即接管、继续、停止任务。执行前验证当前窗口/页面；导航或焦点变化后重新确认对象。锁屏、权限撤回、登录过期、弹窗遮挡时记录 `waiting_environment`，释放计算槽；不要无限重试。已开始的不可中断操作保持核对状态。\n",
+    "project-notes/note-09.md": "### Durable media jobs\n\nProposed methods: `capabilities()`, `submit(spec, operationId)`, `inspect(handle)`, `cancel(handle)`, `collect(handle)`. Providers declare cancellation granularity, idempotence, retention and reconnect behavior. MediaJob records task/generation, provider instance, workflow/model versions, input digests, seed, specification, output handles and resource leases.\n\nPersist intent before submit and the provider handle afterward. Reconnect through queue/history. A lost submission response without a discoverable matching job becomes uncertain, not an automatic second render. Progress is presentation data; final backend state and verified output files establish completion. Validate MIME, dimensions, duration and hashes.\n\nComfyUI's current-workflow interrupt is not automatically scoped to a dshpa task. Interrupt only when the running job is demonstrably owned; otherwise wait or hand off. Prefer an exclusive instance or backend scheduling lock. Never cancel another user's render.\n\nStart with reviewed, versioned workflow templates. Custom nodes, model downloads and upgrades are software/resource changes, not automatically trusted content. Report missing components without silently installing large dependencies.\n",
+    "project-notes/note-10.md": "### 使用和锁定规则\n\n1. 用户在可信 UI 解锁或授权特定凭据用途；可设置有限时间的重复使用范围，避免每步重复确认。\n2. 代理绑定准确站点 origin、账号和任务；重定向、跨域 iframe、账号切换后重新校验。\n3. 密码进入受保护登录通道，不进入模型上下文、日志、命令参数、产物、剪贴板或截图。浏览器 DOM、网络日志、可访问性树与错误也需要检查，不能只遮住截图。\n4. 已登录 cookie/session 同样具有访问能力；密码不可见不等于登录后的数据不可访问。浏览器配置与操作权限也必须限定。\n5. 锁库、超时、重启和授权撤销阻止新使用；暂停相关任务等待用户，允许无关任务继续。主密码、MFA 与恢复操作由用户接管。\n\n对于无人值守工作，优先使用已授权、可撤销的服务令牌或限定会话；不默认永久解锁整个私人密码库。用户自己的电脑提供了部署自由，但不能自动解决任意本地进程读取秘密的问题。\n",
+    "project-notes/note-11.md": "## 4. Configuration and switching\n\nSettings show ID/version, capabilities, schema-generated configuration, health, data location, network destinations, active jobs and test/select/disable controls. Secret inputs use secure cards and configuration stores CredentialRef only. Invalid configuration fails visibly without silent fallback.\n\n1. Install/select a provider and disclose its resource/data access.\n2. Validate version/configuration, run contracts and connection probes, and persist a configuration revision.\n3. Media defaults change at new-job boundaries; retain old instances until jobs finish or cancellation reconciles.\n4. For memory, freeze writes, export a versioned snapshot including tombstones, import into the candidate and compare counts, IDs, hashes, access and retrieval cases.\n5. Atomically switch the core active-provider pointer. New context requests use the new revision; retain old snapshots under policy without migrating tasks/sessions.\n6. Failed import retains the old backend. Before rollback, replay subsequent corrections/deletions from the change log; never point at a stale copy that revives facts. Incomplete reconciliation blocks rollback.\n\nArbitrary hot replacement is not promised. Drain idle providers; otherwise wait, reconcile cancellation or require an explicit restart. Unavailable capabilities leave affected tasks waiting without silently using a paid external service.\n",
+    "project-notes/note-12.md": "## 2. 分发与依赖方向\n\n```text\npackages/\n  personal-agent/       # DSH bundle、可信控制服务、UI、服务消费者\n  plugin-api/           # 服务定义、版本、公开类型、注册与生命周期契约\n  plugin-testkit/       # keyless 契约测试和开发夹具\n  memory-sqlite/        # 默认记忆存储/关键词检索 provider\n  media-comfyui/        # 默认生成 provider\n  creation-workflows/  # 默认图片与视频创作流程\nexamples/plugins/      # 明确标注的记忆示例和媒体模拟 provider\n```\n\n依赖方向是核心消费者 → `plugin-api` ← provider；provider 不能导入核心私有目录，也不能直接修改核心任务/授权数据库。bundle 默认组合这些插件，但用户可以按支持的配置覆盖 provider。保持 Service Definition / Provider / Consumer 三种角色完整；不把每个辅助类都拆成 npm 包。\n\n预稳定的 `@mosbot-ai/dshpa-plugin-api` 包版本为 `0.1.0`，使用确切的能力 API 版本 `1`。`ProviderDefinition` 将清单、配置 Schema、校验和启动结合起来。`dshpaPlugins.register(definition, instance, config)` 返回 `ready` 与 `dispose`。宿主在启动前校验版本和配置，再接受对已就绪实例的明确选择。卸载先关闭准入，等待实际调用及迟到的启动结果，再排空并执行一次停止。健康与声明元数据和私有配置分开。\n",
+    "project-notes/note-13.md": "## 5. Quotas and exhaustion\n\n| Condition | Response |\n| --- | --- |\n| Temporary RPM/TPM | Retry-After/cooldown or permitted backup, not permanent exhaustion |\n| Credit/subscription/token quota exhausted | Disable affected account/bucket until trusted reset/repair; use quota chain |\n| dshpa hard spending cap | No new paid calls; permitted local/zero-incremental-cost candidates must still satisfy resource limits, else wait |\n| Context overflow | Controlled compaction or larger compatible context |\n| Timeout/5xx/network | Bounded retry/circuit breaker; retain uncertain spend reservation |\n| Bad key/permission/unsupported parameter | Mark deployment for repair; only independently authorized compatible alternatives may take over |\n| Safety/authorization denial | Retain denial; do not route around it |\n| All candidates unavailable | Persist waiting_resource with nextCheckAt and condition, release slot and notify once |\n\nQuota telemetry distinguishes local measurements, provider reports, estimates and unknowns, with timestamp/resetAt/confidence. Unknown is not unlimited. API billing and chat subscription allowances may be separate or inaccessible; do not assume subscription access. Use trusted resets or bounded probes, not model polling.\n\nRecheck capabilities, effort, destinations and budgets on every fallback. Configured grants need no repeated confirmation, but new destinations or exceeded caps cannot proceed. Assign one global fallback owner and bound gateway retries within the same attempt budget; reject cycles and do not evade service limits by account rotation.\n",
+    "project-notes/note-14.md": "## 4. 如何判断难度\n\n先按工具调用/结构化输出/视觉/上下文容量、隐私目的地、预算、账号可用性筛掉不合格模型，再评估任务。评分特征包括任务类型、约束数量、依赖深度、材料规模、多模态需求、代码范围、验证难度、失败记录和时延目标；长度不能单独代表难度，动作风险也不等于推理难度。\n\n初始规则：简单提取/格式整理用 fast + low；多来源总结/常规代码修改用 balanced + medium；复杂规划、跨模块修复、冲突证据研究用 deep + high。实际模型与 effort 映射全部由用户设置，不能从营销名称推断能力。状态查询等确定性操作不调用模型。\n\n低置信度选用户指定的保守档，或在关键范围不清时澄清。局部验证失败允许有限提升 effort，再提升模型；失败原因若为缺权限/缺资料则等待，不能浪费更贵模型重试。任务创建、阶段变化和明确失败时重评；固定模式默认不自动升级。更换模型后沿用相同验收条件，不能通过降低质量门槛“完成”。\n\nPA-041 实现确定性难度和可配置模型池及强度规则。可选语义估计通过独立的 Core 预算入口，质量升级保留验收摘要。[验证证据](evidence/PA-041-zh.md)\n",
+    "project-notes/note-15.md": "## 6. Cancellation and external effects\n\nCancellation flow:\n\n1. Persist `cancel_requested` and advance the task generation/revocation state.\n2. Block new dispatch and new effects for that attempt/scope.\n3. Invoke the native DSH cancellation path for the bound agent and relevant child work.\n4. Reconcile tools/jobs that may still be running and any external side effects.\n5. Mark confirmed cancellation only with termination/effect evidence; otherwise expose `cancelling` or `reconciliation_required`.\n\nNative agent cancellation does not undo a sent message, accepted booking, or committed file write. Do not claim rollback where only compensation is possible. Repeated cancel requests should be idempotent and should not cancel unrelated tasks.\n\nProposed effect state:\n\n```text\nprepared → authorized → dispatching → confirmed\n                         ├── failed\n                         └── uncertain → confirmed / failed / manual_reconciliation\n```\n\nWrite intent before dispatch and persist receipts after. Prefer provider idempotency keys. If a network timeout occurs after transmission, query the provider by operation/receipt before retrying. When neither idempotency nor reliable lookup exists, stop in an uncertain state. A local dedupe key alone cannot guarantee exactly-once behavior in a remote system.\n\nOutbox acceptance, provider acceptance, actual delivery, and recipient read are separate states. If the provider only reports acceptance, display that fact rather than claiming delivery.\n",
+    "project-notes/note-16.md": "### 事务与跨存储交接\n\n必需唯一键：`(ownerId, clientId, commandId)`、`(sourceInstanceId, externalEventId, externalRevision)`、`(routineId, routineRevision, occurrenceAt)`、`effect.operationId`，以及顶层尝试的 `(taskId, generation)`。同 command ID 不同规范化载荷返回冲突。来源适配器必须给出稳定 revision，或明确把更新视为新事件。\n\n命令事务读取预期版本、验证转换、存事件/结果，并添加效果与发件箱意图后提交；网络操作在提交后执行。一次性审批预留与不可变效果声明原子提交。授权检查和派发交接与撤销串行化；不可避免的在途动作保留核对路径。\n\n产品 SQLite 与 DSH Session 存储不能共享一次原子提交。使用持久交付意图和唯一输入 ID 衔接；Session flush 后再存确认。重启时比较 Session 已消费/待消费输入 ID，核对后决定重投。PA-002/009 必须验证固定宿主是否可观察这些状态；存在缺口则增加最小扩展点，不宣称天然恰好执行一次。\n\n原生 schedule 注册也跨提交：先存映射意图，再记录/核对创建出的 schedule ID；重复投递使用同 Occurrence 键。run-now 使用独立 command ID。在途提醒保留原 revision，并检查当前启用/撤销状态。\n",
+    "project-notes/note-17.md": "### Schedule local reminders and task wakes\n\nSet `routines: true` in the existing `inbox` block of the named local Web profile. Add this row to the same overlay so the native schedule service waits for the private Session resolver before checking due work.\n\n```yaml\n- id: schedule\n  inject: [dshpaScheduleResolverReady]\n```\n\nOpen **Routines** in **Today**, save a draft, then select **Arm schedule**. One-time schedules take a UTC instant. Repeating schedules use a five-field Cron expression and an IANA zone. The native calendar skips a missing spring-forward time and selects the earlier instant during a fall-back overlap. Select whether to skip missed occurrences or run the latest missed occurrence. Editing saves a new draft that needs explicit arming.\n\nLocal reminders appear in **Today** without a Worker or a model. A task wake checks the exact released wait and current authority and budget before returning the task to the queue. To bind a later task revision, edit the draft and arm it again. **Run now** creates a separate occurrence. It uses its own command identity, independent of the next timed wake. The native Automation page shows opaque wake entries. Manage the routine and its business outcome in **Today**.\n",
+    "project-notes/note-18.md": "### 复用已评审技能\n\n在**今日**打开**已评审技能**并选择项目。验收两个 Markdown 或纯文本任务结果后，将它们选作候选技能的样例。编写带有命名字段的 Markdown 模板，例如 `## {{topic}}`。选择另一个已验收任务的产物作为留出样例的预期结果，并以 JSON 对象输入该样例的值，例如 `{\"topic\":\"North\"}`。评测器只替换一轮字段，然后将结果的 UTF-8 字节与已验收产物逐字节比较。\n\n查看模式、来源和评测结果，随后批准并启用通过评测的确切版本。输入新值即可生成可复制的本地 Markdown，并可为该版本记录接受或需要纠正。起草新版本时，当前版本继续生效，直至你批准替换。若旧版本的证据仍可用，可选择曾获批准的版本进行回滚。\n\n技能仅在显式请求时运行，并在本地生成文本。来源不可用或被排除后，受影响的版本将无法继续使用。技能流程与个人记忆和调度相互独立。[PA-020 证据](docs/evidence/PA-020-zh.md)\n",
+    "project-notes/note-19.md": "## Prepare and run the profile\n\nBuild the workspace with the pinned Node.js and pnpm versions. Set up a fresh named profile once. DSH profile initialization replaces a profile with the same name.\n\n```sh\nexport DSH_HOME=\"$PWD/.dshpa/resident-home\"\npnpm install --frozen-lockfile\npnpm build\n",
+    "project-notes/note-20.md": "### Configure Linux targets (control not yet enabled)\n\nKeep `applications` for existing macOS bundle IDs. Configure exact Linux XDG IDs separately, without a `.desktop` suffix:\n\n```yaml\ndesktop:\n  linuxApplications: [chromium, org.xfce.Mousepad]\n```\n\nA profile supports up to 16 macOS applications, 16 Linux XDG targets and eight browser profiles.\n\nThe durable task key is namespaced, for example `linux:chromium`, so changing the installed provider cannot reinterpret a macOS grant. IDs are exact and case-sensitive; paths, commands, implicit suffix removal and fuzzy executable matching are not accepted. The upstream `list_apps` association uses process-name heuristics and is discovery metadata, not an authorization boundary.\n",
+    "project-notes/note-21.md": "### Run an isolated browser task\n\nThe optional Chrome bundle gives a task a leased browser profile and tab. Today shows the approved starting URL before launch. The model can observe and operate the isolated tab within its assigned origin. [Chrome provider setup](packages/browser-chrome/README.md)\n\n### Route events from trusted adapters\n\nThe local Web host publishes the `dshpaRouting` service for in-process adapters. The owner can declare previously verified accounts in `inbox.sourceAccounts` with `sourceInstanceId`, `accountId` and the UTC `verifiedAt` instant. An adapter authenticates the account independently of message content before binding its source token. It submits the original occurrence time and a stable external event ID and revision. The owner manages versioned `work` or `context` subscriptions through the authenticated inbox `set_subscription` operation. Work delivery uses the exact source, account, thread, project and task. A `routed` receipt includes the current native input journal status. Context subscriptions record the association without feeding or waking a Worker.\n\nSemantic assessment is optional. Add an `inbox.routing` block with `provider`, `model` and permitted `dataScope` labels. The assessor evaluates bounded batches and returns proposals for owner review. Both assessments and subscribed Worker input require known pricing with limits or an explicitly unmetered route. An event-triggered Worker wake also requires a trusted policy for the current grant and wait condition. Provider account enrollment belongs to the connector tasks.\n",
+    "project-notes/note-22.md": "## Implemented behavior\n\n- `GET /v1/capabilities` uses the existing mobile device cookie, exact Host/Origin checks, revocation and no-store responses. It returns the shared `personal.api.v1` envelope with the contract version, diagnostic backend ID, capabilities, transports and limits. Client behavior depends on capabilities, not a backend-name switch.\n- `tasks.list` reports supported, enabled and available on the configured mobile listener. The other six shared domain capabilities remain unavailable with `reason:not_implemented`. Existing native or legacy functionality does not imply a shared adapter exists.\n- `GET /v1/tasks` reauthenticates the current device on every request and returns at most `limit` tasks (1–64, default 32), with `next_cursor` or null and `consistency:live`. Each database query is scoped to the trusted owner/profile and conversation-backed tasks, matching legacy mobile visibility. Duplicate/unknown parameters are rejected. Only the five shared task fields are returned; private constraints, project references, credentials and original destinations are excluded.\n- Common errors distinguish authentication (401), forbidden origin (403), invalid request (400), unavailable capability (409), and temporary service failure (503). No credential, native session or source destination is returned.\n- Plain JSON discovery can be polled. `transport.polling:true` does not advertise a domain change feed: `changes.poll` remains unavailable. Shared SSE is false even though the unchanged legacy `/v1/events` uses SSE.\n- The shared task `title` contains the full requested outcome when it has at most 4,096 Unicode code points. Longer outcomes use the first 4,095 code points followed by `…` (U+2026). The full outcome is preserved in storage and returned by the legacy task snapshot.\n- A strict task projection maps native states to shared states. Pending cancellation remains waiting, and reconciliation remains unknown, never completed or cancelled. Invalid IDs, malformed records and unsafe numeric revisions fail projection. These are recorded task states, not proof that a worker is still running or an external effect is complete.\n",
+    "project-notes/note-23.md": "## Next slices and compatibility gaps\n\n1. Validate shared task pagination in deployed HTTPS and physical-phone environments. The legacy 64-task snapshot remains separate and is not used as the shared collection.\n2. Adapt approvals, operations and a pollable durable change feed, preserving exact one-use grants, version checks, revocation and unknown-outcome reconciliation.\n3. Adapt conversation continuation and memory only through the existing native owner/runtime boundary. Capability availability must remain false until each operation has its own verified adapter and security/recovery evidence.\n4. Run the same client contract suite against both backends once Hermes verifies the native HTTP principal and registers the shared routes. [Hermes identity #29](https://github.com/MosBot-AI/hermes-superagent/issues/29) · [Hermes domain API #30](https://github.com/MosBot-AI/hermes-superagent/issues/30)\n",
+    "project-notes/note-24.md": "### Creation workflows\n\n- **Image:** brief/reference → output specification → generate → preview/select → edit/variants → original and versioned output.\n- **Video:** purpose/duration/aspect → storyboard → selected/generated shots → assembly/subtitles/audio → playable preview → selective regeneration → final file and editable manifest.\n- Retain source assets, workflow/model versions and seeds. Seeds do not promise identical bytes across hardware.\n- Publishing is a distinct authorized action, separate from generation.\n\nAdd authenticated, scoped, range-capable media delivery. The audited DSH file route returns entire files with size restrictions; it does not establish large-video streaming support. PA-034 owns this addition. [Current route](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/api/session-controller/README.md).\n",
+    "project-notes/note-25.md": "## 8. Live VNC viewing and takeover\n\nThis explicit requirement belongs in desktop alpha (PA-036). Dots documents inspecting its computer, which supports the experience reference but does not establish its internal transport. dshpa explicitly implements VNC access.\n\nEmbed a pinned noVNC browser client. Use an independent websockify or validated equivalent when WebSocket-to-TCP bridging is needed; dshpa owns authorization. [noVNC](https://novnc.com/info.html), [websockify](https://github.com/novnc/websockify).\n\n```text\nWorkspace / mobile browser\n  → authenticated desktop session (owner + device + environment + view/control)\n  → TLS/WSS gateway and short-lived authorization\n  → private VNC/RFB backend\n",
+    "project-notes/note-26.md": "## 3. Provider contracts\n\n**MediaProvider:** `capabilities`, `submit`, `inspect`, `cancel`, `collect`, with durable handles and structured failures. Declare modalities, generation/editing, specifications, cancellation granularity, resources, destinations and pricing. Images and video may use different providers or one ComfyUI instance. Each MediaJob pins the configured instance, implementation ID, plugin version and configuration revision. Selection changes apply to new jobs. Readback resolves the exact recorded handle and reports its original provider unavailable when that pin is missing.\n\nThe optional `durableSubmission` contract prepares a backend handle and workflow digest without sending. The host persists them before one admitted submit. After an ambiguous response, it reconciles using the prepared handle. The local queue currently requires free, local providers that implement this contract. [ComfyUI provider](../packages/media-comfyui/README.md)\n\n**CreationWorkflowProvider:** declares input/output, required capabilities, workflow version, steps and checkpoints. Its core-wrapped media and tool callbacks inherit the exact task scope and close on return, cancellation or provider drain. The core records child media intent before handoff and records the accepted receipt before the workflow receives the handle. Core policy checks each child call and the declared result shape.\n\n**MemoryProvider:** `read`, `search`, `upsert`, `supersede`, `forget`, `exportSnapshot`, `importSnapshot`, `health`. Canonical records preserve IDs, owner/scope, content, sources, explicit/inferred status, validity, revision and tombstones. A vector-only component implements optional `MemoryRetrievalProvider`, not a complete store. Retrieval returns record IDs, scores and sources; the core rechecks scope and forgetting exclusions.\n\nMemory-provider records store personal facts. Core tasks, grants, delivery and exclusion records remain in the core database. Forgetting records a core exclusion before requesting provider deletion, with separate completed and pending states. Retrieval candidates are resolved through canonical scoped reads, and disclosure is checked again before publishing hits. Snapshot import preserves tombstones that have an exact confirmed core exclusion. Active records under an exclusion stay out of recall and import.\n",
+    "project-notes/note-27.md": "## 6. DSH and persistence\n\nRerouting creates a new inference attempt/request series, not a replay of the business task. Reassemble for the new model's capabilities; never transfer incompatible hidden reasoning or encrypted state. A gateway hiding the actual deployment cannot perform cross-model fallback unless capability equivalence is established.\n\nMark partial streams interrupted and start a separate attempt, never splice models' output. Dispatch only complete validated tool calls; preserve completed effects. A timed-out inference may still be billed.\n\nPersist ModelDeployment, QuotaBucket, RoutingPolicyRevision, RoutingDecision and InferenceAttempt, including exclusions, difficulty/confidence, actual model/effort, fallback cause, usage, pricing and reservation references. Exclude secrets/private reasoning. Configuration updates affect new decisions; revocation blocks new dispatch immediately.\n",
+    "project-notes/note-28.md": "## 2. Status and fields\n\n| Status | Meaning and exit condition |\n| --- | --- |\n| Backlog | Unclaimed, waiting on ordinary dependencies, not an operational failure |\n| Ready | Dependencies closed as completed, Project Done, verification label and evidence linked; available to claim |\n| In progress | Claimed with Execution agent, GitHub assignee and Claim comment |\n| Blocked | Specific external condition/decision prevents progress; record exact unblock condition |\n| In review | Reviewable PR and evidence supplied; review or required live acceptance pending |\n| Done | Merged implementation, applicable checks and verified outcome; Issue completed, acceptance:verified label and Evidence linked |\n\nPhase/Release retain planned stage and first-delivery tier. Priority is P0 for foundation alpha, P1 for desktop extensions and P2 for beta/v1. Execution agent identifies a run/chat, assignee identifies a real GitHub actor, Evidence links PR/records, and Last update changes with meaningful progress.\n\nAn unmerged PR, not-planned Issue or documentation/mock alone is not Done. Missing mandatory live acceptance remains In review/Blocked. Cancellation records a reason and requires downstream dependency review.\n"
+  },
+  "queries": [
+    {
+      "id": "repository-health-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which HTTP status should I expect on the resident readiness probe during a restore-only startup?",
+      "relevant": [
+        {
+          "path": "project-notes/note-01.md",
+          "anchor": "Readiness uses HTTP 503 during startup, reconciliation, restore-only operation or shutdown."
+        }
+      ]
+    },
+    {
+      "id": "repository-health-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "常驻宿主的 provider 认证失败后，要由谁重新验证？",
+      "relevant": [
+        {
+          "path": "project-notes/note-01.md",
+          "anchor": "Provider authentication failures wait for owner revalidation."
+        }
+      ]
+    },
+    {
+      "id": "repository-health-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "正常 shutdown 时，resident owner login link 对应的文件会怎么处理？",
+      "relevant": [
+        {
+          "path": "project-notes/note-01.md",
+          "anchor": "Its file is owner-private and removed during normal shutdown."
+        }
+      ]
+    },
+    {
+      "id": "repository-backup-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Before I point the resident backup setting at a separate volume, what directory must already exist?",
+      "relevant": [
+        {
+          "path": "project-notes/note-02.md",
+          "anchor": "Its parent must already exist."
+        }
+      ]
+    },
+    {
+      "id": "repository-backup-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "常驻宿主默认保留的自动备份最多有多少份？",
+      "relevant": [
+        {
+          "path": "project-notes/note-02.md",
+          "anchor": "The defaults are seven snapshots and 30 days."
+        }
+      ]
+    },
+    {
+      "id": "repository-backup-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Which argument 给 resident audit 命令传入下一页起点？",
+      "relevant": [
+        {
+          "path": "project-notes/note-02.md",
+          "anchor": "Pass `nextAfterSequence` as the optional final argument to read the next page."
+        }
+      ]
+    },
+    {
+      "id": "repository-linux-service-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What systemd component has to be running for the optional resident Linux service?",
+      "relevant": [
+        {
+          "path": "project-notes/note-03.md",
+          "anchor": "服务使用运行中的 systemd 用户管理器。"
+        }
+      ]
+    },
+    {
+      "id": "repository-linux-service-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "关闭 Linux 常驻服务的自动启动并移除服务描述后，应当保留哪些东西？",
+      "relevant": [
+        {
+          "path": "project-notes/note-03.md",
+          "anchor": "保留 Profile 和状态目录。"
+        }
+      ]
+    },
+    {
+      "id": "repository-linux-service-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Linux resident service 写好 user unit 后，用哪个 command 验证 unit 语法？",
+      "relevant": [
+        {
+          "path": "project-notes/note-03.md",
+          "anchor": "systemd-analyze verify \"$dshpa_unit\""
+        }
+      ]
+    },
+    {
+      "id": "repository-knowledge-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How is a configured local knowledge root displayed if its directory is missing?",
+      "relevant": [
+        {
+          "path": "project-notes/note-04.md",
+          "anchor": "A missing root appears as unavailable and the search continues with other configured roots."
+        }
+      ]
+    },
+    {
+      "id": "repository-knowledge-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "本地知识库每个根的派生文本索引预算是多少？",
+      "relevant": [
+        {
+          "path": "project-notes/note-04.md",
+          "anchor": "Each root has a 4 MiB derived text budget."
+        }
+      ]
+    },
+    {
+      "id": "repository-knowledge-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Which digest algorithm 用来生成 knowledge source reference 中的 revision？",
+      "relevant": [
+        {
+          "path": "project-notes/note-04.md",
+          "anchor": "A reference pairs a stable ID with the SHA-256 revision of the document."
+        }
+      ]
+    },
+    {
+      "id": "repository-memory-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What must I resend to resume an interrupted personal-memory mutation after a restart?",
+      "relevant": [
+        {
+          "path": "project-notes/note-05.md",
+          "anchor": "可在重启后重发相同载荷和 `commandId`，继续被中断的变更。"
+        }
+      ]
+    },
+    {
+      "id": "repository-memory-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "点个人记忆的遗忘操作后，提供者尚未删完时界面里的记录何时隐藏？",
+      "relevant": [
+        {
+          "path": "project-notes/note-05.md",
+          "anchor": "遗忘会立即隐藏记录，再请求提供者删除内容并保留墓碑。"
+        }
+      ]
+    },
+    {
+      "id": "repository-memory-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "备份 memory-enabled Profile 时，两处 data store 都要保留吗？",
+      "relevant": [
+        {
+          "path": "project-notes/note-05.md",
+          "anchor": "备份 Profile 时应同时保留两者。"
+        }
+      ]
+    },
+    {
+      "id": "repository-mobile-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What discovery request is made first when I open Browse all tasks on a paired mobile device?",
+      "relevant": [
+        {
+          "path": "project-notes/note-06.md",
+          "anchor": "页面先用已配对的设备会话读取 `GET /v1/capabilities`。"
+        }
+      ]
+    },
+    {
+      "id": "repository-mobile-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "移动端共享任务浏览遇到 `cursor_invalid` 后，页面会怎样处理当前游标？",
+      "relevant": [
+        {
+          "path": "project-notes/note-06.md",
+          "anchor": "页面会丢弃游标并提示所有者显式从头开始。"
+        }
+      ]
+    },
+    {
+      "id": "repository-mobile-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "After mobile event-stream reconnect，待处理的 browse reads 怎么处理？",
+      "relevant": [
+        {
+          "path": "project-notes/note-06.md",
+          "anchor": "会话失效（包括设备被撤销）、页面隐藏或事件流重连时，页面清除浏览状态并取消待处理的浏览请求。"
+        }
+      ]
+    },
+    {
+      "id": "repository-pagination-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What has to happen to a shared task scan before it can see a task inserted before the current cursor?",
+      "relevant": [
+        {
+          "path": "project-notes/note-07.md",
+          "anchor": "Inserts before the cursor require restarting the scan to observe them; later inserts can appear on subsequent pages."
+        }
+      ]
+    },
+    {
+      "id": "repository-pagination-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "共享任务分页已经到了当前末尾时，continuation 的值是什么？",
+      "relevant": [
+        {
+          "path": "project-notes/note-07.md",
+          "anchor": "A null continuation means the current query reached the end, not that future tasks cannot appear."
+        }
+      ]
+    },
+    {
+      "id": "repository-pagination-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Which error code 和 HTTP status 会在 shared cursor 被另一台 device 使用时返回？",
+      "relevant": [
+        {
+          "path": "project-notes/note-07.md",
+          "anchor": "Modifications, another device or a restart return `cursor_invalid` (400); restart without a cursor."
+        }
+      ]
+    },
+    {
+      "id": "repository-desktop-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "During desktop takeover, which party has the highest priority to control input?",
+      "relevant": [
+        {
+          "path": "project-notes/note-08.md",
+          "anchor": "用户接管有最高优先级"
+        }
+      ]
+    },
+    {
+      "id": "repository-desktop-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "共享桌面锁屏时，执行任务要记录成什么等待状态？",
+      "relevant": [
+        {
+          "path": "project-notes/note-08.md",
+          "anchor": "锁屏、权限撤回、登录过期、弹窗遮挡时记录 `waiting_environment`"
+        }
+      ]
+    },
+    {
+      "id": "repository-desktop-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Desktop UI 焦点切换后，下次执行前需要做哪项复核？",
+      "relevant": [
+        {
+          "path": "project-notes/note-08.md",
+          "anchor": "导航或焦点变化后重新确认对象。"
+        }
+      ]
+    },
+    {
+      "id": "repository-media-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How should a durable media submission be classified if its reply disappears and no corresponding backend job can be discovered?",
+      "relevant": [
+        {
+          "path": "project-notes/note-09.md",
+          "anchor": "A lost submission response without a discoverable matching job becomes uncertain, not an automatic second render."
+        }
+      ]
+    },
+    {
+      "id": "repository-media-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "持续媒体作业收到进度后，最终要凭什么判定完成？",
+      "relevant": [
+        {
+          "path": "project-notes/note-09.md",
+          "anchor": "final backend state and verified output files establish completion"
+        }
+      ]
+    },
+    {
+      "id": "repository-media-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "When is a ComfyUI interrupt allowed，必须先确认哪项 ownership？",
+      "relevant": [
+        {
+          "path": "project-notes/note-09.md",
+          "anchor": "Interrupt only when the running job is demonstrably owned; otherwise wait or hand off."
+        }
+      ]
+    },
+    {
+      "id": "repository-vault-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "During a vault-backed sign-in, what must be revalidated when a redirect changes the site?",
+      "relevant": [
+        {
+          "path": "project-notes/note-10.md",
+          "anchor": "代理绑定准确站点 origin、账号和任务；重定向、跨域 iframe、账号切换后重新校验。"
+        }
+      ]
+    },
+    {
+      "id": "repository-vault-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "发起密码登录时，原始密码经过哪个受控通道？",
+      "relevant": [
+        {
+          "path": "project-notes/note-10.md",
+          "anchor": "密码进入受保护登录通道"
+        }
+      ]
+    },
+    {
+      "id": "repository-vault-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Vault 授权撤销时，unrelated tasks 是否需要一起暂停？",
+      "relevant": [
+        {
+          "path": "project-notes/note-10.md",
+          "anchor": "暂停相关任务等待用户，允许无关任务继续。"
+        }
+      ]
+    },
+    {
+      "id": "repository-switching-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "When does changing a selected media default take effect for provider selection?",
+      "relevant": [
+        {
+          "path": "project-notes/note-11.md",
+          "anchor": "Media defaults change at new-job boundaries; retain old instances until jobs finish or cancellation reconciles."
+        }
+      ]
+    },
+    {
+      "id": "repository-switching-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "更换记忆提供者时，导出版本化快照前需要对写入做什么处理？",
+      "relevant": [
+        {
+          "path": "project-notes/note-11.md",
+          "anchor": "For memory, freeze writes, export a versioned snapshot including tombstones"
+        }
+      ]
+    },
+    {
+      "id": "repository-switching-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "在 memory provider rollback 前，subsequent corrections 和 deletions 要如何处理？",
+      "relevant": [
+        {
+          "path": "project-notes/note-11.md",
+          "anchor": "Before rollback, replay subsequent corrections/deletions from the change log"
+        }
+      ]
+    },
+    {
+      "id": "repository-package-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What exact capability API revision accompanies the pre-stable dshpa plugin API package?",
+      "relevant": [
+        {
+          "path": "project-notes/note-12.md",
+          "anchor": "使用确切的能力 API 版本 `1`"
+        }
+      ]
+    },
+    {
+      "id": "repository-package-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "provider 注册调用会返回哪两个操作或句柄？",
+      "relevant": [
+        {
+          "path": "project-notes/note-12.md",
+          "anchor": "`dshpaPlugins.register(definition, instance, config)` 返回 `ready` 与 `dispose`。"
+        }
+      ]
+    },
+    {
+      "id": "repository-package-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Unloading a plugin instance 时，宿主最先关闭什么？",
+      "relevant": [
+        {
+          "path": "project-notes/note-12.md",
+          "anchor": "卸载先关闭准入"
+        }
+      ]
+    },
+    {
+      "id": "repository-quota-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How should routing handle a timeout when it cannot determine whether usage was billed?",
+      "relevant": [
+        {
+          "path": "project-notes/note-13.md",
+          "anchor": "Bounded retry/circuit breaker; retain uncertain spend reservation"
+        }
+      ]
+    },
+    {
+      "id": "repository-quota-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "所有模型候选都暂时不可用时，要持久记录什么等待状态？",
+      "relevant": [
+        {
+          "path": "project-notes/note-13.md",
+          "anchor": "Persist waiting_resource with nextCheckAt and condition"
+        }
+      ]
+    },
+    {
+      "id": "repository-quota-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "During quota fallback，如果目标已经到 dshpa hard spending cap，还能发起新的付费调用吗？",
+      "relevant": [
+        {
+          "path": "project-notes/note-13.md",
+          "anchor": "No new paid calls"
+        }
+      ]
+    },
+    {
+      "id": "repository-difficulty-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Under the initial routing rules, what tier and reasoning effort apply to multi-source summarization?",
+      "relevant": [
+        {
+          "path": "project-notes/note-14.md",
+          "anchor": "多来源总结/常规代码修改用 balanced + medium"
+        }
+      ]
+    },
+    {
+      "id": "repository-difficulty-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "固定路由模式遇到失败时，默认会自动升级模型吗？",
+      "relevant": [
+        {
+          "path": "project-notes/note-14.md",
+          "anchor": "固定模式默认不自动升级。"
+        }
+      ]
+    },
+    {
+      "id": "repository-difficulty-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "切换 model 后，原 acceptance criteria 如何处理？",
+      "relevant": [
+        {
+          "path": "project-notes/note-14.md",
+          "anchor": "更换模型后沿用相同验收条件"
+        }
+      ]
+    },
+    {
+      "id": "repository-effects-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "After a send times out over the network, what must be done before retrying the external effect?",
+      "relevant": [
+        {
+          "path": "project-notes/note-15.md",
+          "anchor": "query the provider by operation/receipt before retrying"
+        }
+      ]
+    },
+    {
+      "id": "repository-effects-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "取消时若没有确认终止或效果证据，状态应怎样显示？",
+      "relevant": [
+        {
+          "path": "project-notes/note-15.md",
+          "anchor": "otherwise expose `cancelling` or `reconciliation_required`"
+        }
+      ]
+    },
+    {
+      "id": "repository-effects-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "如果没有 idempotency 和可靠 lookup，remote effect 要停在哪种状态？",
+      "relevant": [
+        {
+          "path": "project-notes/note-15.md",
+          "anchor": "When neither idempotency nor reliable lookup exists, stop in an uncertain state."
+        }
+      ]
+    },
+    {
+      "id": "repository-storage-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "In the documented cross-store delivery handoff, after which step is the confirmation saved?",
+      "relevant": [
+        {
+          "path": "project-notes/note-16.md",
+          "anchor": "Session flush 后再存确认。"
+        }
+      ]
+    },
+    {
+      "id": "repository-storage-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "命令事务涉及的网络副作用应在哪个时点执行？",
+      "relevant": [
+        {
+          "path": "project-notes/note-16.md",
+          "anchor": "网络操作在提交后执行。"
+        }
+      ]
+    },
+    {
+      "id": "repository-storage-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Which occurrence identity does schedule redelivery 使用，保持与首次交付一致？",
+      "relevant": [
+        {
+          "path": "project-notes/note-16.md",
+          "anchor": "重复投递使用同 Occurrence 键。"
+        }
+      ]
+    },
+    {
+      "id": "repository-schedules-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What happens to a repeating local schedule at a nonexistent local time during the spring clock change?",
+      "relevant": [
+        {
+          "path": "project-notes/note-17.md",
+          "anchor": "The native calendar skips a missing spring-forward time"
+        }
+      ]
+    },
+    {
+      "id": "repository-schedules-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "编辑一下本地例程后，新草稿需要做什么才会生效？",
+      "relevant": [
+        {
+          "path": "project-notes/note-17.md",
+          "anchor": "Editing saves a new draft that needs explicit arming."
+        }
+      ]
+    },
+    {
+      "id": "repository-schedules-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Run now 创建的 occurrence 和下次 timed wake 共用 command identity 吗？",
+      "relevant": [
+        {
+          "path": "project-notes/note-17.md",
+          "anchor": "It uses its own command identity, independent of the next timed wake."
+        }
+      ]
+    },
+    {
+      "id": "repository-skill-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How many accepted Markdown or text examples are selected to propose a reviewed skill?",
+      "relevant": [
+        {
+          "path": "project-notes/note-18.md",
+          "anchor": "验收两个 Markdown 或纯文本任务结果后，将它们选作候选技能的样例。"
+        }
+      ]
+    },
+    {
+      "id": "repository-skill-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "留出样例生成后，评测器按什么方式比较它与已验收产物？",
+      "relevant": [
+        {
+          "path": "project-notes/note-18.md",
+          "anchor": "将结果的 UTF-8 字节与已验收产物逐字节比较。"
+        }
+      ]
+    },
+    {
+      "id": "repository-skill-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "如果 reviewed skill 的 source 被排除，当前版本还能继续用吗？",
+      "relevant": [
+        {
+          "path": "project-notes/note-18.md",
+          "anchor": "来源不可用或被排除后，受影响的版本将无法继续使用。"
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "What interval in seconds triggers the resident watchdog heartbeat-gap condition?"
+    },
+    {
+      "language": "zh",
+      "query": "常驻宿主自动生成的备份文件名必须使用哪种日期格式？"
+    },
+    {
+      "language": "mixed",
+      "query": "Linux user service 默认设置多少秒的 restart delay？"
+    },
+    {
+      "language": "en",
+      "query": "What filesystem polling interval refreshes the local knowledge index?"
+    },
+    {
+      "language": "zh",
+      "query": "个人记忆自动清理墓碑时默认的有效期为多少天？"
+    },
+    {
+      "language": "mixed",
+      "query": "移动 Browse all tasks buttons 的 swipe threshold 是多少像素？"
+    },
+    {
+      "language": "en",
+      "query": "What token byte limit is assigned to a shared task continuation cursor?"
+    },
+    {
+      "language": "zh",
+      "query": "桌面接管的暂停键默认绑定到哪个快捷键？"
+    },
+    {
+      "language": "mixed",
+      "query": "ComfyUI durable job 的 backend history 默认保存多少天？"
+    },
+    {
+      "language": "en",
+      "query": "What is the default idle lock period for an unlocked credential vault?"
+    },
+    {
+      "language": "zh",
+      "query": "切换记忆提供者时，每次导入批量操作固定最多包含多少条记录？"
+    },
+    {
+      "language": "mixed",
+      "query": "单个 Cordis bundle 能注册的 provider 数量上限是多少？"
+    },
+    {
+      "language": "en",
+      "query": "How many consecutive provider 5xx responses open the default circuit breaker?"
+    },
+    {
+      "language": "zh",
+      "query": "难度估计器默认的低置信度判定分数是多少？"
+    },
+    {
+      "language": "mixed",
+      "query": "Remote effect reconciliation 关联 provider receipt 的 identifier 最长多少 bytes？"
+    },
+    {
+      "language": "en",
+      "query": "What database busy timeout is configured for the command transaction handoff?"
+    },
+    {
+      "language": "zh",
+      "query": "本地 reminder 每次可保存的正文最长多少个字符？"
+    },
+    {
+      "language": "mixed",
+      "query": "Reviewed skill 输出的 Markdown 每次最多允许多少 bytes？"
+    }
+  ],
+  "provenance": {
+    "revision": "d0d16567f5495e9fb6c30a23d2a562c6616d7962",
+    "excerpts": {
+      "project-notes/note-01.md": {
+        "path": "docs/operations.md",
+        "first": 49,
+        "last": 51
+      },
+      "project-notes/note-02.md": {
+        "path": "docs/operations.md",
+        "first": 89,
+        "last": 93
+      },
+      "project-notes/note-03.md": {
+        "path": "docs/operations-zh.md",
+        "first": 69,
+        "last": 80
+      },
+      "project-notes/note-04.md": {
+        "path": "README.md",
+        "first": 285,
+        "last": 289
+      },
+      "project-notes/note-05.md": {
+        "path": "README-zh.md",
+        "first": 253,
+        "last": 257
+      },
+      "project-notes/note-06.md": {
+        "path": "docs/shared-client-api-zh.md",
+        "first": 33,
+        "last": 39
+      },
+      "project-notes/note-07.md": {
+        "path": "docs/shared-client-api.md",
+        "first": 27,
+        "last": 31
+      },
+      "project-notes/note-08.md": {
+        "path": "docs/08-local-computer-media-and-vault-zh.md",
+        "first": 47,
+        "last": 53
+      },
+      "project-notes/note-09.md": {
+        "path": "docs/08-local-computer-media-and-vault.md",
+        "first": 70,
+        "last": 78
+      },
+      "project-notes/note-10.md": {
+        "path": "docs/08-local-computer-media-and-vault-zh.md",
+        "first": 99,
+        "last": 107
+      },
+      "project-notes/note-11.md": {
+        "path": "docs/09-plugin-architecture.md",
+        "first": 61,
+        "last": 72
+      },
+      "project-notes/note-12.md": {
+        "path": "docs/09-plugin-architecture-zh.md",
+        "first": 20,
+        "last": 35
+      },
+      "project-notes/note-13.md": {
+        "path": "docs/10-model-routing-and-gateway.md",
+        "first": 69,
+        "last": 84
+      },
+      "project-notes/note-14.md": {
+        "path": "docs/10-model-routing-and-gateway-zh.md",
+        "first": 59,
+        "last": 67
+      },
+      "project-notes/note-15.md": {
+        "path": "docs/03-contracts-security-and-tests.md",
+        "first": 123,
+        "last": 145
+      },
+      "project-notes/note-16.md": {
+        "path": "docs/03-contracts-security-and-tests-zh.md",
+        "first": 220,
+        "last": 228
+      },
+      "project-notes/note-17.md": {
+        "path": "README.md",
+        "first": 389,
+        "last": 398
+      },
+      "project-notes/note-18.md": {
+        "path": "README-zh.md",
+        "first": 379,
+        "last": 385
+      },
+      "project-notes/note-19.md": {
+        "path": "docs/operations.md",
+        "first": 7,
+        "last": 14
+      },
+      "project-notes/note-20.md": {
+        "path": "README.md",
+        "first": 149,
+        "last": 160
+      },
+      "project-notes/note-21.md": {
+        "path": "README.md",
+        "first": 164,
+        "last": 172
+      },
+      "project-notes/note-22.md": {
+        "path": "docs/shared-client-api.md",
+        "first": 15,
+        "last": 21
+      },
+      "project-notes/note-23.md": {
+        "path": "docs/shared-client-api.md",
+        "first": 41,
+        "last": 46
+      },
+      "project-notes/note-24.md": {
+        "path": "docs/08-local-computer-media-and-vault.md",
+        "first": 80,
+        "last": 87
+      },
+      "project-notes/note-25.md": {
+        "path": "docs/08-local-computer-media-and-vault.md",
+        "first": 140,
+        "last": 150
+      },
+      "project-notes/note-26.md": {
+        "path": "docs/09-plugin-architecture.md",
+        "first": 49,
+        "last": 59
+      },
+      "project-notes/note-27.md": {
+        "path": "docs/10-model-routing-and-gateway.md",
+        "first": 94,
+        "last": 98
+      },
+      "project-notes/note-28.md": {
+        "path": "docs/11-github-project-workflow.md",
+        "first": 15,
+        "last": 28
+      }
+    }
+  }
+}
