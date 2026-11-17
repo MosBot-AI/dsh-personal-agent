@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as files from '../../packages/personal-agent/src/connectors/knowledge-files.js'
 import { createLocalKnowledge, localKnowledgeConfigSchema } from '../../packages/personal-agent/src/connectors/local-knowledge.js'
+import type { KnowledgeQuestionRanker } from '../../packages/personal-agent/src/connectors/knowledge-ranker.js'
 
 const supported = ['darwin', 'linux'].includes(process.platform) && ['arm64', 'x64'].includes(process.arch)
 const current = () => true
@@ -19,11 +20,11 @@ function fixture() {
     for (const connector of connectors) connector.close()
     rmSync(directory, { recursive: true, force: true })
   })
-  function open(maxFileBytes = 512) {
+  function open(maxFileBytes = 512, ranker?: KnowledgeQuestionRanker) {
     const connector = createLocalKnowledge({ roots: [
       { id: 'local', directory: root, include: ['**/*.md', '**/*.txt'], exclude: ['private/**'], maxFileBytes },
       { id: 'llmwiki', directory: missing },
-    ] })
+    ] }, ranker)
     connectors.push(connector)
     return connector
   }
@@ -116,6 +117,29 @@ describe.skipIf(!supported)('descriptor-relative local knowledge', () => {
       .toMatchObject({ ok: true, kind: 'knowledge_search', hits: [] })
     expect(await f.search(connector, 'Where is the cargo manifest stored?'))
       .toMatchObject({ ok: true, kind: 'knowledge_search', hits: [] })
+  })
+
+  it('discards outdated revisions and partial UTF-8 byte ranges from the semantic ranker', async () => {
+    const f = fixture()
+    const replaced = join(f.root, 'cargo.md')
+    writeFileSync(replaced, 'The cargo manifest is stored in the north cabinet.')
+    writeFileSync(join(f.root, 'notes.md'), '露水观察记录。')
+    mkdirSync(f.missing)
+    writeFileSync(join(f.missing, 'other.md'), 'This source is outside the search scope.')
+    const ranker = vi.fn<KnowledgeQuestionRanker>(async ({ rootId, documents }) => {
+      expect(rootId).toBe('local')
+      expect(documents.map(row => row.path).sort()).toEqual(['cargo.md', 'notes.md'])
+      writeFileSync(replaced, 'The cargo manifest now resides in the east warehouse.')
+      return documents.map(row => ({ id: row.ref.id, revision: row.revision, offset: 0,
+        length: row.path === 'cargo.md' ? Buffer.byteLength(row.text) : 2 }))
+    })
+    const connector = f.open(512, ranker)
+    expect(await f.search(connector, 'Where is the cargo manifest stored?', 'local')).toMatchObject({ hits: [] })
+    expect(ranker).toHaveBeenCalledOnce()
+    expect(await f.search(connector, 'cargo.md', 'local')).toMatchObject({ hits: [
+      { path: 'cargo.md', snippet: 'The cargo manifest now resides in the east warehouse.' },
+    ] })
+    expect(ranker).toHaveBeenCalledOnce()
   })
 
   it('keeps long natural questions scoped and rejects long ordinary keyword queries', async () => {

@@ -13,7 +13,7 @@
     "test": "vitest run --exclude \"tests/e2e/**\"",
     "test:contracts": "pnpm build && vitest run tests/contracts",
     "test:recovery": "vitest run tests/recovery",
-    "test:local-flow": "vitest run tests/e2e/local-flow.spec.ts",
+    "test:local-flow": "vitest run tests/e2e/local-flow.spec.ts tests/e2e/knowledge-configured-ranker.spec.ts",
     "test:mobile": "vitest run tests/e2e/mobile.spec.ts",
     "test:resident": "vitest run tests/e2e/resident.spec.ts",
     "test:install": "vitest run tests/e2e/install.spec.ts",

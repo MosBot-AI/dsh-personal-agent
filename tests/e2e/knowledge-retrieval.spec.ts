@@ -28,6 +28,7 @@ interface Corpus {
 interface ScoredQuery extends Pick<Query, 'id' | 'language' | 'mode'> {
   hits: { path: string; verified: boolean; relevant: boolean; snippetHasAnchor?: boolean }[]
   invalidInput: boolean
+  elapsedMs: number
 }
 
 const regressionCorpora = [
@@ -46,6 +47,7 @@ const optInCorpora = new Map([
 const selectedCorpus = optInCorpora.get(process.env.DSHPA_KNOWLEDGE_RETRIEVAL_FRESH ?? '')
 const corpora = selectedCorpus ? [selectedCorpus] : regressionCorpora
 const reportDirectory = process.env.DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR
+const semanticSocket = process.env.DSHPA_KNOWLEDGE_RANKER_SOCKET
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const probe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
 const sha256 = (value: Buffer | string) => createHash('sha256').update(value).digest('hex')
@@ -91,7 +93,9 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
   const prepared = prepareWebHost(probe, [
     '- id: dshpa', '  config:', '    inbox:',
     "      storageDirectory: !!js dshHomePath('knowledge-inbox')", '      workRoot: !!js process.cwd()',
-    '      knowledge:', '        roots:', ...[...counts.keys()].flatMap(id => [
+    '      knowledge:',
+    ...(semanticSocket ? ['        semanticRanker:', `          socketPath: ${JSON.stringify(semanticSocket)}`] : []),
+    '        roots:', ...[...counts.keys()].flatMap(id => [
       `          - id: ${id}`, `            directory: !!js process.cwd() + '/${id}'`, '            include: ["**/*.md"]',
     ]),
   ])
@@ -103,7 +107,7 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
     writeFileSync(destination, document, { mode: 0o600 })
   }
 
-  const host = await openWebHost(probe, { prepared })
+  const host = await openWebHost(probe, { prepared, rpcTimeoutMs: semanticSocket ? 120_000 : undefined })
   const cookie = await host.exchange()
   const operator = await host.exchange(true)
   const sample = { type: 'knowledge_search', query: queries[0]!.query, ...(allRoots ? {} : { rootId }), limit: 3 }
@@ -117,8 +121,10 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
   }
 
   async function search(query: string, relevant: Query['relevant'] = []) {
+    const started = performance.now()
     const result = await inbox({ ...sample, query })
-    if (!result.ok && result.code === 'invalid_input') return { invalidInput: true, hits: [] }
+    const elapsedMs = Math.round(performance.now() - started)
+    if (!result.ok && result.code === 'invalid_input') return { invalidInput: true, hits: [], elapsedMs }
     assert.ok(result.ok && result.kind === 'knowledge_search', JSON.stringify(result))
     assert.deepEqual(result.roots, [...counts].map(([id, files]) => ({ id, status: 'available', files })))
     const hits = []
@@ -126,23 +132,29 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
       const page = await inbox({ type: 'knowledge_read', ref: hit.ref, revision: hit.revision, maxBytes: 4096 })
       const expected = documents[hit.path]
       const expectedRoot = locations.get(hit.path)
+      const excerpt = hit.snippet.endsWith('…') ? hit.snippet.slice(0, -1) : hit.snippet
       const verified = expected !== undefined && page.ok && page.kind === 'knowledge_page'
         && page.source.path === hit.path && page.source.ref.id === hit.ref.id
         && page.source.ref.rootId === expectedRoot && hit.ref.rootId === expectedRoot
         && page.source.revision === hit.revision && hit.revision === sha256(expected)
         && page.text === expected && page.nextOffset === undefined && page.totalBytes === Buffer.byteLength(expected)
+        && (!semanticSocket || (excerpt.length > 0 && expected.includes(excerpt)))
       const answer = relevant.find(answer => answer.path === hit.path)
       hits.push({
         path: hit.path, verified, relevant: verified && answer !== undefined && expected.includes(answer.anchor),
         ...(allRoots ? { snippetHasAnchor: verified && answer !== undefined && hit.snippet.includes(answer.anchor) } : {}),
       })
     }
-    return { invalidInput: false, hits }
+    return { invalidInput: false, hits, elapsedMs }
   }
 
   const results: ScoredQuery[] = []
   for (const { id, language, mode, query, relevant } of queries) {
-    results.push({ id, language, mode, ...await search(query, relevant) })
+    const scored = { id, language, mode, ...await search(query, relevant) }
+    results.push(scored)
+    if (semanticSocket && results.length % 18 === 1) {
+      console.log(`${name}: completed search ${results.length}/${queries.length} (${scored.elapsedMs} ms)`)
+    }
   }
   const noAnswer = []
   for (const [index, control] of negativeControls.entries()) {
@@ -155,6 +167,8 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
 
   const require = createRequire(import.meta.url)
   const summary = summarize(results)
+  const latency = [...results, ...noAnswer].map(row => row.elapsedMs)
+  const afterFirst = latency.slice(1).sort((a, b) => a - b)
   const [repoRevision, repoTree] = execFileSync('git', ['rev-parse', 'HEAD', 'HEAD^{tree}'],
     { cwd: repository, encoding: 'utf8' }).trim().split('\n')
   const sourceChanges = execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--', 'packages'],
@@ -163,6 +177,15 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
     corpus: name, corpusDigest: digest, rubric,
     ...(allRoots ? { rootScope: 'all', roots: Object.fromEntries(counts) } : {}),
     repoRevision, repoTree, sourceChanges,
+    ...(semanticSocket ? {
+      semanticRanker: 'configured-unix-socket',
+      searchLatencyMs: {
+        first: latency[0],
+        afterFirstP50: afterFirst[Math.ceil(afterFirst.length * 0.5) - 1],
+        afterFirstP95: afterFirst[Math.ceil(afterFirst.length * 0.95) - 1],
+        max: Math.max(...latency),
+      },
+    } : {}),
     dshVersion: (JSON.parse(readFileSync(require.resolve('@deepseek-ai/dsh/package.json'), 'utf8')) as { version: string }).version,
     nodeVersion: process.version, icuVersion: process.versions.icu,
     documents: Object.keys(documents).length, summary,
@@ -187,10 +210,14 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
   assert.deepEqual([...results, ...noAnswer, ...invalidInputs].flatMap(row => row.hits.filter(hit => !hit.verified)), [])
   assert.equal(report.invalidInputs.rejected, report.invalidInputs.expected)
   assert.equal(report.noAnswer.empty, report.noAnswer.queries)
+  if (allRoots && semanticSocket) {
+    assert.ok(summary.hitAt1Rate >= 0.8, 'The configured semantic ranker missed the first-rank target')
+    assert.ok(summary.hitAt3Rate >= 0.8, 'The configured semantic ranker missed the top-three target')
+  }
   if (name === 'keyword-navigation') assert.deepEqual(summary.missesAt1, [])
   if (name === 'original') {
     const earlierMisses = new Set(['en-03', 'zh-13', 'zh-19'])
     assert.deepEqual(results.filter(row => row.mode === 'keyword' && !row.hits[0]?.relevant && !earlierMisses.has(row.id)), [])
     assert.ok(results.filter(row => row.mode === 'keyword').every(row => row.hits.some(hit => hit.relevant)))
   }
-}, 120_000)
+}, semanticSocket ? 9_200_000 : 120_000)

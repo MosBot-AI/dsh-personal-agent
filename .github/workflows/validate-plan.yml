@@ -26,6 +26,8 @@ jobs:
           python3 scripts/check_plan.py
           python3 -m unittest discover -s tests/coordination -p 'test_*.py'
           git diff --check
+      - name: Verify the local ranker protocol
+        run: python3 -m unittest discover -s scripts/knowledge-ranker
 
   native-bundle:
     runs-on: ubuntu-latest
