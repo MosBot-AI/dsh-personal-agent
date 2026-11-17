@@ -29,12 +29,15 @@ interface ScoredQuery extends Pick<Query, 'id' | 'language' | 'mode'> {
   invalidInput: boolean
 }
 
-const corpora = [
+const regressionCorpora = [
   { name: 'original', digest: '8056a9bd95c607b6a654c745d58238db07a5dad1dda836f5c903cf25b64908e5' },
   { name: 'keyword-navigation', digest: 'ab2aa823a81dc7ee986f0b4f200861eeacc957354f82bc9d52b5180f8af0a8f2' },
   { name: 'natural', digest: '9ab183fd0c49b7787d79e43547e28a7bdd2a63e0fd2d9649862fea42cb4d856e' },
   { name: 'final-natural', digest: '0ef54d26764807f0577a83f549a3e3e84819011d7b1de180bbd786de1e317bcd' },
 ]
+const corpora = process.env.DSHPA_KNOWLEDGE_RETRIEVAL_FRESH === '1'
+  ? [{ name: 'fresh-holdout', digest: '633b0a1e50fc01f2f64eb829d1209d8e4850c243f548c826da359b68b091f42c' }]
+  : regressionCorpora
 const reportDirectory = process.env.DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const probe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
