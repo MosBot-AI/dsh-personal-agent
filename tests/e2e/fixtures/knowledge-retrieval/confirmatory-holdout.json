@@ -1,0 +1,769 @@
+{
+  "rubric": {
+    "positiveQueries": "54 different facts across 18 new topics. Each topic has three independently annotated English, Chinese, and mixed-language questions.",
+    "negativeControls": "18 related questions that request facts absent from all sources.",
+    "meaning": "A sourced hit requires the annotated source and exact answer span."
+  },
+  "documents": {
+    "manuals/accessibility/reference.md": "# Accessibility walkthrough resources\n\nLoan hearing receivers can be picked up from the west-side ticket desk.\nBraille maps for the walkthrough are filed in a white envelope.\nStaff collect returned receivers at the last stop of the tour.\n",
+    "manuals/accessibility/related.md": "# Accessibility walkthrough resources\n\nThe main ticket desk keeps rental lanyards in a white box; the eastern desk collects visitor badges.\n",
+    "manuals/bridge/reference.md": "# 河中过桥志愿者签到\n\n过桥活动的志愿者在东岸的蓝棚签到。\n每组领队需要在发放点领取两面安全旗。\n活动结束后的物资清点由后勤协调员签字。\n",
+    "manuals/bridge/related.md": "# 河中过桥志愿者签到\n\n东岸的绿棚登记摄影人员，场馆活动的签到表归安保部门。\n",
+    "manuals/camera/reference.md": "# Stop motion studio\n\nUse the short camera stand when capturing overhead frames.\nThe spare memory card is stored underneath the labeled charging tray.\nRecord the first usable frame number on the paper shot sheet.\n",
+    "manuals/camera/related.md": "# Stop motion studio\n\nThe tall camera stand is for portraits, and the spare battery sits in the red charging box.\n",
+    "manuals/school/reference.md": "# 校史展解说录音\n\n校史展解说录音的开头先报展品编号，再读标题。\n用于现场播放的最终文件保存为 WAV。\n访谈有杂音需要重录时，在文件名末尾加 -retake。\n",
+    "manuals/school/related.md": "# 校史展解说录音\n\n旧的宣传视频用 MP4 存档，历史照片的文件名以采集日期结尾。\n",
+    "manuals/canteen/reference.md": "# Community canteen handover\n\nPut the morning ingredient tally in the clipboard next to the pantry.\nLeave the last unused meal voucher in the blue envelope.\nWhen a serving spoon breaks, record the counter number on the repair sheet.\n",
+    "manuals/canteen/related.md": "# Community canteen handover\n\nThe clipboard by the loading door tracks crate deliveries; the green envelope holds bus tickets.\n",
+    "manuals/forest/reference.md": "# 森林课堂雨天转场\n\n下雨时，森林课堂的标本观察移到入口服务站的连廊。\n植物标本袋使用红色标签，石头样本袋使用黄色标签。\n转场后，带队教师先清点学生再发放雨衣。\n",
+    "manuals/forest/related.md": "# 森林课堂雨天转场\n\n入口服务站的等候区可以领取雨伞；备用储物柜用绿色标签编号。\n",
+    "manuals/printing/reference.md": "# Poster print queue\n\nDraft posters are submitted in black and white.\nSend approved color poster files to the layout coordinator.\nUse a cardboard sleeve to carry finished posters down the stairs.\n",
+    "manuals/printing/related.md": "# Poster print queue\n\nEvent flyers use a blue border, and the coordinator for room bookings distributes hallway signs.\n",
+    "manuals/clinic/reference.md": "# 血压展示志愿者布置\n\n健康讲座的血压演示只使用空袖带作为教具。\n计时用的沙漏从右边的展示柜借用。\n演示结束后，由器材志愿者收回道具并登记。\n",
+    "manuals/clinic/related.md": "# 血压展示志愿者布置\n\n大厅左边展示柜存放宣传册，展台志愿者负责归还桌牌。\n",
+    "manuals/puppet/reference.md": "# Puppet stage setup\n\nAttach the gray backdrop before the tabletop set is unfolded.\nClean the hand puppet handles with a dry microfiber cloth.\nStore the extra backdrop pins in the narrow metal tin.\n",
+    "manuals/puppet/related.md": "# Puppet stage setup\n\nThe blue backdrop is reserved for photos; the round tin stores batteries for the stage clock.\n",
+    "manuals/garden/reference.md": "# 种子交换带走登记\n\n领走交换种子前，把种子包装上的批次号记在登记簿。\n潮湿的种子包用纸袋临时隔开，不放进塑料袋。\n空的分装盒要交回门口的归还筐。\n",
+    "manuals/garden/related.md": "# 种子交换带走登记\n\n门口的蓝筐存放义工登记证；种子包装广告由主办方保留。\n",
+    "manuals/memory/reference.md": "# Interview recording kit\n\nCharge the field recorder using the short marked USB cable.\nWhen an interview is interrupted, note the timestamp in the session log.\nReturn all clipped microphones to the padded zipper pouch.\n",
+    "manuals/memory/related.md": "# Interview recording kit\n\nThe long USB cable powers the label printer; the large pouch holds site adapters.\n",
+    "manuals/seal/reference.md": "# 展厅临时封条登记\n\n玻璃展柜临时关闭时，在封条上写闭馆当天日期。\n蓝色封条代表需等待复核，红色封条代表禁止开启。\n用完的封条纸卷芯要送回值班台。\n",
+    "manuals/seal/related.md": "# 展厅临时封条登记\n\n蓝色标签用于展厅借出钥匙，入口台负责发告示牌。\n",
+    "manuals/paint/reference.md": "# Mural repair intake\n\nRecord damage that reaches the primer on a yellow intake form.\nOnly the mural lead can approve a patch that changes a painted outline.\nPut the reference photographs in the shared job folder.\n",
+    "manuals/paint/related.md": "# Mural repair intake\n\nA green form logs broken step stools; general workshop photographs go in the press folder.\n",
+    "manuals/train/reference.md": "# 模型火车展台复位\n\n模型火车展台停场前，先关闭主控电源，再取下无线控制器。\n黄色机车进维修托盘，绿色机车回主轨停车位。\n设备检查记录应放入展台下方第二个抽屉。\n",
+    "manuals/train/related.md": "# 模型火车展台复位\n\n展台下第一格放机车说明书，红色机车只用于摄影。\n",
+    "manuals/firstaid/reference.md": "# Trail checkpoint supplies\n\nSpare hydration cups are stacked behind the checkpoint flag.\nRestock the first-aid box from the sealed supplies bin.\nWhen calling in a trail blockage, give the marker number first.\n",
+    "manuals/firstaid/related.md": "# Trail checkpoint supplies\n\nThe water jug is beside the signpost; the bin for loose gate clips is unsealed.\n",
+    "manuals/pocket/reference.md": "# 自助物品柜的钥匙交接\n\n交接自助物品柜的备用钥匙时，放进编号为 B 的信封。\n归还钥匙的登记卡只写柜号和归还时间，不记录姓名。\n发现不能转动的锁时，在状态面板写故障时间。\n",
+    "manuals/pocket/related.md": "# 自助物品柜的钥匙交接\n\n公用钥匙按值班组编号，工作人员抽屉里另备空信封。\n",
+    "manuals/duet/reference.md": "# Outdoor concert changeover\n\nCheck the cable ramp before the second act begins.\nMove unattended instrument cases behind the green curtain.\nA red marker on the running order means the performers have signed in.\n",
+    "manuals/duet/related.md": "# Outdoor concert changeover\n\nThe blue curtain covers maintenance shelves; the paper seating chart marks reserved rows in red.\n",
+    "manuals/oxygen/reference.md": "# 潜水装备教学展位\n\n模拟氧气瓶演示结束后，用灰色扎带束好气管。\n展位的讲解页若被雨淋湿，由讲解负责人替换。\n离开展位前，记录书由最后一名志愿者放回桌底托盘。\n",
+    "manuals/oxygen/related.md": "# 潜水装备教学展位\n\n黄色扎带用来固定展位的说明牌，讲解负责人领用备用纸张。\n"
+  },
+  "queries": [
+    {
+      "id": "confirm-accessibility-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which counter hands out the borrowed listening devices?",
+      "relevant": [
+        {
+          "path": "manuals/accessibility/reference.md",
+          "anchor": "Loan hearing receivers can be picked up from the west-side ticket desk."
+        }
+      ]
+    },
+    {
+      "id": "confirm-accessibility-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "盲文导览图装在什么颜色的信封里？",
+      "relevant": [
+        {
+          "path": "manuals/accessibility/reference.md",
+          "anchor": "Braille maps for the walkthrough are filed in a white envelope."
+        }
+      ]
+    },
+    {
+      "id": "confirm-accessibility-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Tour 最后哪一站收回 loan receiver？",
+      "relevant": [
+        {
+          "path": "manuals/accessibility/reference.md",
+          "anchor": "Staff collect returned receivers at the last stop of the tour."
+        }
+      ]
+    },
+    {
+      "id": "confirm-bridge-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should volunteers report before the river crossing?",
+      "relevant": [
+        {
+          "path": "manuals/bridge/reference.md",
+          "anchor": "过桥活动的志愿者在东岸的蓝棚签到。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-bridge-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "过桥活动每位领队要领取多少面旗？",
+      "relevant": [
+        {
+          "path": "manuals/bridge/reference.md",
+          "anchor": "每组领队需要在发放点领取两面安全旗。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-bridge-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "结束时谁给 equipment count 签字？",
+      "relevant": [
+        {
+          "path": "manuals/bridge/reference.md",
+          "anchor": "活动结束后的物资清点由后勤协调员签字。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-camera-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which support should I use to photograph a scene from above?",
+      "relevant": [
+        {
+          "path": "manuals/camera/reference.md",
+          "anchor": "Use the short camera stand when capturing overhead frames."
+        }
+      ]
+    },
+    {
+      "id": "confirm-camera-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "备用存储卡放在有标签的充电托盘的哪里？",
+      "relevant": [
+        {
+          "path": "manuals/camera/reference.md",
+          "anchor": "The spare memory card is stored underneath the labeled charging tray."
+        }
+      ]
+    },
+    {
+      "id": "confirm-camera-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "第一帧能用后，shot sheet 写哪个 number？",
+      "relevant": [
+        {
+          "path": "manuals/camera/reference.md",
+          "anchor": "Record the first usable frame number on the paper shot sheet."
+        }
+      ]
+    },
+    {
+      "id": "confirm-school-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What does the narrator say before the exhibit's title?",
+      "relevant": [
+        {
+          "path": "manuals/school/reference.md",
+          "anchor": "校史展解说录音的开头先报展品编号，再读标题。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-school-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "校史展解说现场播放用什么文件格式？",
+      "relevant": [
+        {
+          "path": "manuals/school/reference.md",
+          "anchor": "用于现场播放的最终文件保存为 WAV。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-school-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "访谈 retake 后文件名最后加什么 suffix？",
+      "relevant": [
+        {
+          "path": "manuals/school/reference.md",
+          "anchor": "访谈有杂音需要重录时，在文件名末尾加 -retake。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-canteen-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where can the afternoon crew find the morning's ingredient figures?",
+      "relevant": [
+        {
+          "path": "manuals/canteen/reference.md",
+          "anchor": "Put the morning ingredient tally in the clipboard next to the pantry."
+        }
+      ]
+    },
+    {
+      "id": "confirm-canteen-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "最后一张没使用的餐券应放在哪里？",
+      "relevant": [
+        {
+          "path": "manuals/canteen/reference.md",
+          "anchor": "Leave the last unused meal voucher in the blue envelope."
+        }
+      ]
+    },
+    {
+      "id": "confirm-canteen-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Serving spoon 破损的 repair sheet 上填哪个编号？",
+      "relevant": [
+        {
+          "path": "manuals/canteen/reference.md",
+          "anchor": "When a serving spoon breaks, record the counter number on the repair sheet."
+        }
+      ]
+    },
+    {
+      "id": "confirm-forest-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where does the group examine the specimens after moving out of the rain?",
+      "relevant": [
+        {
+          "path": "manuals/forest/reference.md",
+          "anchor": "下雨时，森林课堂的标本观察移到入口服务站的连廊。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-forest-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "森林课堂的石头样本袋要用什么颜色的标签？",
+      "relevant": [
+        {
+          "path": "manuals/forest/reference.md",
+          "anchor": "植物标本袋使用红色标签，石头样本袋使用黄色标签。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-forest-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "下雨 move 室内后老师先做哪件事再发 raincoat？",
+      "relevant": [
+        {
+          "path": "manuals/forest/reference.md",
+          "anchor": "转场后，带队教师先清点学生再发放雨衣。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-printing-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which color mode is expected for a first proof of a poster?",
+      "relevant": [
+        {
+          "path": "manuals/printing/reference.md",
+          "anchor": "Draft posters are submitted in black and white."
+        }
+      ]
+    },
+    {
+      "id": "confirm-printing-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "已批准的彩色海报文件需要发给谁？",
+      "relevant": [
+        {
+          "path": "manuals/printing/reference.md",
+          "anchor": "Send approved color poster files to the layout coordinator."
+        }
+      ]
+    },
+    {
+      "id": "confirm-printing-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Finished posters 下楼时用什么 sleeve？",
+      "relevant": [
+        {
+          "path": "manuals/printing/reference.md",
+          "anchor": "Use a cardboard sleeve to carry finished posters down the stairs."
+        }
+      ]
+    },
+    {
+      "id": "confirm-clinic-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What is used as the prop for the blood-pressure demonstration?",
+      "relevant": [
+        {
+          "path": "manuals/clinic/reference.md",
+          "anchor": "健康讲座的血压演示只使用空袖带作为教具。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-clinic-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "讲座计时用的沙漏要从哪个展示柜借？",
+      "relevant": [
+        {
+          "path": "manuals/clinic/reference.md",
+          "anchor": "计时用的沙漏从右边的展示柜借用。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-clinic-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Demo 结束后，props 谁收回登记？",
+      "relevant": [
+        {
+          "path": "manuals/clinic/reference.md",
+          "anchor": "演示结束后，由器材志愿者收回道具并登记。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-puppet-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What is hung up before the small stage is opened?",
+      "relevant": [
+        {
+          "path": "manuals/puppet/reference.md",
+          "anchor": "Attach the gray backdrop before the tabletop set is unfolded."
+        }
+      ]
+    },
+    {
+      "id": "confirm-puppet-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "手偶把手用什么布清理？",
+      "relevant": [
+        {
+          "path": "manuals/puppet/reference.md",
+          "anchor": "Clean the hand puppet handles with a dry microfiber cloth."
+        }
+      ]
+    },
+    {
+      "id": "confirm-puppet-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Extra backdrop pins 收到哪种 tin？",
+      "relevant": [
+        {
+          "path": "manuals/puppet/reference.md",
+          "anchor": "Store the extra backdrop pins in the narrow metal tin."
+        }
+      ]
+    },
+    {
+      "id": "confirm-garden-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which code is required in the book before someone takes a seed packet?",
+      "relevant": [
+        {
+          "path": "manuals/garden/reference.md",
+          "anchor": "领走交换种子前，把种子包装上的批次号记在登记簿。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-garden-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "潮湿的种子包装临时隔离时要用什么袋子？",
+      "relevant": [
+        {
+          "path": "manuals/garden/reference.md",
+          "anchor": "潮湿的种子包用纸袋临时隔开，不放进塑料袋。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-garden-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Empty 分装盒还到 entry 的哪里？",
+      "relevant": [
+        {
+          "path": "manuals/garden/reference.md",
+          "anchor": "空的分装盒要交回门口的归还筐。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-memory-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which cable should be used to charge the recorder?",
+      "relevant": [
+        {
+          "path": "manuals/memory/reference.md",
+          "anchor": "Charge the field recorder using the short marked USB cable."
+        }
+      ]
+    },
+    {
+      "id": "confirm-memory-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "访谈中途中断，要在场次日志里记下什么？",
+      "relevant": [
+        {
+          "path": "manuals/memory/reference.md",
+          "anchor": "When an interview is interrupted, note the timestamp in the session log."
+        }
+      ]
+    },
+    {
+      "id": "confirm-memory-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Clipped microphones 用完收在哪种 pouch？",
+      "relevant": [
+        {
+          "path": "manuals/memory/reference.md",
+          "anchor": "Return all clipped microphones to the padded zipper pouch."
+        }
+      ]
+    },
+    {
+      "id": "confirm-seal-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What date belongs on the seal when a glass display case closes temporarily?",
+      "relevant": [
+        {
+          "path": "manuals/seal/reference.md",
+          "anchor": "玻璃展柜临时关闭时，在封条上写闭馆当天日期。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-seal-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "展柜需等待复核时，用什么颜色的封条？",
+      "relevant": [
+        {
+          "path": "manuals/seal/reference.md",
+          "anchor": "蓝色封条代表需等待复核，红色封条代表禁止开启。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-seal-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Seal roll 用完后的纸芯送回哪里？",
+      "relevant": [
+        {
+          "path": "manuals/seal/reference.md",
+          "anchor": "用完的封条纸卷芯要送回值班台。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-paint-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What paperwork is used when mural damage extends to the undercoat?",
+      "relevant": [
+        {
+          "path": "manuals/paint/reference.md",
+          "anchor": "Record damage that reaches the primer on a yellow intake form."
+        }
+      ]
+    },
+    {
+      "id": "confirm-paint-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "改变原有绘制轮廓的修补需要谁批准？",
+      "relevant": [
+        {
+          "path": "manuals/paint/reference.md",
+          "anchor": "Only the mural lead can approve a patch that changes a painted outline."
+        }
+      ]
+    },
+    {
+      "id": "confirm-paint-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Reference photos 保存到哪个 shared folder？",
+      "relevant": [
+        {
+          "path": "manuals/paint/reference.md",
+          "anchor": "Put the reference photographs in the shared job folder."
+        }
+      ]
+    },
+    {
+      "id": "confirm-train-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which action comes first when shutting the model-railway stand down?",
+      "relevant": [
+        {
+          "path": "manuals/train/reference.md",
+          "anchor": "模型火车展台停场前，先关闭主控电源，再取下无线控制器。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-train-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "绿色机车维护后要回哪里停放？",
+      "relevant": [
+        {
+          "path": "manuals/train/reference.md",
+          "anchor": "黄色机车进维修托盘，绿色机车回主轨停车位。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-train-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Equipment check record 放展台下哪个 drawer？",
+      "relevant": [
+        {
+          "path": "manuals/train/reference.md",
+          "anchor": "设备检查记录应放入展台下方第二个抽屉。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-firstaid-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where are extra drinking cups kept at the trail stop?",
+      "relevant": [
+        {
+          "path": "manuals/firstaid/reference.md",
+          "anchor": "Spare hydration cups are stacked behind the checkpoint flag."
+        }
+      ]
+    },
+    {
+      "id": "confirm-firstaid-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "急救箱需要补充物品时，从哪里拿？",
+      "relevant": [
+        {
+          "path": "manuals/firstaid/reference.md",
+          "anchor": "Restock the first-aid box from the sealed supplies bin."
+        }
+      ]
+    },
+    {
+      "id": "confirm-firstaid-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Trail blocked 报告时先报哪个 number？",
+      "relevant": [
+        {
+          "path": "manuals/firstaid/reference.md",
+          "anchor": "When calling in a trail blockage, give the marker number first."
+        }
+      ]
+    },
+    {
+      "id": "confirm-pocket-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which envelope takes the spare key at a locker handover?",
+      "relevant": [
+        {
+          "path": "manuals/pocket/reference.md",
+          "anchor": "交接自助物品柜的备用钥匙时，放进编号为 B 的信封。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-pocket-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "归还钥匙时，登记卡上只需记哪两项？",
+      "relevant": [
+        {
+          "path": "manuals/pocket/reference.md",
+          "anchor": "归还钥匙的登记卡只写柜号和归还时间，不记录姓名。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-pocket-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Locker lock 转不动，在 status panel 写什么？",
+      "relevant": [
+        {
+          "path": "manuals/pocket/reference.md",
+          "anchor": "发现不能转动的锁时，在状态面板写故障时间。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-duet-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What has to be inspected before the second act goes on?",
+      "relevant": [
+        {
+          "path": "manuals/duet/reference.md",
+          "anchor": "Check the cable ramp before the second act begins."
+        }
+      ]
+    },
+    {
+      "id": "confirm-duet-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "无人看管的乐器盒应该移到哪里？",
+      "relevant": [
+        {
+          "path": "manuals/duet/reference.md",
+          "anchor": "Move unattended instrument cases behind the green curtain."
+        }
+      ]
+    },
+    {
+      "id": "confirm-duet-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Running order 上 red marker 表示什么已经完成？",
+      "relevant": [
+        {
+          "path": "manuals/duet/reference.md",
+          "anchor": "A red marker on the running order means the performers have signed in."
+        }
+      ]
+    },
+    {
+      "id": "confirm-oxygen-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What is used to gather the hoses after the mock cylinder demonstration?",
+      "relevant": [
+        {
+          "path": "manuals/oxygen/reference.md",
+          "anchor": "模拟氧气瓶演示结束后，用灰色扎带束好气管。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-oxygen-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "潜水装备展位的讲解页淋湿了，应该由谁更换？",
+      "relevant": [
+        {
+          "path": "manuals/oxygen/reference.md",
+          "anchor": "展位的讲解页若被雨淋湿，由讲解负责人替换。"
+        }
+      ]
+    },
+    {
+      "id": "confirm-oxygen-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Logbook 在 booth 结束后放桌下哪个地方？",
+      "relevant": [
+        {
+          "path": "manuals/oxygen/reference.md",
+          "anchor": "离开展位前，记录书由最后一名志愿者放回桌底托盘。"
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "What battery size fits the loan hearing receivers?"
+    },
+    {
+      "language": "zh",
+      "query": "安全旗使用的旗杆有多长？"
+    },
+    {
+      "language": "en",
+      "query": "What capacity is printed on the spare memory card?"
+    },
+    {
+      "language": "zh",
+      "query": "现场播放的 WAV 文件要用什么采样率？"
+    },
+    {
+      "language": "en",
+      "query": "What date does the last unused meal voucher expire?"
+    },
+    {
+      "language": "zh",
+      "query": "入口服务站连廊能容纳多少名学生？"
+    },
+    {
+      "language": "en",
+      "query": "Which software version created the approved color poster?"
+    },
+    {
+      "language": "zh",
+      "query": "血压展示的袖带是哪家制造商生产的？"
+    },
+    {
+      "language": "en",
+      "query": "Who bought the extra backdrop pins?"
+    },
+    {
+      "language": "zh",
+      "query": "登记簿的批次号有多少位数字？"
+    },
+    {
+      "language": "en",
+      "query": "Which company manufactured the clipped microphones?"
+    },
+    {
+      "language": "zh",
+      "query": "临时封条上的日期必须用哪种书写格式？"
+    },
+    {
+      "language": "en",
+      "query": "How many days does a yellow intake form remain valid?"
+    },
+    {
+      "language": "zh",
+      "query": "第二个抽屉的锁芯型号是什么？"
+    },
+    {
+      "language": "en",
+      "query": "What diameter are the spare hydration cups?"
+    },
+    {
+      "language": "zh",
+      "query": "B 号信封使用多少克重的纸？"
+    },
+    {
+      "language": "en",
+      "query": "Which person placed the red marker on the running order?"
+    },
+    {
+      "language": "zh",
+      "query": "灰色扎带的最长可用长度是多少？"
+    }
+  ]
+}
