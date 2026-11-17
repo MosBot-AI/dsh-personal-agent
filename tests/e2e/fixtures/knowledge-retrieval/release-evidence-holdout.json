@@ -1,0 +1,906 @@
+{
+  "rubric": {
+    "positiveQueries": "54 new annotated questions sourced from pinned implementation evidence.",
+    "negativeControls": "18 plausible configuration and behavior lookups absent from the excerpts.",
+    "meaning": "A sourced hit requires the annotated document, exact revision, and byte readback. Measure proof coverage independently."
+  },
+  "documents": {
+    "evidence/note-01.md": "## Implementation\n\n- The native bundle provides `ctx.dshpa.host`. Its adapter creates and resumes native handles and checks the native session flush result. The DSH CLI and Cordis retain runtime and lifecycle ownership.\n- The [agent](../../tests/contracts/host.spec.ts) and [schedule](../../tests/contracts/schedule-host.spec.ts) contracts start the published CLI with temporary named profiles and scripted local models. They read back the native JSONL session log and restart the CLI using the same test home. Each profile and its data are removed after the test.\n",
+    "evidence/note-02.md": "## Implemented boundary\n\n- `openWorkStore(directory)` owns one SQLite connection in a private application directory. A separate persistent guard database holds an exclusive transaction for the lifetime of the store. Process exit releases that lock. The work database uses WAL, full synchronization, and foreign keys. POSIX file and directory permissions are checked, including SQLite sidecars.\n- One synchronous transaction checks command and source deduplication, applies the task version and attempt generation fences, and commits the task, attempt, scoped work event, prepared effects, pending deliveries, and command receipt. Foreign keys bind effect and delivery intents to the exact attempt generation. Cancellation can advance the task generation while retaining the retired attempt for reconciliation.\n- Command replay uses the authenticated owner and client key and a fingerprint of the canonical request and trusted routing scope. An exact replay returns the prior receipt before checking the current task version. Changed requests conflict, and records decoded from storage must match their enclosing scope. Each transaction accepts up to 64 effect and delivery intents and 1 MiB of encoded records.\n- Migration 001 initializes an empty database and commits the application identifier and schema version with the tables. Unsupported versions and foreign databases are refused in place. Corruption creates an on-disk quarantine marker, closes the connection, and prevents normal reopen or empty replacement. The database remains at its original path. Normal SQLite close can checkpoint the WAL.\n",
+    "evidence/note-03.md": "## Implemented boundary\n\n- Trusted adapters bind exact owner, profile, device, client, and session identities, or the verified account of a specific source instance. Opaque identity handles are checked against current enrollment and policy and can be released by the adapter. Source handles provide intake identity. Approval responses require the exact owner session and enrollment.\n- The action gate checks a registered connector's exact account, resource, recipient, payload validator, and disclosure scope against the current Attempt. An eligible prepared action produces a review request with an immutable preview and a SHA-256 digest of the bounded canonical action. Approval binds its digest, policy, task, attempt, generation, enrollment, and expiry. Observed expiry persists across restart and clock rewind.\n- The SQLite transaction rechecks the exact proposal, approval, account and device enrollment, current task version and attempt generation, revocation, and expiry. It reserves the single-use grant and advances the effect to `dispatching` atomically. The trusted connector starts the exact stored action synchronously after commit. A failed claim invokes no handoff. An interrupted or uncertain handoff leaves the consumed claim available for reconciliation.\n- `ctx.dshpa.host.privateWorkers` installs a scoped tool-free executor and deny-only guard before native publication on create and resume. Private Workers publish zero tool definitions. Scripted shell, browser, network, file, MCP, late scoped, and reserved PTC calls were denied. Ordinary Agent behavior remained available. Fixture credential markers stayed outside model messages and persisted sessions.\n- Schema 002 preserves version 1 work and adds proposal, approval, grant, and dispatch records with exact foreign keys. A guarded upgrade takes an owner-private `state.sqlite.v1.bak` snapshot including committed WAL data before additive DDL. Capacity exhaustion retains the version 1 database and its backup for retry.\n",
+    "evidence/note-04.md": "## Implemented boundary\n\n- `ctx.dshpa.host.createWorkerExecutor()` coordinates one executor per work store. The default capacity is two Workers, with a validated range of 1–32. A trusted model-only preset binds provider, model, disclosure labels, and a real directory contained in its work root. Worker tools remain disabled. Foreground query, redirect, and cancellation use the current task scope while the slots are occupied.\n- The executor reserves a slot and commits the Attempt's exact version, generation, session, directory, preset, and input cursor before opening the native Agent. Resume rechecks the persisted route, work directory, ownership, and empty native inbox. The Attempt retains up to 64 distinct input cursors across process restarts. Only Worker-minted message IDs and cursors enter the native model step.\n- Reports are bounded JSON with the exact current cursor and one of `progress`, `waiting`, `blocked`, `ready`, or `failed`. The scoped observer selects the final text from the corresponding completed native turn. Progress remains observational. Dependency blocking checks the stored dependency chain. Readiness persists candidate artifact references and enters verification. The verifier should wait for native release before sealing evidence.\n- A durable stop advances the generation before the executor signals the owned Agent. A durable wait keeps the slot through exact owned job and subagent cleanup, including late work observed during teardown. Unverified cleanup retains the slot. Cancellation settlement checks the Attempt's unresolved effects. The executor uses only trusted preset and coordinator inputs for these state transitions.\n",
+    "evidence/note-05.md": "## Implemented boundary\n\n- The artifact store seals up to 256 KiB of UTF-8 text, Markdown, or parseable JSON per version. It derives the SHA-256 digest and storage reference, records scoped source references and visibility, and binds each revision to its producing Attempt and generation. Revisions form a linear history. Scoped reads verify persisted content and return detached bytes.\n- Worker readiness admits only sealed, exact-attempt artifacts. The executor commits its one-use release proof after native cleanup. The verifier checks actual bytes and required confirmed Effect receipts, receives redacted evidence from a trusted criteria checker, and rechecks the task version and evidence after the checker completes. Completion, verification evidence, and original-destination delivery intents commit in one transaction.\n- Outbox `pending` records represent locally generated deliveries. A durable claim precedes provider I/O and binds the exact route and account. Immutable destination, content, dedupe key, and origin remain fixed. The controller serializes sends per task and channel while unrelated work continues. Attachment sends recheck sealed bytes against verification and apply trusted disclosure rules, with separate approval for private artifacts.\n- Provider acceptance, delivery, and readback are distinct states. Positive readback advances exact receipts monotonically. Unknown outcomes and ordinary absence stay uncertain. Only a correlated definitive no-send result can permit bounded retry. An open provider operation holds the store writer against graceful close until it settles.\n- Schema 003 preserves source-version v1 or v2 data and takes an owner-private backup including committed WAL content before upgrade. A migrated native Attempt awaiting verification without release evidence remains in that state pending recovery.\n",
+    "evidence/note-06.md": "## Implemented boundary\n\n- The optional context profile checks that the live primary Session uses the two checkpoint-aware DSH plugins. Before native compaction or tool-result pruning, a scoped SQLite transaction captures the Task version, Attempt, objective, constraints, acceptance criteria, current wait, source-backed owner answers and evidence references. A checkpoint write failure blocks the native mutation. Managed compaction generates a local reference summary.\n- The authenticated owner can look up exact Task, event or artifact references through the Web inbox. UTF-8 pagination checks current authority, revision and digest on every page. Bounded Chinese and English search uses the same scope checks. Forgetting and superseding evidence persist across restarts and filter derived checkpoint material.\n- Worker context assembly uses the selected route's window, the native token estimator, a response reserve and section budgets. It preserves current instructions verbatim and journals the model-visible input with exact evidence IDs. Before dispatch, the native Worker checks the full request budget and revalidates retained input sources, including conservative source reconstruction for upgraded journals.\n- Schema 008 adds checkpoints, exclusions and journal provenance. Migration creates an owner-private backup and preserves earlier Worker input records.\n",
+    "evidence/note-07.md": "## Implemented boundary\n\n- Authenticated owners can explicitly remember, search, inspect, correct and forget through the local Web inbox. Each operation uses exactly one profile, project or task scope. The view shows source receipts, revisions, confidence and validity, with separate projections for confirmed and inferred records. Automatic extraction is off, and the external knowledge base remains read-only.\n- The independent SQLite memory provider stores fact values. It implements normalized search, revision checks, atomic supersession, tombstones and version-1 snapshot import and export. A failed import leaves the target scope unchanged.\n- The schema-009 WorkStore ledger holds source receipts, revisions, state, digests and replayable command receipts. Correction or forgetting hides the old record before the provider call. Core completion requires exact readback from the pinned provider. A different preimage at the same revision leaves the operation pending. The same authenticated command and payload can retry a pending change.\n- Reads recheck scope, authority, provenance and current ledger state. A stale provider copy cannot publish superseded or forgotten content, even when its read began before the exclusion. Explicit personal memory stays outside automatic Worker context and native compaction summaries.\n",
+    "evidence/note-08.md": "## Implemented boundary\n\n- The local owner authorizes one exact GitHub account and repository, optionally bound to one active dshpa project. REST reads verify numeric IDs and current names before each page. The connector uses fixed authenticated GET endpoints, bounded JSON, and opaque process-local cursors tied to the exact operation and issue.\n- The registry applies local concurrency and rate limits and honors GitHub backoff. It rejects cross-account, cross-repository and cross-project data before disclosure. Source text stays outside Worker input, routing intake and action authority. [GitHub REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)\n- A reviewed loopback MCP facade can supply the same read DTOs. The bridge compares the configured fingerprint against discovery before and after invocation. It uses three exact tool names, bounded JSON or SSE responses, and sends no GitHub token to MCP. The facade owns its provider-side read permissions. [MCP transports](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) · [MCP tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)\n- The authenticated Web panel verifies connection status and reads issue and comment pages. It renders provider text literally and generates links only for the configured repository.\n",
+    "evidence/note-09.md": "## Implemented boundary\n\n- The owner saves a draft and explicitly arms a versioned Routine. Editing or pausing advances the revision. SQLite separates Routine intent, exact native mapping, and the logical occurrence. The internal routine source is reserved against generic source binding and event intake.\n- The bridge uses the pinned native calendar for Cron and delegates timed wakeups to native one-shot schedules. It records the IANA zone and DST policy that skips a gap and chooses the earlier overlap. The logical instant stays distinct from the physical wake, including a one-second creation lead. The `skip` policy allows one minute for a previously mapped wake to reach application reconciliation. The `latest` policy coalesces missed Cron slots and arms the latest logical occurrence for an exact wake.\n- Mapping intent commits before native create. A complete, bounded native catalog can recover one exact marker, target and wake. Ambiguous, altered or missing bound records remain inspectable. A wake that elapses before the carrier calls native create is known unsent and can be retimed or skipped under policy. Exact obsolete active rows can be cancelled with the native revision check. Terminal native rows are retired after the application saves their receipt.\n- A private mailbox accepts opaque wake markers with model and tool execution fenced. Application intake requires an exact ended native schedule and persisted receipt. The app deduplicates timed occurrences by Routine revision and intended instant. Explicit Run Now uses a separate command key. Stock Run Now receipts do not satisfy timed intake.\n- Local reminders persist their original title and content and appear in the authenticated inbox. A goal occurrence checks the current authority, released Task wait, Attempt, version, generation and budget. It atomically commits the scoped source event, queue transition and occurrence. A denied budget records a skip and leaves the Task waiting. Either path uses zero Worker slots at admission.\n- Schema 007 creates a private v6 backup and preserves budget, attention, Worker input and restore records. Reconciliation-only restore keeps the application dispatch gate closed.\n",
+    "evidence/note-10.md": "## 实现边界\n\n- 主动工作需显式启用，初始关闭。规则绑定活跃目标的修订、锚定任务、准确的已验证来源账号和线程，以及配置的模型披露路由。已存事件回放是确定性的，最多使用 100 条限定范围的事件。准入在语义评估前检查时效、关键词、内容去重、冷却、价格和预算。\n- 观察记录建议和抑制理由。准备要求至少 20 条所有者评审的建议、至少 70% 有用，以及明确的来源读取授权。准备生成带来源的私有产物。行动另需一份评为有用的私有简报，以及在**今日**展示私有简报的单独授权。\n- 本地提示与现有外部预留共用每位所有者每个本地日三条的预算，且在发布前执行静默时段。模型没有给出有用建议时保持静默。主动路径不会创建任务、发送外部消息或启用调度。\n- 评估结束后及发布产物或提示前重新核对规则、来源、目标、任务及策略。带版本的决策和证据在重启后保留。中断评估会被抑制，不会再次派发。模式 011 保留已有工作和恢复模式，并创建私有 v10 备份。\n",
+    "evidence/note-11.md": "## 已实现边界\n\n- 已认证所有者在今日选择至少两个不同的已验收任务结果后，可提议项目范围内的 Markdown 模板。不可变版本保存准确的任务版本和产物版本、内容摘要、必填文本字段、Markdown 输出和 `render-markdown` 能力。样例产物保留在原任务中。模板和留出样例由所有者编写。\n- 留出样例使用单独的已验收任务产物和显式输入。测试不能和样例使用同一任务，也不能沿用样例的输出字节。评测渲染每个测试，并将输出哈希与已验收产物的摘要比较。审批固定版本摘要和当前启用状态的版本号，并要求所有测试通过。\n- 所有者显式运行已启用的版本。渲染器仅对有长度限制的字符串执行一轮替换，并以字面文本返回本地 Markdown。技能没有工具、插件、调度、通知、记忆或模型调用路径。接受和纠正按版本计数。重发运行请求时核对版本、操作 ID 和输入摘要。只要证据仍有效，已批准的旧版本可用于回滚。\n- 查看、评测、启用、回滚和复用都会重新核对确切的验收记录和产物、来源排除规则以及当前来源授权。证据失效后会隐藏受影响的规格并阻止使用。私有工作库保存版本中的留出样例输入、证据引用和反馈。新运行的输入仅保存摘要，结果文本留在响应中。模式 012 保留先前记录并创建仅所有者可读写的 v11 备份。\n",
+    "evidence/note-12.md": "## 已实现的边界\n\n- 单个前台原生 DSH Web 进程先取得 SQLite 写入租约，再启动原生调度解析。本地公开探针区分进程存活与就绪。原生所有者链接使用私有文件和当前进程标识。诊断状态、备份及审计通过已认证收件箱执行。可选的 launchd 和 systemd 描述调用同一个启动器。\n- 看门狗观察当前 Attempt 和代次，保留有界诊断元数据，并将进展停滞、重复工具调用、计算及供应商条件与进程健康分开。心跳间隔过长时启动一次有界的暖调度检查。中止限制该次检查继续写入应用状态，确切原生意图或回执仍可用于正常对账。\n- 供应商认证、限流、暂时不可用及模型错误具有不同资源条件。已准入且结果不确定的模型调用保留预算证据。执行器在原生退出后释放 Worker 槽位。所有者恢复时重新检查确切等待和预算。已取消任务的迟到结果不会影响其他 Worker 或后续路由授权。\n- 在线备份固定已提交的 SQLite 快照，包含封存产物，并发布仅所有者可访问的独立文件。成功发布后，保留策略仅处理受管备份名称。恢复较旧快照时，派发保持仅对账限制。所有者审计通过有界游标导出限定范围的计数和固定元数据。进程内诊断默认保留 14 天、最多 512 条。\n",
+    "evidence/note-13.md": "# PA-028 打包后的原生 Worker 预检\n\n```\n\n测试将核心包及其两个工作区依赖打成归档。固定版本的 DSH CLI 初始化一个全新的命名 Web Profile，再安装核心归档。测试保留 DSH 生成的 `nodeLinker: hoisted` 和 `autoInstallPeers: false`，并追加两个工作区依赖的本地归档引用以及 Koffi 的构建许可。安装从包注册表解析已发布的依赖。DSH 在运行时提供共享的宿主包。如果 Profile 安装了第二份 `@deepseek-ai/dsh-llm`，该模块内部记录的请求标记会与原生 Agent Loop 的请求标记分离。\n\n已安装的包通过常驻启动器运行。测试检查收件箱是否要求认证，以及所有者是否能够创建并显式启动 Worker。固定版本的原生供应商向回环端点发送恰好一次请求，该端点返回 HTTP 400。Worker 释放并进入预期的供应商等待状态，常驻宿主正常退出。运行使用模拟凭据和本地供应商端点。\n\n主分支 `917e84e` 和九个 PR 的组合代码树 `7d08796` 均通过直装的 HTTP 400 对照，结果 SHA-256 一致，为 `baeeb36b4f99fee4cada60151f261699141e8be1ab7d627c542c8684f98ef479`。发布 Issue 记录了安装设置和单独的凭据恢复结果。 [验证记录](https://github.com/MosBot-AI/dsh-personal-agent/issues/32#issuecomment-6831354517)\n",
+    "evidence/note-14.md": "## 已实现边界\n\n- 所有者经认证后，可在今日为一次任务尝试授权精确的 macOS 应用或已配置的浏览器目标。操作系统支持的每用户保留在本地 Profile 之间串行化桌面工作流。浏览器路径将 Profile 租约绑定到新建的精确原生隔离标签页。每项模型操作均重新核对当前租约和原生目标。开始或继续都需要前台授权。\n- macOS 路径使用 DSH Computer Use。它在模型调用前探测会话状态和辅助功能权限，然后使用提供者的应用授权与 AX 快照。浏览器路径使用 DSH Session 管理的 MCP 运行时与固定版本的无头 Chrome DevTools。提供者实施已配置的网络白名单，任务进一步将工具调用限定在自己的来源和标签页。操作按结构化页面 ID 路由，且仅接受有限顶层观察中提供的元素 ID。\n- 接管会立即阻止新的输入，并保留在途操作的收尾状态。Worker 在原生退出后进入等待并释放计算槽位。继续会创建新租约并要求重新观察。浏览器 Session 退出时清理隔离上下文。\n- 专用部署只允许使用受租约保护的模型工具。原生 Shell 和程序执行在此边界禁用。操作系统级沙箱需要另行配置具备强制隔离能力的执行后端。\n",
+    "evidence/note-15.md": "## 已实现\n\n- 可选的常驻服务在 SQLite v16 中排队处理限定范围的图片和视频任务。按模态选择配置的免费本地提供器，固定其配置，检查当前尝试，并限制队列与每次尝试的提交数量。冷启动后保留单个媒体租约。准备阶段遇到限流时先等待，再进入可执行队列按顺序处理。该循环独立于 Worker 槽位运行。\n- ComfyUI 0.44.0 适配器接受使用已安装模型的已批准 API 图，并探测本地服务、CPU 或 GPU 和输出文件系统。请求发出前，SQLite 提交客户端分配的 prompt ID、请求与工作流摘要、种子及精确的提供器标识。提交结果不明确时，以同一凭据进入回查。队列与历史都查不到时，结果保持未决并继续占用租约。\n- 适配器验证归属绑定后，才调用 ComfyUI 的单任务取消路由。它从已批准的输出节点下载有大小上限的文件，探测媒体类型、尺寸和时长，解码媒体流并计算 SHA-256。任务保存已验证的元数据，文件保留在 ComfyUI 中。 [提供器配置](../../packages/media-comfyui/README-zh.md)\n",
+    "evidence/note-16.md": "## 已实现的边界\n\n- `@mosbot-ai/dshpa-plugin-api` 版本 `0.1.0` 提供确切能力 API 版本 `1`、带类型的定义与提供方契约、严格的限定范围数据结构、配置 Schema 和生命周期操作。媒体、记忆、检索和创作工作流共用明确的目的地与模拟声明。\n- 原生 `dshpaPlugins` 服务提供注册。核心私有注册表在启动前校验版本与配置，报告确切就绪状态，并明确选择已就绪的绑定。绑定含配置实例 ID、实现 ID、插件版本和配置修订。卸载先关闭准入，再等待已受理调用及迟到启动，最后排空并执行一次停止。\n- 核心消费者在交接前核对可信授权，并在异步读取后再次核对披露权限。记忆命中须匹配确切规范记录、修订与来源。遗忘先记录核心排除项，再请求提供方删除。导入墓碑需要已确认的排除项，陈旧的活动记录继续受排除限制。\n- 媒体提交校验模态、尺寸及已批准的产物引用。检查、取消和收集使用已记录作业及其原绑定。工作流子调用继承任务范围并受当前生命周期限制。可信媒体意图与已受理句柄回调独立于工作流输出保留对账证据。\n- 测试工具包检查确切绑定行为及记忆快照往返。本地记忆和明确标注的模拟媒体示例是可由 DSH 分别加载的独立包。模拟提供方提供测试夹具元数据和生命周期行为。\n",
+    "evidence/note-17.md": "## 实现\n\n- 公开契约携带带版本的部署和策略固定引用、账户与配额身份、能力和披露范围、已声明价格及显式强度映射。决策和推理尝试携带相同的 Task 隔离标记及独立的请求序列身份。尝试记录保留预算预留与用量引用。\n- 原生适配器校验部署、策略、配额和尝试绑定，解析确切的 DSH 模型元数据，并在 Agent 发布前的 setup 中选择路由。已发布的原生循环在组装提示前捕获模型及推理强度。每次准入流均匹配已捕获的路由、实际强度、输出上限和已授权能力。Core 继续负责路由授权和预算占用，包括每次重试。\n- 回退在同一业务 Task 下取得全新的原生 Session 和请求序列。新 Session 使用经授权的输入及独立请求头开始。适配器使用 DSH 现有的模型选择和请求序列 API。\n",
+    "evidence/note-18.md": "## 实现\n\n- 限定范围的推理账本在同一 WorkStore 内按所有者、提供者账户和额度桶共享配额。它区分本地速率窗口、提供者冷却、硬额度耗尽，以及未知或过期观察。未知遥测下的有限准入要求配置请求和 token 限额。经认证的提供者重置可清除持久耗尽状态。\n- 配额占用、一次性推理声明和 Core 费用预留在同一 SQLite 事务内提交。派发前的拒绝会记录原因，且没有配额占用或费用预留。升级到模式 13 时保留私有 v12 备份。\n- 可信原生执行器每次推理在全新的私有 DSH Session 中接受一次精确获批输入。它沿用原 Task，并核对授权、能力、预算和已确认效果的回执。替代请求收到重新组装的经授权证据。旧输出及回放状态留在原 Session，执行器拒绝可执行工具调用。\n- 回退遵循配置顺序、确切的目的地授权、尝试及切换上限，并检查循环。硬预算拒绝只允许另行通过准入的零费用路由。资源等待保留在原 Task 上。显式继续会核对确切等待引用和截止时间，也可用新请求序列重试同一路由。Core 负责重试决策，此边界内每次尝试只派发一次，网关重试数为零。\n- 部分或丢失的流保留中断状态。冷启动保留不确定费用和一次性请求历史。经核实的精确费用回读可结算原预留。实时回退会等待原生 Session 刷新并退出。\n",
+    "evidence/note-19.md": "# PA-001 native bundle evidence\n\nThe audited upstream source is `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159`. The published release tag points to `66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`. The lockfile records the package artifact integrity. The contracts execute that installed artifact, whose compatibility check disables the incompatible plugin row. PA-002 will verify the remaining host APIs against the installed release.\n\n| Check | Exit | Observation |\n| --- | --- | --- |\n| `pnpm install --frozen-lockfile --offline` with the populated task store | 0 | Resolved the committed lockfile and ran the reviewed PTY helper repair. |\n| `pnpm check` | 0 | Type check and build passed. The three E00 contracts booted the real DSH CLI in temporary named profiles and verified service activation and disposal, the missing `agents` diagnostic and version rejection. |\n| Named `dshpa` SDK smoke | 0 | Created the `sdk` profile in an isolated DSH home, installed the local bundle through `dsh plugin add`, then observed the service load and dispose under the real SDK profile. The smoke used `workspace-write`. |\n",
+    "evidence/note-20.md": "## 已实现边界\n\n- 已构建的 Web 扩展通过 DSH 插槽加入 **待办** 主面板与侧栏入口。它使用 DSH 现有 Session 导航、对话记录和输入框。阻塞问题与确切审批预览排在已验收结果和日常任务之前。英语与简体中文文案来自成对的语言字典。\n- 本地 Web Profile 启用后，宿主在原生 Connection 传输上挂载收件箱精确路由。它要求绑定回环地址并验证已认证的浏览器 Peer。测试区分了该 Peer 与具有相同主体类型的独立 API Peer。稳定且仅所有者可读的本地绑定限定项目、任务、产物和审批响应范围。请求体应用层上限为 512 KiB。\n- 所有者创建项目，并将任务关联到已知的原生主 Session。启动使用明确配置的 Worker 路由和独立任务工作区。前台暂停、取消、引导与回答通过限定范围的确定性控制执行。继续和回答要求确切的等待或暂停状态及已知原生释放证据。未知运行时状态可见。连接变化时界面保留未发送或结果未确认的草稿，并刷新权威状态。\n",
+    "evidence/note-21.md": "## Implemented boundary\n\n- A Worker launch or redirect commits the exact Attempt, generation, stable native message identity, cursor, rendered payload and digest in one SQLite transaction. Native input is eligible for inference only after the Session flush and matching SQLite acknowledgment. The journal retains the flush timestamp through later observations.\n- Cold DSH readback checks the unseeded Session header, directory, stable revision, exact message ID and digest, and paged inbox events. It distinguishes pending, admitted, cancelled, absent, and ambiguous input. A claimed input without a committed user message remains unknown. Older records without equivalent evidence remain subject to reconciliation.\n- Startup gates new native inputs, action claims, and Outbox sends while interrupted work is classified. Unproven cold Workers are fenced by generation and retain their wait reference where applicable. Existing confirmed release can settle an exact cancellation. New work can proceed after startup classification, while fenced attempts and uncertain deliveries retain their own restrictions.\n",
+    "evidence/note-22.md": "## 实现边界\n\n- 已认证的收件箱可以创建目标项目，并按准确修订编辑计划。计划记录成功标准、里程碑、回顾周期、优先级和理由。历史快照可以用作可编辑草稿。已有项目首次编辑时记录历史基线。计划修改后仍可重放原始创建命令。\n- SQLite 保存同项目的前置依赖。写入事务拒绝循环、跨项目依赖及过期任务版本。所有前置任务验收完成后才解除排队下游任务的阻塞。重新打开前置任务会再次阻塞排队中的下游任务。原生启动和唤醒在准入时重新检查依赖图。已运行的尝试沿用原有授权。\n- 原生 Worker 可以提出数量受限的子任务结果草稿，绑定当前 Attempt 和输入游标。经认证的所有者可把准确的草稿创建为同项目的新任务，并保留来源。重放返回同一个任务，之后的 Worker 输入会替代旧草稿。\n",
+    "evidence/note-23.md": "## Implemented boundary\n\n- An explicitly configured test repository, active dshpa project, GitHub identity and base ref define the only route. The owner prepares one Markdown file in a temporary bare Git workspace. The approval preview binds the repository, base and head refs and commits, title, marked body, file content and SHA-256 digests.\n- The WorkStore records the exact effect and approval together. Publication uses a one-use claim and a Git lease for a new head only. The connector revalidates the grant between branch publication and the draft PR call. It also checks the live base and head before the fixed draft endpoint.\n- Read-only reconciliation checks the provider account, repository, refs, commit IDs, title and body against the immutable marker. A unique exact result becomes a provider receipt and a sealed task artifact. No match or an ambiguous result remains uncertain. The connector has no automatic replay or remote cleanup.\n- The normal local Web carrier exposes explicit preparation, approval, publication, revocation and lookup. The feature requires the separate `DSHPA_GITHUB_WRITE_TOKEN` for the configured test repository. [GitHub draft PR API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#create-a-pull-request)\n",
+    "evidence/note-24.md": "## 实现\n\n- 路由策略在为 Task 评分前，按能力、上下文、数据范围和 Core 准入筛选精确配置的部署。Core 提供当前目的地授权、账户可用性、配额及预算。确定性估计器使用任务和阶段信号，包括工作范围、冲突证据及验收复杂度。\n- 版本化自动规则按档位选择模型池与逻辑推理强度。低置信度采用已配置的保守下限。固定路由保持绑定，每任务覆盖要求所有者授权和符合策略的固定引用。自动策略可显式允许省略不可用强度。显式强度选择要求有效映射。\n- 可选语义估计接收结构化信号，并使用独立的输入、输出、费用和截止时间限制。Core 准入入口占用预算并对 Task 和阶段键去重。策略将每次估计限制为一次派发回调，丢弃迟到或无效的结果，并在选定路由前重新核对准入。\n"
+  },
+  "queries": [
+    {
+      "id": "release-evidence-host-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which native write result does the host adapter verify after operating on a session?",
+      "relevant": [
+        {
+          "path": "evidence/note-01.md",
+          "anchor": "checks the native session flush result"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-host-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "核心 bundle 装载后，哪两个组件保有原生运行和生命周期的控制权？",
+      "relevant": [
+        {
+          "path": "evidence/note-01.md",
+          "anchor": "The DSH CLI and Cordis retain runtime and lifecycle ownership."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-host-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "schedule contract 重启 CLI 时沿用哪个 test home？",
+      "relevant": [
+        {
+          "path": "evidence/note-01.md",
+          "anchor": "restart the CLI using the same test home."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-store-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What does WorkStore do in place when it encounters a database schema version it cannot open?",
+      "relevant": [
+        {
+          "path": "evidence/note-02.md",
+          "anchor": "Unsupported versions and foreign databases are refused in place."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-store-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "完全相同的命令重放时，检查当前任务版本之前会返回什么？",
+      "relevant": [
+        {
+          "path": "evidence/note-02.md",
+          "anchor": "An exact replay returns the prior receipt before checking the current task version."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-store-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "WorkStore 的 exclusive writer lock 什么时候由进程释放？",
+      "relevant": [
+        {
+          "path": "evidence/note-02.md",
+          "anchor": "Process exit releases that lock."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-approval-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which tool definitions are published by a private Worker?",
+      "relevant": [
+        {
+          "path": "evidence/note-03.md",
+          "anchor": "Private Workers publish zero tool definitions."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-approval-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "已消耗的一次性声明遇到交接中断或结果未决时，保留下来做什么？",
+      "relevant": [
+        {
+          "path": "evidence/note-03.md",
+          "anchor": "An interrupted or uncertain handoff leaves the consumed claim available for reconciliation."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-approval-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "action grant 的 expires 已被观察到后，restart 或 clock rewind 能让它恢复吗？",
+      "relevant": [
+        {
+          "path": "evidence/note-03.md",
+          "anchor": "Observed expiry persists across restart and clock rewind."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-workers-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What is the default number of simultaneous Workers per work store?",
+      "relevant": [
+        {
+          "path": "evidence/note-04.md",
+          "anchor": "The default capacity is two Workers"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-workers-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "恢复一个工作执行时，持久化的原生收件箱需要处于什么状态？",
+      "relevant": [
+        {
+          "path": "evidence/note-04.md",
+          "anchor": "Resume rechecks the persisted route, work directory, ownership, and empty native inbox."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-workers-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "executor 无法核实清理完成时，会释放 occupied slot 吗？",
+      "relevant": [
+        {
+          "path": "evidence/note-04.md",
+          "anchor": "Unverified cleanup retains the slot."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-delivery-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How large may one sealed revision of a Markdown artifact be?",
+      "relevant": [
+        {
+          "path": "evidence/note-05.md",
+          "anchor": "The artifact store seals up to 256 KiB of UTF-8 text, Markdown, or parseable JSON per version."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-delivery-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "普通查无发送记录时，原投递结果保留什么状态？",
+      "relevant": [
+        {
+          "path": "evidence/note-05.md",
+          "anchor": "Unknown outcomes and ordinary absence stay uncertain."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-delivery-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "The Outbox 在同一个 task 和 channel 里，是并行发送还是 serialize？",
+      "relevant": [
+        {
+          "path": "evidence/note-05.md",
+          "anchor": "The controller serializes sends per task and channel while unrelated work continues."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-checkpoint-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What happens to native context compaction if its checkpoint cannot be written?",
+      "relevant": [
+        {
+          "path": "evidence/note-06.md",
+          "anchor": "A checkpoint write failure blocks the native mutation."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-checkpoint-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "收件箱按 UTF-8 翻页时，必须每一页重新校验哪些信息？",
+      "relevant": [
+        {
+          "path": "evidence/note-06.md",
+          "anchor": "UTF-8 pagination checks current authority, revision and digest on every page."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-checkpoint-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Worker context 打包时，current instructions 会改写还是原样保留？",
+      "relevant": [
+        {
+          "path": "evidence/note-06.md",
+          "anchor": "It preserves current instructions verbatim"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-memory-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What happens to the target scope when a version-one memory import fails?",
+      "relevant": [
+        {
+          "path": "evidence/note-07.md",
+          "anchor": "A failed import leaves the target scope unchanged."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-memory-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "更正或遗忘是在调用记忆提供方之前还是之后隐藏旧记录？",
+      "relevant": [
+        {
+          "path": "evidence/note-07.md",
+          "anchor": "Correction or forgetting hides the old record before the provider call."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-memory-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Explicit personal memory 会自动进入 Worker context 或原生压缩摘要吗？",
+      "relevant": [
+        {
+          "path": "evidence/note-07.md",
+          "anchor": "Explicit personal memory stays outside automatic Worker context and native compaction summaries."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-github-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What identifiers and names does GitHub REST verify before serving each page?",
+      "relevant": [
+        {
+          "path": "evidence/note-08.md",
+          "anchor": "REST reads verify numeric IDs and current names before each page."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-github-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "走 MCP 门面读取 Github 时，调用前后分别需要核对配置中的什么？",
+      "relevant": [
+        {
+          "path": "evidence/note-08.md",
+          "anchor": "The bridge compares the configured fingerprint against discovery before and after invocation."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-github-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "GitHub provider 的 text 在 authenticated Web panel 会被按字面文本处理吗？",
+      "relevant": [
+        {
+          "path": "evidence/note-08.md",
+          "anchor": "It renders provider text literally"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-routine-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What prevents a missed wake from being dispatched after a reconciliation-only restore?",
+      "relevant": [
+        {
+          "path": "evidence/note-09.md",
+          "anchor": "Reconciliation-only restore keeps the application dispatch gate closed."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-routine-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "原生唤醒在创建调用之前就到期时，应用把它判定为什么？",
+      "relevant": [
+        {
+          "path": "evidence/note-09.md",
+          "anchor": "A wake that elapses before the carrier calls native create is known unsent"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-routine-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Cron 的 timed occurrence 去重时用 Routine revision 和哪一个 instant？",
+      "relevant": [
+        {
+          "path": "evidence/note-09.md",
+          "anchor": "The app deduplicates timed occurrences by Routine revision and intended instant."
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-proactive-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What is the maximum number of stored events considered in one proactive replay?",
+      "relevant": [
+        {
+          "path": "evidence/note-10.md",
+          "anchor": "最多使用 100 条限定范围的事件"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-proactive-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "主动动作除了已有的有用私有简报，还需要哪个单独授权？",
+      "relevant": [
+        {
+          "path": "evidence/note-10.md",
+          "anchor": "在**今日**展示私有简报的单独授权"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-proactive-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "运行中断的 proactive assessment 在 restart 之后会重新派发吗？",
+      "relevant": [
+        {
+          "path": "evidence/note-10.md",
+          "anchor": "中断评估会被抑制，不会再次派发。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-reviewed-skill-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which two identifiers are pinned alongside passing held-out tests when a skill is approved?",
+      "relevant": [
+        {
+          "path": "evidence/note-11.md",
+          "anchor": "审批固定版本摘要和当前启用状态的版本号"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-reviewed-skill-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "重新发出技能运行请求时，需要比对哪三项信息？",
+      "relevant": [
+        {
+          "path": "evidence/note-11.md",
+          "anchor": "重发运行请求时核对版本、操作 ID 和输入摘要。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-reviewed-skill-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "技能新运行的 input payload 在工作库里作为 raw text 保存吗？",
+      "relevant": [
+        {
+          "path": "evidence/note-11.md",
+          "anchor": "新运行的输入仅保存摘要，结果文本留在响应中。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-resident-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "When does the resident executor release the Worker slot during provider wait?",
+      "relevant": [
+        {
+          "path": "evidence/note-12.md",
+          "anchor": "执行器在原生退出后释放 Worker 槽位。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-resident-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "常驻宿主心跳间隔太长时，看门狗会做哪类检查？",
+      "relevant": [
+        {
+          "path": "evidence/note-12.md",
+          "anchor": "心跳间隔过长时启动一次有界的暖调度检查。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-resident-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "恢复 older SQLite snapshot 时，dispatch gate 处于什么限制？",
+      "relevant": [
+        {
+          "path": "evidence/note-12.md",
+          "anchor": "恢复较旧快照时，派发保持仅对账限制。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-package-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which base node linker setting does the clean packaged Worker installation retain?",
+      "relevant": [
+        {
+          "path": "evidence/note-13.md",
+          "anchor": "`nodeLinker: hoisted`"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-package-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "安装预检中，模拟供应商的回环服务返回哪个 HTTP 状态？",
+      "relevant": [
+        {
+          "path": "evidence/note-13.md",
+          "anchor": "该端点返回 HTTP 400"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-package-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "If a second @deepseek-ai/dsh-llm copy is installed，哪两个 request marker 会分离？",
+      "relevant": [
+        {
+          "path": "evidence/note-13.md",
+          "anchor": "该模块内部记录的请求标记会与原生 Agent Loop 的请求标记分离。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-desktop-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What does the browser session clean up when it exits?",
+      "relevant": [
+        {
+          "path": "evidence/note-14.md",
+          "anchor": "浏览器 Session 退出时清理隔离上下文。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-desktop-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "操作系统支持的每用户保留在桌面工作流里起什么作用？",
+      "relevant": [
+        {
+          "path": "evidence/note-14.md",
+          "anchor": "操作系统支持的每用户保留在本地 Profile 之间串行化桌面工作流。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-desktop-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "模型可点击的 browser element IDs 必须来自哪种 observation？",
+      "relevant": [
+        {
+          "path": "evidence/note-14.md",
+          "anchor": "仅接受有限顶层观察中提供的元素 ID。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-media-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What happens to the media lease when neither the queue nor history contains an uncertain ComfyUI submission?",
+      "relevant": [
+        {
+          "path": "evidence/note-15.md",
+          "anchor": "队列与历史都查不到时，结果保持未决并继续占用租约。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-media-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "一次媒体任务完成验证后，原文件留在哪个提供器？",
+      "relevant": [
+        {
+          "path": "evidence/note-15.md",
+          "anchor": "文件保留在 ComfyUI 中。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-media-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "ComfyUI prompt 还没发出 request 时，prompt ID 是 provider 决定还是应用分配？",
+      "relevant": [
+        {
+          "path": "evidence/note-15.md",
+          "anchor": "SQLite 提交客户端分配的 prompt ID"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-plugins-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What action comes first when unloading an installed provider instance?",
+      "relevant": [
+        {
+          "path": "evidence/note-16.md",
+          "anchor": "卸载先关闭准入"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-plugins-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "核心完成记忆遗忘时，先记录排除项还是先交给提供方删除？",
+      "relevant": [
+        {
+          "path": "evidence/note-16.md",
+          "anchor": "遗忘先记录核心排除项，再请求提供方删除。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-plugins-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Plugin 的 ready binding 包含哪些 ID 和 revision？",
+      "relevant": [
+        {
+          "path": "evidence/note-16.md",
+          "anchor": "绑定含配置实例 ID、实现 ID、插件版本和配置修订。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-routes-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "At what native lifecycle point does the adapter choose the route?",
+      "relevant": [
+        {
+          "path": "evidence/note-17.md",
+          "anchor": "在 Agent 发布前的 setup 中选择路由。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-routes-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "同一业务任务发生路由回退，旧 Session 和旧请求序列会继续复用吗？",
+      "relevant": [
+        {
+          "path": "evidence/note-17.md",
+          "anchor": "回退在同一业务 Task 下取得全新的原生 Session 和请求序列。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-routes-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Which component 持有每次 retry 的 budget reservation 和授权？",
+      "relevant": [
+        {
+          "path": "evidence/note-17.md",
+          "anchor": "Core 继续负责路由授权和预算占用，包括每次重试。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-quota-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What can clear a durable provider hard-exhaustion state?",
+      "relevant": [
+        {
+          "path": "evidence/note-18.md",
+          "anchor": "经认证的提供者重置可清除持久耗尽状态。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-quota-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "旧模型流只返回一部分数据后断掉，推理结果保留什么状态？",
+      "relevant": [
+        {
+          "path": "evidence/note-18.md",
+          "anchor": "部分或丢失的流保留中断状态。"
+        }
+      ]
+    },
+    {
+      "id": "release-evidence-quota-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "The Core hard-budget denial 后只准许哪种已独立通过准入的 route？",
+      "relevant": [
+        {
+          "path": "evidence/note-18.md",
+          "anchor": "硬预算拒绝只允许另行通过准入的零费用路由。"
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "How many session flush retries does the adapter allow before failing?"
+    },
+    {
+      "language": "zh",
+      "query": "WorkStore 打开数据库时，等待另一个写入进程退出的默认超时是多少毫秒？"
+    },
+    {
+      "language": "mixed",
+      "query": "A prepared action 的 approval 默认多少分钟到期？"
+    },
+    {
+      "language": "en",
+      "query": "Which signal timeout in seconds is used for native Worker cleanup?"
+    },
+    {
+      "language": "zh",
+      "query": "Outbox 的单个发送目的地默认允许重试几次？"
+    },
+    {
+      "language": "mixed",
+      "query": "checkpoint-aware context profile 的 default response reserve 是多少 tokens？"
+    },
+    {
+      "language": "en",
+      "query": "At what confidence score does explicitly remembered text become confirmed automatically?"
+    },
+    {
+      "language": "zh",
+      "query": "GitHub 只读连接器的 issue 游标默认几分钟到期？"
+    },
+    {
+      "language": "mixed",
+      "query": "Native routine mailbox 每轮最多缓存多少 active wake markers？"
+    },
+    {
+      "language": "en",
+      "query": "How many minutes of cooldown does a newly created proactive rule have?"
+    },
+    {
+      "language": "zh",
+      "query": "每个已启用 Markdown 技能最多允许多少个必填变量？"
+    },
+    {
+      "language": "mixed",
+      "query": "resident watchdog 对单个 Attempt 连续多少次相同 tool call 才标记重复？"
+    },
+    {
+      "language": "en",
+      "query": "What is the retry delay after the packaged Worker enters provider wait?"
+    },
+    {
+      "language": "zh",
+      "query": "已配置的 browser Profile 每次可以打开多少个并行租约标签页？"
+    },
+    {
+      "language": "mixed",
+      "query": "ComfyUI 的单张输出图下载大小上限是多大 MiB？"
+    },
+    {
+      "language": "en",
+      "query": "How long does an unresponsive provider have to drain before the host forcibly stops it?"
+    },
+    {
+      "language": "zh",
+      "query": "路由回退时重新组装提示，给源证据预留的默认 token 配额是多少？"
+    },
+    {
+      "language": "mixed",
+      "query": "本地 rate window 达到上限后，默认 cooldown 有多少秒？"
+    }
+  ],
+  "provenance": {
+    "revision": "51446a09732d65161abc4cef44e32daa4e1b8062",
+    "excerpts": {
+      "evidence/note-01.md": {
+        "path": "docs/evidence/PA-002.md",
+        "first": 9,
+        "last": 12,
+        "root": "runtime"
+      },
+      "evidence/note-02.md": {
+        "path": "docs/evidence/PA-004.md",
+        "first": 9,
+        "last": 14,
+        "root": "runtime"
+      },
+      "evidence/note-03.md": {
+        "path": "docs/evidence/PA-005.md",
+        "first": 9,
+        "last": 15,
+        "root": "runtime"
+      },
+      "evidence/note-04.md": {
+        "path": "docs/evidence/PA-006.md",
+        "first": 9,
+        "last": 14,
+        "root": "runtime"
+      },
+      "evidence/note-05.md": {
+        "path": "docs/evidence/PA-007.md",
+        "first": 9,
+        "last": 15,
+        "root": "coordination"
+      },
+      "evidence/note-06.md": {
+        "path": "docs/evidence/PA-011.md",
+        "first": 9,
+        "last": 14,
+        "root": "runtime"
+      },
+      "evidence/note-07.md": {
+        "path": "docs/evidence/PA-012.md",
+        "first": 9,
+        "last": 14,
+        "root": "runtime"
+      },
+      "evidence/note-08.md": {
+        "path": "docs/evidence/PA-016.md",
+        "first": 9,
+        "last": 14,
+        "root": "coordination"
+      },
+      "evidence/note-09.md": {
+        "path": "docs/evidence/PA-018.md",
+        "first": 9,
+        "last": 16,
+        "root": "coordination"
+      },
+      "evidence/note-10.md": {
+        "path": "docs/evidence/PA-019-zh.md",
+        "first": 9,
+        "last": 14,
+        "root": "coordination"
+      },
+      "evidence/note-11.md": {
+        "path": "docs/evidence/PA-020-zh.md",
+        "first": 7,
+        "last": 12,
+        "root": "coordination"
+      },
+      "evidence/note-12.md": {
+        "path": "docs/evidence/PA-021-zh.md",
+        "first": 9,
+        "last": 14,
+        "root": "runtime"
+      },
+      "evidence/note-13.md": {
+        "path": "docs/evidence/PA-028-zh.md",
+        "first": 11,
+        "last": 17,
+        "root": "runtime"
+      },
+      "evidence/note-14.md": {
+        "path": "docs/evidence/PA-031-zh.md",
+        "first": 7,
+        "last": 12,
+        "root": "delivery"
+      },
+      "evidence/note-15.md": {
+        "path": "docs/evidence/PA-033-zh.md",
+        "first": 7,
+        "last": 11,
+        "root": "delivery"
+      },
+      "evidence/note-16.md": {
+        "path": "docs/evidence/PA-038-zh.md",
+        "first": 9,
+        "last": 15,
+        "root": "delivery"
+      },
+      "evidence/note-17.md": {
+        "path": "docs/evidence/PA-040-zh.md",
+        "first": 7,
+        "last": 11,
+        "root": "runtime"
+      },
+      "evidence/note-18.md": {
+        "path": "docs/evidence/PA-042-zh.md",
+        "first": 7,
+        "last": 13,
+        "root": "runtime"
+      },
+      "evidence/note-19.md": {
+        "path": "docs/evidence/PA-001.md",
+        "first": 7,
+        "last": 13,
+        "root": "runtime"
+      },
+      "evidence/note-20.md": {
+        "path": "docs/evidence/PA-008-zh.md",
+        "first": 9,
+        "last": 13,
+        "root": "runtime"
+      },
+      "evidence/note-21.md": {
+        "path": "docs/evidence/PA-009.md",
+        "first": 9,
+        "last": 13,
+        "root": "coordination"
+      },
+      "evidence/note-22.md": {
+        "path": "docs/evidence/PA-014-zh.md",
+        "first": 9,
+        "last": 13,
+        "root": "coordination"
+      },
+      "evidence/note-23.md": {
+        "path": "docs/evidence/PA-017.md",
+        "first": 9,
+        "last": 14,
+        "root": "delivery"
+      },
+      "evidence/note-24.md": {
+        "path": "docs/evidence/PA-041-zh.md",
+        "first": 7,
+        "last": 11,
+        "root": "runtime"
+      }
+    }
+  }
+}

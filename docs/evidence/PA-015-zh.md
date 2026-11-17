@@ -186,3 +186,22 @@ DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=repository \
   DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/repository-reports \
   pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
 ```
+
+## 三根目录独立原生确认（2026-11-17）
+
+[发布验收语料](../../tests/e2e/fixtures/knowledge-retrieval/release-evidence-holdout.json)包含来自固定版本实施证据的 24 段原文、54 道有标注答案的题和 18 道缺失事实对照题。每个语言分组各有 18 道有答案题和 6 道对照题。夹具记录了来源版本、行号范围，以及文本在 `runtime`、`coordination`、`delivery` 三个根目录中的位置。72 次鉴权搜索均省略根目录参数，使用默认的全根目录范围。语料 SHA-256 为 `e8fc2ceb127093cc2d19cca3f818e134b0730707fe2616bc7374f466afee3c48`。
+
+| 经鉴权的原生 Web 运行 | 首条命中 | 前三条命中 | 首条摘录包含完整标注答案 | 缺失事实误报 | 一致的来源回读 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 未修改的主分支代码树 `51446a0` | 24/54 | 25/54 | 8/54 | 10/18 | 79/79 |
+| 冻结策略的段落原型 | 46/54 | 47/54 | 45/54 | 0/18 | 64/64 |
+
+模型选择一段原文摘录或弃答。冻结策略包含对所问数值和对象的核对。首条和前三条命中均达到 80% 目标。英语、中文和混合语言的首条命中分别为 15/18、14/18 和 17/18。相比基线，原型找回了 26 道首条命中，丢失了 4 道。测试核对了各结果的根目录、修订和文档字节，并拒绝未鉴权和只读会话发起的搜索。候选报告 SHA-256 为 `910ac764772c36adac8153e09d4ac9f78908f29d3841b6b3a4372e86c604e918`。Linux CPU 排序器首次冷查询耗时 64.1 秒，71 次热查询的 p50/p95 分别为 27.1/49.1 秒。产品接入及常规原生回归继续由 [#182](https://github.com/MosBot-AI/dsh-personal-agent/issues/182) 跟踪。[验证记录](https://github.com/MosBot-AI/dsh-personal-agent/issues/182#issuecomment-6955588709)
+
+用以下命令对已构建的工作树运行语料。未修改的主分支代码树会先写出报告，随后因上述十道缺失事实题返回了结果而未通过无答案断言。
+
+```sh
+DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=release-evidence \
+  DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/confirmation-reports \
+  pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
+```

@@ -22,10 +22,11 @@ interface Corpus {
   documents: Record<string, string>
   queries: Query[]
   negativeControls: Pick<Query, 'language' | 'query'>[]
+  provenance?: { excerpts: Record<string, { root?: string }> }
 }
 
 interface ScoredQuery extends Pick<Query, 'id' | 'language' | 'mode'> {
-  hits: { path: string; verified: boolean; relevant: boolean }[]
+  hits: { path: string; verified: boolean; relevant: boolean; snippetHasAnchor?: boolean }[]
   invalidInput: boolean
 }
 
@@ -40,6 +41,7 @@ const optInCorpora = new Map([
   ['confirmatory', { name: 'confirmatory-holdout', digest: 'e2cc46f772f9622ba65c6272a92b235f691b478e89dd6d457f2aaf75a8f33a0e' }],
   ['answerability', { name: 'answerability-holdout', digest: 'ad223709bc0630197d2bbd712a850f720278a0c4afad3767d782994b06354eec' }],
   ['repository', { name: 'repository-holdout', digest: 'd0cde5e58272d766785cca24ed2bdf0ffaba40a40cf716a7e32034e2766c86f5' }],
+  ['release-evidence', { name: 'release-evidence-holdout', digest: 'e8fc2ceb127093cc2d19cca3f818e134b0730707fe2616bc7374f466afee3c48' }],
 ])
 const selectedCorpus = optInCorpora.get(process.env.DSHPA_KNOWLEDGE_RETRIEVAL_FRESH ?? '')
 const corpora = selectedCorpus ? [selectedCorpus] : regressionCorpora
@@ -73,7 +75,15 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
   assert.ok(reportDirectory && isAbsolute(reportDirectory), 'Supply an absolute benchmark report directory')
   const bytes = readFileSync(new URL(`./fixtures/knowledge-retrieval/${name}.json`, import.meta.url))
   assert.equal(sha256(bytes), digest)
-  const { rubric, documents, queries, negativeControls } = JSON.parse(bytes.toString('utf8')) as Corpus
+  const { rubric, documents, queries, negativeControls, provenance } = JSON.parse(bytes.toString('utf8')) as Corpus
+  const allRoots = name === 'release-evidence-holdout'
+  const locations = new Map(Object.keys(documents).map(path => [path, allRoots ? provenance?.excerpts[path]?.root : rootId]))
+  const counts = new Map<string, number>()
+  for (const id of locations.values()) {
+    assert.ok(id && /^[a-z][a-z0-9-]*$/u.test(id))
+    counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  assert.ok(!allRoots || counts.size > 1)
   for (const query of queries) {
     assert.ok(query.relevant.length && query.relevant.every(answer => documents[answer.path]?.includes(answer.anchor)), query.id)
   }
@@ -81,14 +91,14 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
   const prepared = prepareWebHost(probe, [
     '- id: dshpa', '  config:', '    inbox:',
     "      storageDirectory: !!js dshHomePath('knowledge-inbox')", '      workRoot: !!js process.cwd()',
-    '      knowledge:', '        roots:', `          - id: ${rootId}`,
-    `            directory: !!js process.cwd() + '/${rootId}'`, '            include: ["**/*.md"]',
+    '      knowledge:', '        roots:', ...[...counts.keys()].flatMap(id => [
+      `          - id: ${id}`, `            directory: !!js process.cwd() + '/${id}'`, '            include: ["**/*.md"]',
+    ]),
   ])
   onTestFinished(() => rmSync(prepared.root, { recursive: true, force: true }))
-  const directory = join(prepared.root, rootId)
   for (const [path, document] of Object.entries(documents)) {
     assert.ok(!posix.isAbsolute(path) && path.split('/').every(part => part && part !== '.' && part !== '..'), path)
-    const destination = join(directory, path)
+    const destination = join(prepared.root, locations.get(path)!, path)
     mkdirSync(dirname(destination), { recursive: true, mode: 0o700 })
     writeFileSync(destination, document, { mode: 0o600 })
   }
@@ -96,7 +106,7 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
   const host = await openWebHost(probe, { prepared })
   const cookie = await host.exchange()
   const operator = await host.exchange(true)
-  const sample = { type: 'knowledge_search', query: queries[0]!.query, rootId, limit: 3 }
+  const sample = { type: 'knowledge_search', query: queries[0]!.query, ...(allRoots ? {} : { rootId }), limit: 3 }
   assert.equal((await host.rpc(INBOX_RPC_ENDPOINT, sample)).status, 401)
   assert.equal((await host.rpc(INBOX_RPC_ENDPOINT, sample, operator)).status, 403)
 
@@ -110,18 +120,22 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
     const result = await inbox({ ...sample, query })
     if (!result.ok && result.code === 'invalid_input') return { invalidInput: true, hits: [] }
     assert.ok(result.ok && result.kind === 'knowledge_search', JSON.stringify(result))
-    assert.deepEqual(result.roots, [{ id: rootId, status: 'available', files: Object.keys(documents).length }])
+    assert.deepEqual(result.roots, [...counts].map(([id, files]) => ({ id, status: 'available', files })))
     const hits = []
     for (const hit of result.hits) {
       const page = await inbox({ type: 'knowledge_read', ref: hit.ref, revision: hit.revision, maxBytes: 4096 })
       const expected = documents[hit.path]
+      const expectedRoot = locations.get(hit.path)
       const verified = expected !== undefined && page.ok && page.kind === 'knowledge_page'
         && page.source.path === hit.path && page.source.ref.id === hit.ref.id
-        && page.source.ref.rootId === rootId && hit.ref.rootId === rootId
+        && page.source.ref.rootId === expectedRoot && hit.ref.rootId === expectedRoot
         && page.source.revision === hit.revision && hit.revision === sha256(expected)
         && page.text === expected && page.nextOffset === undefined && page.totalBytes === Buffer.byteLength(expected)
-      hits.push({ path: hit.path, verified, relevant: verified && relevant.some(answer =>
-        answer.path === hit.path && expected.includes(answer.anchor)) })
+      const answer = relevant.find(answer => answer.path === hit.path)
+      hits.push({
+        path: hit.path, verified, relevant: verified && answer !== undefined && expected.includes(answer.anchor),
+        ...(allRoots ? { snippetHasAnchor: verified && answer !== undefined && hit.snippet.includes(answer.anchor) } : {}),
+      })
     }
     return { invalidInput: false, hits }
   }
@@ -147,6 +161,7 @@ it.skipIf(!reportDirectory).each(corpora)('benchmarks the frozen $name knowledge
     { cwd: repository, encoding: 'utf8' }).trim().length > 0
   const report = {
     corpus: name, corpusDigest: digest, rubric,
+    ...(allRoots ? { rootScope: 'all', roots: Object.fromEntries(counts) } : {}),
     repoRevision, repoTree, sourceChanges,
     dshVersion: (JSON.parse(readFileSync(require.resolve('@deepseek-ai/dsh/package.json'), 'utf8')) as { version: string }).version,
     nodeVersion: process.version, icuVersion: process.versions.icu,
