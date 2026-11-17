@@ -39,6 +39,7 @@ const optInCorpora = new Map([
   ['1', { name: 'fresh-holdout', digest: '633b0a1e50fc01f2f64eb829d1209d8e4850c243f548c826da359b68b091f42c' }],
   ['confirmatory', { name: 'confirmatory-holdout', digest: 'e2cc46f772f9622ba65c6272a92b235f691b478e89dd6d457f2aaf75a8f33a0e' }],
   ['answerability', { name: 'answerability-holdout', digest: 'ad223709bc0630197d2bbd712a850f720278a0c4afad3767d782994b06354eec' }],
+  ['repository', { name: 'repository-holdout', digest: 'd0cde5e58272d766785cca24ed2bdf0ffaba40a40cf716a7e32034e2766c86f5' }],
 ])
 const selectedCorpus = optInCorpora.get(process.env.DSHPA_KNOWLEDGE_RETRIEVAL_FRESH ?? '')
 const corpora = selectedCorpus ? [selectedCorpus] : regressionCorpora
