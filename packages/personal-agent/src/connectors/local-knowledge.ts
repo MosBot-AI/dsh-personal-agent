@@ -210,7 +210,7 @@ export function createLocalKnowledge(input: z.input<typeof localKnowledgeConfigS
   function currentRow(root: Root, row: Row): boolean {
     const stamp = withFile(root, row.source.path, (fd, device) => fileStamp(fd, device, root.config.maxFileBytes)?.stamp)
     if (stamp === row.stamp) return true
-    root.rows.delete(row.source.ref.id)
+    if (root.rows.get(row.source.ref.id) === row) root.rows.delete(row.source.ref.id)
     return false
   }
 
