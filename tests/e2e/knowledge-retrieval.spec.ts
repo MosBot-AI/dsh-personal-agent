@@ -35,9 +35,12 @@ const regressionCorpora = [
   { name: 'natural', digest: '9ab183fd0c49b7787d79e43547e28a7bdd2a63e0fd2d9649862fea42cb4d856e' },
   { name: 'final-natural', digest: '0ef54d26764807f0577a83f549a3e3e84819011d7b1de180bbd786de1e317bcd' },
 ]
-const corpora = process.env.DSHPA_KNOWLEDGE_RETRIEVAL_FRESH === '1'
-  ? [{ name: 'fresh-holdout', digest: '633b0a1e50fc01f2f64eb829d1209d8e4850c243f548c826da359b68b091f42c' }]
-  : regressionCorpora
+const optInCorpora = new Map([
+  ['1', { name: 'fresh-holdout', digest: '633b0a1e50fc01f2f64eb829d1209d8e4850c243f548c826da359b68b091f42c' }],
+  ['confirmatory', { name: 'confirmatory-holdout', digest: 'e2cc46f772f9622ba65c6272a92b235f691b478e89dd6d457f2aaf75a8f33a0e' }],
+])
+const selectedCorpus = optInCorpora.get(process.env.DSHPA_KNOWLEDGE_RETRIEVAL_FRESH ?? '')
+const corpora = selectedCorpus ? [selectedCorpus] : regressionCorpora
 const reportDirectory = process.env.DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const probe = fileURLToPath(new URL('./fixtures/memory-flow-probe.mjs', import.meta.url))
