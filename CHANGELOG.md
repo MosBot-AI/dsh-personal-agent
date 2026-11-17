@@ -33,6 +33,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 - Refuse to publish a GitHub test draft when its approved head already exists, including at the same commit.
 
 - Improve local knowledge keyword ranking with stronger document-body matches and priority for exact filenames and relative paths.
+- Preserve refreshed local knowledge revisions when concurrent searches discard stale results.
 
 ### Added
 - Prepare a dedicated packaged alpha profile and record opt-in owner trial observations and incidents locally.

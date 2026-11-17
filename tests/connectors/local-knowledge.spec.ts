@@ -19,9 +19,9 @@ function fixture() {
     for (const connector of connectors) connector.close()
     rmSync(directory, { recursive: true, force: true })
   })
-  function open() {
+  function open(maxFileBytes = 512) {
     const connector = createLocalKnowledge({ roots: [
-      { id: 'local', directory: root, include: ['**/*.md', '**/*.txt'], exclude: ['private/**'], maxFileBytes: 512 },
+      { id: 'local', directory: root, include: ['**/*.md', '**/*.txt'], exclude: ['private/**'], maxFileBytes },
       { id: 'llmwiki', directory: missing },
     ] })
     connectors.push(connector)
@@ -77,6 +77,32 @@ describe.skipIf(!supported)('descriptor-relative local knowledge', () => {
     const navigation = await f.search(connector, exact)
     assert.ok(navigation.ok && navigation.kind === 'knowledge_search')
     expect(navigation.hits.map(hit => hit.path)).toEqual([exact, 'body.md'])
+  })
+
+  it('keeps a refreshed revision indexed when an older search resumes', async () => {
+    const f = fixture()
+    const filename = 'cargo.md'
+    const path = join(f.root, filename)
+    writeFileSync(path, '# Cargo manifest\nThe cargo manifest is stored in the north cabinet.')
+    // Cross the question scorer's cooperative yield while keeping the directory scan below its own yield threshold.
+    for (const name of ['x', 'y', 'z']) writeFileSync(join(f.root, `${name}.txt`), name.repeat(100 * 1024))
+    const connector = f.open(128 * 1024)
+    const outdated = f.search(connector, 'Where is the cargo manifest stored?', 'local')
+
+    const replacement = '# Cargo manifest\nThe cargo manifest is stored in the east warehouse.'
+    const refreshed = new Promise<Awaited<typeof outdated>>(resolve => {
+      setImmediate(() => {
+        writeFileSync(path, replacement)
+        resolve(f.search(connector, filename, 'local'))
+      })
+    })
+    const [older, newer] = await Promise.all([outdated, refreshed])
+    assert.ok(newer.ok && newer.kind === 'knowledge_search')
+    expect(newer.hits.map(hit => hit.path)).toEqual([filename])
+    expect(older).toMatchObject({ hits: [], roots: [{ id: 'local', files: 4 }, { id: 'llmwiki', files: 0 }] })
+    const source = newer.hits[0]!
+    expect(await connector.handle({ type: 'knowledge_read', ref: source.ref, revision: source.revision }, current))
+      .toMatchObject({ kind: 'knowledge_page', text: replacement })
   })
 
   it('returns no results for unrelated questions or tied natural-question matches', async () => {
