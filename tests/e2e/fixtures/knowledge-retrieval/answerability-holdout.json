@@ -1,0 +1,769 @@
+{
+  "rubric": {
+    "positiveQueries": "54 different facts across 18 synthetic work topics and three question languages.",
+    "negativeControls": "18 topical missing facts, six per language.",
+    "meaning": "A hit requires the annotated source and the verbatim answer-bearing text."
+  },
+  "documents": {
+    "work/receipts/notes.md": "# Expense tracker handover\n\n## Importing the pilot batch\nThe intake sheet accepts one row per payment. The raw amount stays in local currency until the finance pass is finished. A duplicate receipt is flagged on the Review tab.\n\n## Exceptions\n把一张收据拆成两笔支出时，必须填写原单据编号。Missing receipts are held in a folder named Pending Proof. An item may move to the monthly summary after the reviewer checks the amount and date.\n",
+    "work/receipts/record.md": "# Expense tracker template decisions\n\nThe standard tracker lists office breakfasts on the Meals tab and travel advances on the Prepaid tab. Put statements awaiting manager approval in the Pending Signoff folder. Raw amount may be updated during budget review, before the sheet is circulated.\n",
+    "work/handover/record.md": "# Customer survey readout\n\n## Before sharing\nRound response rates to one decimal place. Hide free-text comments that name an individual before a director opens the preview. Keep internal review copies separate from the final summary.\n\n| Case | Viewer cue |\n| --- | --- |\n| Fewer than eight survey responses | Report the group as Too Small. |\n| Response labels revised | 在术语变更页记录旧标签与新标签。 |\n| Department summary ready to send | Export the department summary as PDF. |\n",
+    "work/handover/notes.md": "# Customer feedback coding workshop\n\nThe training slide uses a warning badge on departments with fewer than five facilitators. Export the workshop roster as CSV. The slide explains how old survey categories map to facilitator duties. The department naming exercise is fictional.\n",
+    "work/monday/notes.md": "# 周一库存差额复查\n\n## 清单\n本流程针对周一早班。先核对上周末的出入库总数，再打开本周清单。差额记录应注明计数方式与记录时间，月末再统一处理长期差额。\n\n- 发现清单里同一箱出现两次时，把第二条移动到重复页。\n- 仓库的复核抽样固定在周一上午十点。\n- 复核结束后，把不能确认的差额交给当班盘点负责人。\n",
+    "work/monday/record.md": "# 周二供应商盘点安排\n\n周二上午十点核对本周新到纸箱。重复的送货单由采购内勤回寄。电子清单里要保留订货单号和内勤人员的复核签字。退货入库由售后另查。\n",
+    "work/release/record.md": "# Desktop preview packaging notes\n\nThe preview is built after the platform smoke checks. The creator attaches the installed version to the test record. Preview package names begin with desk-preview followed by the build number. Append the architecture when publishing two builds with the same number.\n\n此轮预览用单独的离线签名机签名。Verify the checksum from the Releases pane before deleting the local copy. A failed signature check pauses the upload and leaves the temporary file available for review.\n",
+    "work/release/notes.md": "# Desktop support bundle\n\nThe support bundle is named desk-support followed by the case number. No live signing happens in the desktop support application. Check the recorded file count in the ticket view when sending logs and include a copy of the affected configuration.\n",
+    "work/supplier/notes.md": "# 替代供应商样件评审\n\n先给新样件扫码，保留样件外包装到评审结束。如果验证发现材质与登记不同，在通报里写出实际材质。技术合格的样件用紫色贴纸标记。这个标记只在该批评审期间有效。\n\n评审期间如有两个样件使用相同编号，由质检员重新贴号。临时增加的评审步骤写在附页的补充试验区。所有关于成本的讨论在采购记录里单独留存。\n",
+    "work/supplier/record.md": "# 正式供应商样件存放\n\n正式供货批次用白色贴纸标记货架。样件通过外观复查后，仓库管理员按到货日期排序。评审记录附上商业报价表，质检员按需要重做外观检测。\n",
+    "work/nearline/record.md": "# Nearline research export checklist\n\nVerify that filenames match the index and that rows are sorted before making the export. The validation manifest stays next to the compressed archive. Delete the temporary staging directory after the test restore finishes.\n\n无法识别的数据行保存在 rejected-rows.csv。Each training snapshot gets a fresh export number. The research coordinator is responsible for flagging folders that should be retained for a second restore test.\n",
+    "work/nearline/notes.md": "# Daily analytics export\n\nThe validation manifest is sent to the event reporting team. Move bad timestamp records to daily-errors.csv. Temporary working folders may be cleared once the dashboard adopts the output. Each dashboard includes the reporting week and account label.\n",
+    "work/room/notes.md": "# 小型培训室到场演练\n\n## 入场\n本次是动线测试，签到从门外开始。课程开始前用一张白纸摆出拟用桌椅位置。辅助听音器要从前台左侧上锁的抽屉取出。重复演练之间把门口的可移动招牌归位。\n\n## 散场\n把试用的感应胸卡交给签到台右侧工作人员。备用座椅要在散场后推回北墙的折叠屏后面。记录讲者转换与听众离场是否发生冲突。\n",
+    "work/room/record.md": "# 培训室日常借用\n\n门口招牌挂在北墙。课程签到后请把访客胸卡投入正门边的灰色回收箱。讲者需要的遥控器收在前台右侧的抽屉。讲台的备用座椅通常在南侧储物间。\n",
+    "work/bike/record.md": "# Bicycle maintenance intake\n\nUse this record when collecting training bicycles after a class. Start with a visual inspection and ask the instructor whether any brake drag was reported. Jobs involving a bent rim get an orange triangle tag.\n\nConvert a trainee's nickname to the class identifier in the shared record. 取下来的小垫片先放进带盖的小格盒里。A replacement saddle can be fitted after the mechanic records the seat tube diameter. Put clear photos in the job folder alongside the signed inspection checklist.\n",
+    "work/bike/notes.md": "# Bicycle shelter inspections\n\nDamaged shelter signs get a yellow rectangle tag. Remove broken cable clips and place them in an open supply bucket under the shelter bench. Collect the signed site checklist before the staff meeting. Note which bicycle racks needed cleaning.\n",
+    "work/seedling/notes.md": "# 阳台育苗试种记录\n\n本次小批试种记录种植日期和容器编号，不合并不同试验组。浇水后检查外托盘，叶片碰到盖子就换更高的盖。开始适应户外前，把育苗盘推到能见明亮散射光的位置。\n\n遇到装错标签的育苗格，在电子记录里写原标签和新编号。玻璃盖上的水珠太多时，用木夹留一个通风缝。两批苗归档后再比较出芽日期与所在格子的条件。\n",
+    "work/seedling/record.md": "# 阳台花盆清洗\n\n用旧木夹固定防滑垫。碎花盆贴上坏盆标签再移到储藏间。清洗区域放在阳台上能遮雨的地方。盘点时只核对已经清空的容器和使用状态。\n",
+    "work/library/record.md": "# Branch interlibrary dispatch\n\nSort requests using the shipping list. Paper slips inside the envelope can stay in order by member ID. Outbound loan notices go to the originating library's lending desk. Staging bins are separate from items reserved for walk-in pickup.\n\n无法在当日配齐的一组图书暂放在标为部分待配的篮子里。On each outgoing bundle, place the routing slip underneath the blue rubber band. Preserve reservations that will wait for the next dispatch.\n",
+    "work/library/notes.md": "# Library exhibit transport\n\nAn event loan notice goes to the exhibits coordinator. Bundled reading lists use a white paper tie. Items reserved for local walk-in pickup are marked at the desk and held behind the information counter until their time slot.\n",
+    "work/quota/notes.md": "# 小组数据作业配额交接\n\n作业请求按小组统计，事件记录按本地日期查询。可以在观测面板看到拒绝，但应保留导致拒绝的窗口编号。配额申请表的资源类型必须填 CPU 小时，而非运行次数。\n\n月初的计数核对以日志中第一条完成记录为准。暂时调高配额时，把调高原因写在值班记录的说明栏里。恢复原来的限额后，确认隔天的报表使用新的观察时段。\n",
+    "work/quota/record.md": "# 样例执行报表\n\n培训报表里的执行次数是演示数据，其中每周第一条开始记录会用黄色标识。报表格子默认用 UTC 日期。给学员解释配额时，先把报表发给培训负责人。\n",
+    "work/backstage/record.md": "# Hall lighting rehearsal\n\nTest the full cue list with a quiet audience. Record whether operators could see their printed controls. The balcony spots switch off during the second scene change. Check the map when resetting equipment after the test.\n\n中场测试用的临时电池放在写着备用的抽屉里。After the last cue, the booth operator returns the laminated cue sheet to the stage manager. Leave the backup copy near the entrance to the booth.\n",
+    "work/backstage/notes.md": "# Public hall opening checklist\n\nBalcony lighting stays at reduced output until both doors open. Temporary window lighting uses battery packs in the unlocked storage basket. The house manager files attendance sheets. The stage manager places floor signs before visitors arrive.\n",
+    "work/translation/notes.md": "# 工作手册翻译试行\n\n每位译者校对自己的文档标题，检查阅读顺序是否符合手册。章节标题使用标题样式，不手动加粗段落。新的术语译法由本次手册的编辑负责人决定。\n\n第一次给审阅人发稿时，文件名只在结尾加 -draft。未定稿的插图标题在审阅清单中保留方括号标记。所有评论处理完之后，在交接页记最终审阅人员和修改日期。\n",
+    "work/translation/record.md": "# 宣传单页译稿制作\n\n插图标题用圆括号标记。第一页的标题由设计经理统一指定。工作版文件名加 -preview，交给审阅人的纸质版本保持双面。排版审批结束后，设计师将 PDF 发给本地印刷人员。\n",
+    "work/labels/record.md": "# Device label verification\n\nThe trial labels go on two test devices and their storage cases. Record the device ID before removing the old label. Print replacement tags in 14-point type if the original characters cannot be read. A signature confirms a second person compared the record and device.\n\n未能判明归属的箱子用一条银色纸胶带标记。Walk-in equipment stays in the open rack until the inventory lead verifies the label. Only a verified asset moves to the permanent shelf.\n",
+    "work/labels/notes.md": "# Workshop packaging guide\n\nPrint accessory label sheets in 11-point type. Sealed parcels waiting for collection sit on the open rack. Mark outgoing carry cases with transparent tape. Check the case contents once by weight and once by counting the individual packets.\n",
+    "work/clinicforms/notes.md": "# 社区活动报名表复盘\n\n目前复盘只统计本轮报名，去除重复提交后再合计。签名区不要纳入复盘拍照范围，照片仅用于表单优化。空白签名不补填，在核对表里记作待本人确认。\n\n借用的表格夹要归还给活动前台的早班同事。新版报名表的右上角应印上蓝色版本号。现场口头修订可写在工作人员的笔记里，下轮统一更新表格模板。\n",
+    "work/clinicforms/record.md": "# 活动现场公告模板\n\n入口展示页的左下角印红色版本号。未发完的模板放在前台晚班同事的抽屉。签到表不能展示在公开区域，活动信息卡可摆在公告栏旁。\n",
+    "work/adapter/record.md": "# AV cart commissioning checklist\n\nConnect the cart to the test display after moving it out of storage. Leave the display in its input test mode until the picture and sound have been verified. Spare HDMI adapters live in the shallow tray below the power strip.\n\n换掉磨损的插头后，在车架前面的接线图上贴一个星号。The AV coordinator checks that the cart rolls without pinching the cables. Its test notes list the monitor model and where the test was performed.\n",
+    "work/adapter/notes.md": "# AV storage reset\n\nSpare audio adapters are in a deep crate behind the tool panel. Mark returned cables using a removable dot. The inventory assistant checks wrapping and counts power strips before restocking. Leave defective carts separated until a replacement is ready.\n",
+    "work/market/notes.md": "# 小区义卖摊位收尾\n\n开始收尾前，请对照摊位号核对价签。旧价签保留到货款复核完毕，所有无法正常收纳的物品移出行走通道。预售后剩的宣传书签放到东门服务桌。\n\n摊位交接表由负责最后一轮巡场的人签名。搬走摊架时，把待返还的挂牌挂在推车左侧把手上。稍后由值班员把待取物品送到另一个指定地点。\n",
+    "work/market/record.md": "# 义卖预备会物资摆放\n\n各摊位的全新价签放在西门签到桌。纸质书签由宣传小组统一发放。物资箱带回时，挂在推车右侧的醒目标识由库房人员查看。准备会记录由主持人签字。\n",
+    "work/renderqueue/record.md": "# Print proof signoff\n\nThe proofing coordinator checks color and text size against the order record. Keep the approved proof with the work order until the production batch is counted. The second test page uses uncoated stock.\n\n第一次打样的、更改前的 PDF 放在版本对照目录里。Work orders waiting for a color adjustment carry an amber flag. Add a note with the requested change before sending the updated proof back to the requester.\n",
+    "work/renderqueue/notes.md": "# Training guide to print imposition\n\nAn exercise with folded stock uses a coated second page. Store the initial calendar demo in the examples folder. Urgent work orders carry a red flag. Requests are sorted by classroom, then by scheduled delivery week.\n"
+  },
+  "queries": [
+    {
+      "id": "answerability-receipts-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where can I see if I imported the same receipt twice into the pilot expense sheet?",
+      "relevant": [
+        {
+          "path": "work/receipts/notes.md",
+          "anchor": "A duplicate receipt is flagged on the Review tab."
+        }
+      ]
+    },
+    {
+      "id": "answerability-receipts-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "如果同一付款凭证要分成两条支出，表格里必须补填什么？",
+      "relevant": [
+        {
+          "path": "work/receipts/notes.md",
+          "anchor": "把一张收据拆成两笔支出时，必须填写原单据编号。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-receipts-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Which folder 收暂时还没有 receipt 的支出？",
+      "relevant": [
+        {
+          "path": "work/receipts/notes.md",
+          "anchor": "Missing receipts are held in a folder named Pending Proof."
+        }
+      ]
+    },
+    {
+      "id": "answerability-handover-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How should I label a survey group if only seven people responded?",
+      "relevant": [
+        {
+          "path": "work/handover/record.md",
+          "anchor": "Report the group as Too Small."
+        }
+      ]
+    },
+    {
+      "id": "answerability-handover-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "调整调查的选项标签后，在哪一页保存新旧标签的对应关系？",
+      "relevant": [
+        {
+          "path": "work/handover/record.md",
+          "anchor": "在术语变更页记录旧标签与新标签。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-handover-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Director approval 之后，department summary 要导出成哪种文件？",
+      "relevant": [
+        {
+          "path": "work/handover/record.md",
+          "anchor": "Export the department summary as PDF."
+        }
+      ]
+    },
+    {
+      "id": "answerability-monday-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "When does the warehouse take the verification sample for the Monday stock reconciliation?",
+      "relevant": [
+        {
+          "path": "work/monday/notes.md",
+          "anchor": "仓库的复核抽样固定在周一上午十点。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-monday-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "过一遍库存清单发现同一箱填了两次，第二条应该放到哪里？",
+      "relevant": [
+        {
+          "path": "work/monday/notes.md",
+          "anchor": "发现清单里同一箱出现两次时，把第二条移动到重复页。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-monday-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "盘点复核 hold 住的 discrepancy，最终交给谁？",
+      "relevant": [
+        {
+          "path": "work/monday/notes.md",
+          "anchor": "复核结束后，把不能确认的差额交给当班盘点负责人。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-release-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What prefix goes at the start of the installable desktop preview filename?",
+      "relevant": [
+        {
+          "path": "work/release/record.md",
+          "anchor": "Preview package names begin with desk-preview followed by the build number."
+        }
+      ]
+    },
+    {
+      "id": "answerability-release-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "本轮桌面预览包要在哪里完成签名？",
+      "relevant": [
+        {
+          "path": "work/release/record.md",
+          "anchor": "此轮预览用单独的离线签名机签名。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-release-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "删掉 local preview 之前去 UI 哪一页核对 checksum？",
+      "relevant": [
+        {
+          "path": "work/release/record.md",
+          "anchor": "Verify the checksum from the Releases pane before deleting the local copy."
+        }
+      ]
+    },
+    {
+      "id": "answerability-supplier-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How can I identify a substitute supplier sample that passed the technical review by looking at its label?",
+      "relevant": [
+        {
+          "path": "work/supplier/notes.md",
+          "anchor": "技术合格的样件用紫色贴纸标记。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-supplier-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "这次评审若两件样品撞号，由谁负责换一个编号？",
+      "relevant": [
+        {
+          "path": "work/supplier/notes.md",
+          "anchor": "评审期间如有两个样件使用相同编号，由质检员重新贴号。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-supplier-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Review 中途临时新增的 check 记在哪个区？",
+      "relevant": [
+        {
+          "path": "work/supplier/notes.md",
+          "anchor": "临时增加的评审步骤写在附页的补充试验区。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-nearline-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Does the validation manifest travel with the compressed research snapshot or stay in the staging directory?",
+      "relevant": [
+        {
+          "path": "work/nearline/record.md",
+          "anchor": "The validation manifest stays next to the compressed archive."
+        }
+      ]
+    },
+    {
+      "id": "answerability-nearline-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "研究数据导出时读不出来的行集中放到哪个文件？",
+      "relevant": [
+        {
+          "path": "work/nearline/record.md",
+          "anchor": "无法识别的数据行保存在 rejected-rows.csv。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-nearline-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "和 archive 一起用的 staging folder 什么时候可以清掉？",
+      "relevant": [
+        {
+          "path": "work/nearline/record.md",
+          "anchor": "Delete the temporary staging directory after the test restore finishes."
+        }
+      ]
+    },
+    {
+      "id": "answerability-room-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where do I get an assistive receiver for the arrival rehearsal in the small classroom?",
+      "relevant": [
+        {
+          "path": "work/room/notes.md",
+          "anchor": "辅助听音器要从前台左侧上锁的抽屉取出。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-room-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "演练最后的试用感应胸卡归还给谁？",
+      "relevant": [
+        {
+          "path": "work/room/notes.md",
+          "anchor": "把试用的感应胸卡交给签到台右侧工作人员。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-room-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Training rehearsal 收场后备用椅要推回哪里？",
+      "relevant": [
+        {
+          "path": "work/room/notes.md",
+          "anchor": "备用座椅要在散场后推回北墙的折叠屏后面。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-bike-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "What tag signals a bike in the class fleet has a rim that needs straightening?",
+      "relevant": [
+        {
+          "path": "work/bike/record.md",
+          "anchor": "Jobs involving a bent rim get an orange triangle tag."
+        }
+      ]
+    },
+    {
+      "id": "answerability-bike-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "修培训车辆时暂拆的小垫片应该先收在哪里？",
+      "relevant": [
+        {
+          "path": "work/bike/record.md",
+          "anchor": "取下来的小垫片先放进带盖的小格盒里。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-bike-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Mechanic 换 saddle 之前先记录哪项尺寸？",
+      "relevant": [
+        {
+          "path": "work/bike/record.md",
+          "anchor": "A replacement saddle can be fitted after the mechanic records the seat tube diameter."
+        }
+      ]
+    },
+    {
+      "id": "answerability-seedling-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should the seedling tray go just before the outdoor acclimation trial begins?",
+      "relevant": [
+        {
+          "path": "work/seedling/notes.md",
+          "anchor": "开始适应户外前，把育苗盘推到能见明亮散射光的位置。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-seedling-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "发现一格苗先前贴错了，该在电子记录补哪两个信息？",
+      "relevant": [
+        {
+          "path": "work/seedling/notes.md",
+          "anchor": "遇到装错标签的育苗格，在电子记录里写原标签和新编号。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-seedling-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Glass lid 上凝结太多水珠时，怎么给育苗盘 ventilate？",
+      "relevant": [
+        {
+          "path": "work/seedling/notes.md",
+          "anchor": "玻璃盖上的水珠太多时，用木夹留一个通风缝。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-library-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which desk should get the notice for an outbound interlibrary loan?",
+      "relevant": [
+        {
+          "path": "work/library/record.md",
+          "anchor": "Outbound loan notices go to the originating library's lending desk."
+        }
+      ]
+    },
+    {
+      "id": "answerability-library-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "当天无法凑齐的馆际借阅书应该先放进什么篮子？",
+      "relevant": [
+        {
+          "path": "work/library/record.md",
+          "anchor": "无法在当日配齐的一组图书暂放在标为部分待配的篮子里。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-library-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Outgoing bundle 的 routing slip 应夹在什么东西下面？",
+      "relevant": [
+        {
+          "path": "work/library/record.md",
+          "anchor": "On each outgoing bundle, place the routing slip underneath the blue rubber band."
+        }
+      ]
+    },
+    {
+      "id": "answerability-quota-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which unit belongs in the resource field on this team quota request?",
+      "relevant": [
+        {
+          "path": "work/quota/notes.md",
+          "anchor": "配额申请表的资源类型必须填 CPU 小时，而非运行次数。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-quota-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "月初排查作业计数时，要以哪类最早的日志为准？",
+      "relevant": [
+        {
+          "path": "work/quota/notes.md",
+          "anchor": "月初的计数核对以日志中第一条完成记录为准。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-quota-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "临时 raise quota 的理由要填到哪里？",
+      "relevant": [
+        {
+          "path": "work/quota/notes.md",
+          "anchor": "暂时调高配额时，把调高原因写在值班记录的说明栏里。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-backstage-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "At which cue transition do the spotlights on the balcony go dark in this rehearsal?",
+      "relevant": [
+        {
+          "path": "work/backstage/record.md",
+          "anchor": "The balcony spots switch off during the second scene change."
+        }
+      ]
+    },
+    {
+      "id": "answerability-backstage-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "中场演练用的临时电池从哪个抽屉取？",
+      "relevant": [
+        {
+          "path": "work/backstage/record.md",
+          "anchor": "中场测试用的临时电池放在写着备用的抽屉里。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-backstage-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Last cue 后，booth operator 把塑封的 cue sheet 交给谁？",
+      "relevant": [
+        {
+          "path": "work/backstage/record.md",
+          "anchor": "After the last cue, the booth operator returns the laminated cue sheet to the stage manager."
+        }
+      ]
+    },
+    {
+      "id": "answerability-translation-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Who chooses the final translation for a newly encountered term in this handbook pilot?",
+      "relevant": [
+        {
+          "path": "work/translation/notes.md",
+          "anchor": "新的术语译法由本次手册的编辑负责人决定。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-translation-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "第一次给审阅人发这份手册时，文件名结尾加什么？",
+      "relevant": [
+        {
+          "path": "work/translation/notes.md",
+          "anchor": "第一次给审阅人发稿时，文件名只在结尾加 -draft。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-translation-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Review checklist 里，没定稿的 figure caption 用什么标记？",
+      "relevant": [
+        {
+          "path": "work/translation/notes.md",
+          "anchor": "未定稿的插图标题在审阅清单中保留方括号标记。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-labels-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How large should the characters be on a replacement trial tag if the old label is unreadable?",
+      "relevant": [
+        {
+          "path": "work/labels/record.md",
+          "anchor": "Print replacement tags in 14-point type if the original characters cannot be read."
+        }
+      ]
+    },
+    {
+      "id": "answerability-labels-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "暂时核不出归属的设备箱要贴什么来标识？",
+      "relevant": [
+        {
+          "path": "work/labels/record.md",
+          "anchor": "未能判明归属的箱子用一条银色纸胶带标记。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-labels-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Walk-in gear 放进 permanent shelf 前，谁负责确认 label？",
+      "relevant": [
+        {
+          "path": "work/labels/record.md",
+          "anchor": "Walk-in equipment stays in the open rack until the inventory lead verifies the label."
+        }
+      ]
+    },
+    {
+      "id": "answerability-clinicforms-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "How should a missing signature be marked on the reconciliation worksheet?",
+      "relevant": [
+        {
+          "path": "work/clinicforms/notes.md",
+          "anchor": "空白签名不补填，在核对表里记作待本人确认。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-clinicforms-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "借来的报名表夹用完交回前台哪班同事？",
+      "relevant": [
+        {
+          "path": "work/clinicforms/notes.md",
+          "anchor": "借用的表格夹要归还给活动前台的早班同事。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-clinicforms-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "新版 signup form 的 version number 应用什么颜色印？",
+      "relevant": [
+        {
+          "path": "work/clinicforms/notes.md",
+          "anchor": "新版报名表的右上角应印上蓝色版本号。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-adapter-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should I look for a backup HDMI adapter on the cart during commissioning?",
+      "relevant": [
+        {
+          "path": "work/adapter/record.md",
+          "anchor": "Spare HDMI adapters live in the shallow tray below the power strip."
+        }
+      ]
+    },
+    {
+      "id": "answerability-adapter-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "给车架换掉磨坏的插头后，应该在哪儿贴怎样的符号？",
+      "relevant": [
+        {
+          "path": "work/adapter/record.md",
+          "anchor": "换掉磨损的插头后，在车架前面的接线图上贴一个星号。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-adapter-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Cart 滚动有没有夹到 cable，由哪个角色检查？",
+      "relevant": [
+        {
+          "path": "work/adapter/record.md",
+          "anchor": "The AV coordinator checks that the cart rolls without pinching the cables."
+        }
+      ]
+    },
+    {
+      "id": "answerability-market-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Where should the leftover advance-sale bookmarks go during market closeout?",
+      "relevant": [
+        {
+          "path": "work/market/notes.md",
+          "anchor": "预售后剩的宣传书签放到东门服务桌。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-market-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "摊位收尾的交接表交给谁落款？",
+      "relevant": [
+        {
+          "path": "work/market/notes.md",
+          "anchor": "摊位交接表由负责最后一轮巡场的人签名。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-market-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "Takedown 时把待归还的 stall tags 挂在推车哪一边？",
+      "relevant": [
+        {
+          "path": "work/market/notes.md",
+          "anchor": "搬走摊架时，把待返还的挂牌挂在推车左侧把手上。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-renderqueue-en",
+      "language": "en",
+      "mode": "natural",
+      "query": "Which paper type goes into the printer for the second proof test page?",
+      "relevant": [
+        {
+          "path": "work/renderqueue/record.md",
+          "anchor": "The second test page uses uncoated stock."
+        }
+      ]
+    },
+    {
+      "id": "answerability-renderqueue-zh",
+      "language": "zh",
+      "mode": "natural",
+      "query": "打样后还没改过的那份首版 PDF 收在什么目录？",
+      "relevant": [
+        {
+          "path": "work/renderqueue/record.md",
+          "anchor": "第一次打样的、更改前的 PDF 放在版本对照目录里。"
+        }
+      ]
+    },
+    {
+      "id": "answerability-renderqueue-mixed",
+      "language": "mixed",
+      "mode": "natural",
+      "query": "在 print proof 队列里，等待调色的 work order 挂什么颜色的 flag？",
+      "relevant": [
+        {
+          "path": "work/renderqueue/record.md",
+          "anchor": "Work orders waiting for a color adjustment carry an amber flag."
+        }
+      ]
+    }
+  ],
+  "negativeControls": [
+    {
+      "language": "en",
+      "query": "How many days may a pilot expense remain in Pending Proof before it expires?"
+    },
+    {
+      "language": "zh",
+      "query": "部门负责人收到调查汇总以后，有多少个工作日可以提出修改？"
+    },
+    {
+      "language": "mixed",
+      "query": "Monday 复核抽样每一类 inventory 要抽几箱？"
+    },
+    {
+      "language": "en",
+      "query": "Which retention policy duration applies to preview packages once they are uploaded?"
+    },
+    {
+      "language": "zh",
+      "query": "这批替代供应商的样件通过合格标记后，需要保存到哪一天？"
+    },
+    {
+      "language": "mixed",
+      "query": "Nearline archive 的 upload 带宽如果低于多少才要报警？"
+    },
+    {
+      "language": "en",
+      "query": "What radio channel is assigned to the staff at the sign-in desk during the rehearsal?"
+    },
+    {
+      "language": "zh",
+      "query": "培训用的车圈出现弯曲以后，需要在哪个预约时段进入维修？"
+    },
+    {
+      "language": "mixed",
+      "query": "这个 balcony tray 开始试种后，第几天要加营养液？"
+    },
+    {
+      "language": "en",
+      "query": "On which weekday does the courier collect outbound bundles from the originating library?"
+    },
+    {
+      "language": "zh",
+      "query": "每个小组一个自然月最多提交多少次申请上调作业配额？"
+    },
+    {
+      "language": "mixed",
+      "query": "第二次 scene change 结束后，balcony spotlights 间隔几秒恢复？"
+    },
+    {
+      "language": "en",
+      "query": "How many days after receiving a handbook draft should the reviewer submit comments?"
+    },
+    {
+      "language": "zh",
+      "query": "印制设备标签时使用了哪个字体家族？"
+    },
+    {
+      "language": "mixed",
+      "query": "Form reconciliation 后，待本人确认的条目隔几天 follow up？"
+    },
+    {
+      "language": "en",
+      "query": "What length of HDMI cable is required for the cart commissioning test?"
+    },
+    {
+      "language": "zh",
+      "query": "已经交接的摊位当天最晚几点可以取回寄放的物品？"
+    },
+    {
+      "language": "mixed",
+      "query": "Print proof 的第二页先放在室温下几小时才可以测颜色？"
+    }
+  ]
+}
