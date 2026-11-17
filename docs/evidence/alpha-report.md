@@ -39,6 +39,8 @@ The [native Web retrieval benchmark](../../tests/e2e/knowledge-retrieval.spec.ts
 
 The original sample reached 60% at rank 1 and 65% within rank 3. The [80% sourced retrieval target](../07-evaluation-and-release-gates.md#2-quality-latency-and-attention-targets) remains unmet on this sample. The two natural-language holdouts also fall short. [Corpus and scoring details](PA-015.md#natural-question-retrieval)
 
+A subsequent run with the opt-in CPU ranker met the retrieval threshold on a separate three-root corpus. It returned the relevant source first for 46 of 54 questions and within the first three for 47, with all 18 missing-fact controls empty. The same configuration passed the four legacy corpora above. [Packaged retrieval evidence](PA-015.md)
+
 ## Owner observations
 
 The [paired comparison](PA-027.md) used the same inputs and, for model journeys, the same model, tool and budget settings across the foreground and Worker runs. It records result checks, scripted command counts, readback times and estimated costs. The effect on human attention remains unmeasured.

@@ -205,3 +205,24 @@ DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=release-evidence \
   DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/confirmation-reports \
   pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
 ```
+
+## 配置后的 CPU 排序服务（2026-11-17）
+
+可选本地排序服务通过正常的 DSH Profile 配置运行，环境为 Linux x64、Python 3.13、PyTorch 2.11.0 CPU 和固定版本的模型文件。宿主通过同用户 Unix socket 发送所请求根目录中的当前文档，并在返回匹配结果前核对来源引用、修订和 UTF-8 摘录。模型在本机作出判定，经鉴权的 Web 评测仅使用回环网络。[本地排序服务安装](../../scripts/knowledge-ranker/README-zh.md) · [PR #189](https://github.com/MosBot-AI/dsh-personal-agent/pull/189)
+
+打包版排序服务 `35433b8855ebc9a29346f5bce429711c45336d29` 的 72 次查询结果顺序和证据标记均与冻结的段落原型一致。首条命中 46/54，前三条命中 47/54。18 道缺失事实对照题均为空，64 次来源修订和字节回读全部一致。54 道题中有 45 道的首条摘录包含标注答案。词法基线的首条和前三条命中分别为 24/54、25/54。打包版新增 26 道首条命中，丢失 4 道，在这套语料上达到了 80% 排序目标。报告 SHA-256 为 `325ab3a119e01d38daea51540a75561b6b7316a3fbea4ec6221b2b7627e3adc0`。[打包版原生验收](https://github.com/MosBot-AI/dsh-personal-agent/issues/182#issuecomment-6958327968)
+
+首次鉴权搜索耗时 63.774 秒。之后 71 次请求的 p50 和 p95 分别为 24.550 秒和 46.675 秒。在 AMD Ryzen 9 5900HX 上运行期间，采样显示四个 float32 模型所在进程的峰值常驻内存为 16.6 GiB。此前并行运行的测试在写出评分报告前超过了请求时限。
+
+安装检查从四个固定版本获取了模型和分词器配置文件，并核对了摘要。检查复用了已验证的本地权重，并将五个权重文件逐一与上游响应头中的版本和校验值比对。
+
+在 Bundle 已构建、本地排序服务已启动时，可用以下命令复现打包版对比。
+
+```sh
+DSHPA_KNOWLEDGE_RANKER_SOCKET=/absolute/path/to/rank.sock \
+  DSHPA_KNOWLEDGE_RETRIEVAL_FRESH=release-evidence \
+  DSHPA_KNOWLEDGE_RETRIEVAL_REPORT_DIR=/absolute/path/to/confirmation-reports \
+  pnpm exec vitest run tests/e2e/knowledge-retrieval.spec.ts
+```
+
+同一打包配置通过经鉴权的 DSH 跑完了四套冻结的旧语料。204 道标注题的首条命中从 130 道增至 188 道，前三条命中从 135 道增至 197 道。30 道缺失事实题均为空，375 次回读的字节和修订全部吻合，84 道严格关键词和路径查询的结果顺序与词法基线一致。四套打包版结果的排序也与接入配置后的研究排序器一致。打包版回归审计的 SHA-256 为 `5f2241cdc6ce26a715e1a5fc7f641bc5c93d09daca9458a92b8a7596e14a3eca`。[回归与评审证据](https://github.com/MosBot-AI/dsh-personal-agent/pull/189)
