@@ -37,6 +37,7 @@ Notable changes are recorded here using [Keep a Changelog](https://keepachangelo
 
 ### Added
 
+- Add a standalone Vue client demo for shared task pagination and the existing DSH mobile APIs.
 - Allow owners to opt in to a local semantic ranker for natural-language knowledge search with revision-checked source excerpts.
 - Prepare a dedicated packaged alpha profile and record opt-in owner trial observations and incidents locally.
 - Let paired mobile devices browse tasks beyond the recent snapshot with authenticated pagination, one page at a time.
